@@ -6,24 +6,24 @@ import { getPrisma } from "../src/prisma.js";
 // Hint: prisma.category.upsert({ where:{name}, update:{}, create:{name} }).
 async function main() {
   const prisma = getPrisma();
-  const categories = ['Account and Access', 'Hardware', 'Software', 'Network'];
+  try {
+    const categories = ['Account and Access', 'Hardware', 'Software', 'Network'];
 
-  for (const name of categories) {
-    await prisma.category.upsert({
-      where: { name },
-      update: {},
-      create: { name },
-    });
-  }
+    for (const name of categories) {
+      await prisma.category.upsert({
+        where: { name },
+        update: {},
+        create: { name },
+      });
+    }
 
-  console.log("Category seed finished.");
-}
-
-main()
-  .catch((e) => {
+    console.log("Category seed finished.");
+  } catch (e) {
     console.error(e);
     process.exit(1);
-  })
-  .finally(async () => {
-    await getPrisma().$disconnect();
-  });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+main();
