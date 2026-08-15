@@ -16,9 +16,17 @@ export interface SystemStatus {
 //        return { online: true, categories }.
 // Throwing on failure lets the UI show a single Offline/error state.
 export async function checkSystem(): Promise<SystemStatus> {
-  const res = await fetch(`${API_URL}/api/health`);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch health check: ${res.statusText}`);
+  const resHealth = await fetch(`${API_URL}/api/health`);
+  if (!resHealth.ok) {
+    throw new Error(`Failed to fetch health check: ${resHealth.statusText}`);
   }
-  return { online: true, categories: [] };
+  
+  const resCategories = await fetch(`${API_URL}/api/categories`);
+  if (!resCategories.ok) {
+    throw new Error(`Failed to fetch categories: ${resCategories.statusText}`);
+  }
+  
+  const categories = await resCategories.json();
+  
+  return { online: true, categories };
 }
