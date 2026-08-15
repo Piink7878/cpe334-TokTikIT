@@ -34,14 +34,28 @@ export default function App() {
       </button>
 
       {state === "success" && (
-        <div className="mt-4 alert alert-success">
-          <strong>Status:</strong> Online
+        <div className="mt-4">
+          <div className="alert alert-success mb-3">
+            <strong>System Status:</strong> Online
+          </div>
+          <h5>Supported Request Categories:</h5>
+          {categories.length === 0 ? (
+            <p className="text-muted mt-2">No categories available</p>
+          ) : (
+            <ul className="list-group">
+              {categories.map((cat) => (
+                <li key={cat.id} className="list-group-item">
+                  {cat.name}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
       {state === "error" && (
         <div className="mt-4 alert alert-danger">
-          <strong>Status:</strong> Offline <br />
+          <strong>System Status:</strong> Offline / Unable to connect to TokTickIT API <br />
           <small>{errorMsg}</small>
         </div>
       )}
