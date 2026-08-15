@@ -39,13 +39,17 @@ export default function App() {
             <strong>System Status:</strong> Online
           </div>
           <h5>Supported Request Categories:</h5>
-          <ul className="list-group">
-            {categories.map((cat) => (
-              <li key={cat.id} className="list-group-item">
-                {cat.name}
-              </li>
-            ))}
-          </ul>
+          {categories.length === 0 ? (
+            <p className="text-muted mt-2">No categories available</p>
+          ) : (
+            <ul className="list-group">
+              {categories.map((cat) => (
+                <li key={cat.id} className="list-group-item">
+                  {cat.name}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
