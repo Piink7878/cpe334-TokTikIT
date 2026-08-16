@@ -40,18 +40,13 @@ cpe334-TokTikIT/
 │  ├─ tsconfig.json
 │  ├─ vite.config.ts
 │  ├─ src/
-│  │  ├─ api.js
 │  │  ├─ api.ts
-│  │  ├─ App.js
 │  │  ├─ App.tsx
-│  │  ├─ main.js
 │  │  ├─ main.tsx
 │  │  └─ vite-env.d.ts
 │  └─ tests/
-│     ├─ setup.js
 │     ├─ setup.ts
 │     └─ lab-01/
-│        ├─ App.test.js
 │        └─ App.test.tsx
 ├─ docs/
 │  └─ lab-01/
