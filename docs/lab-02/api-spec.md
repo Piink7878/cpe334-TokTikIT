@@ -92,7 +92,7 @@ Retrieves all reference ticket categories.
       "data": [
         { "id": 1, "name": "Account and Access" },
         { "id": 2, "name": "Hardware" },
-        { "id": 3, "Software": "Software" },
+        { "id": 3, "name": "Software" },
         { "id": 4, "name": "Network" }
       ]
     }
@@ -148,7 +148,7 @@ Creates a new support ticket initialized with Current Status `New`. Generates th
   }
   ```
 - **Validation Rules**:
-  - `requesterId`: Required integer matching an active RequesterUser.
+  - `requesterId`: Required integer matching an active RequesterUser. Must strictly match the `X-Requester-Id` header; if they mismatch, the system returns `400 Bad Request` to prevent ambiguity.
   - `categoryId`: Required integer matching an active Category.
   - `relatedSystemId`: Required integer matching an active RelatedSystem.
   - `summary`: Required string, 5–150 characters after trimming.

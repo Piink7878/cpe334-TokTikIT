@@ -200,7 +200,7 @@ The TokTickIT interface adheres strictly to the **Zen Green Theme**, conveying a
     - Row 2: Requester Name, Requested Priority badge, IT Priority badge, Current Status badge.
     - Row 3: Summary (Full text, `#1A2E22`).
     - Row 4: Description (Structured text area, preserved whitespace).
-  - Navigation Tabs (Sub-sections):
+  - Navigation Tabs (Sub-sections) - *Note: These are UI placeholders only for Lab 2 and have no backend functionality*:
     - `Public Comments (0)`: Disabled tab, labeled "(Available in future sprint)".
     - `Attachments (N)`: **Active tab**.
     - `Service Actions (0)`: Disabled tab.
@@ -230,17 +230,17 @@ This checklist must be verified using browser devtools and automated Playwright 
 
 | Check ID | Target Viewport | Screen / Component | Verification Criteria | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| **VIS-01** | Desktop ($\ge 992	ext{ px}$) | Header & Nav | App title and navigation items vertically aligned; active requester name displayed clearly on top right. | Pass |
-| **VIS-02** | Desktop ($\ge 992	ext{ px}$) | Create Ticket | 2-column layout renders cleanly; Summary & Description have full width; no horizontal scrollbar. | Pass |
-| **VIS-03** | Desktop ($\ge 992	ext{ px}$) | My Tickets | 8-column table with aligned headers; status badges cleanly centered; pagination aligned at bottom right. | Pass |
-| **VIS-04** | Desktop ($\ge 992	ext{ px}$) | Ticket Detail | Read-only input fields have distinct `#F0F4F2` background; active attachments display download & delete buttons. | Pass |
-| **VIS-05** | Tablet ($768 - 991	ext{ px}$) | Create Ticket | Form controls adjust width responsively; labels remain above controls; no text truncation on headers. | Pass |
-| **VIS-06** | Tablet ($768 - 991	ext{ px}$) | My Tickets | Filter toolbar wraps cleanly to 2 rows; table columns retain readable padding without breaking page width. | Pass |
-| **VIS-07** | Tablet ($768 - 991	ext{ px}$) | Modals | Soft-removal modal stays centered with comfortable backdrop padding (`min 24px` margin). | Pass |
-| **VIS-08** | Mobile ($< 768	ext{ px}$) | Global | Document body has `overflow-x: hidden`; zero unintended horizontal page scroll across all routes. | Pass |
-| **VIS-09** | Mobile ($< 768	ext{ px}$) | Navigation | Header collapses gracefully; user identity remains accessible; buttons have at least `44px` touch height. | Pass |
-| **VIS-10** | Mobile ($< 768	ext{ px}$) | Create Ticket | Single-column vertical stack for all fields; submit button stretches full width (`100%`). | Pass |
-| **VIS-11** | Mobile ($< 768	ext{ px}$) | My Tickets | Data table automatically transforms into responsive card list; badges remain legible without clipping. | Pass |
-| **VIS-12** | Mobile ($< 768	ext{ px}$) | Empty / No-Results | Empty and No-Results cards center cleanly with legible text and easily clickable action buttons. | Pass |
-| **VIS-13** | All Sizes | Validation States | Required asterisks (`*`) appear in red; error text appears directly below inputs; no popup-only errors. | Pass |
-| **VIS-14** | All Sizes | Buttons & Spinners | Primary buttons show loading spinner when busy; double-click is prevented during active requests. | Pass |
+| **VIS-01** | Desktop ($\ge 992	ext{ px}$) | Header & Nav | App title and navigation items vertically aligned; active requester name displayed clearly on top right. | Planned / Not Verified |
+| **VIS-02** | Desktop ($\ge 992	ext{ px}$) | Create Ticket | 2-column layout renders cleanly; Summary & Description have full width; no horizontal scrollbar. | Planned / Not Verified |
+| **VIS-03** | Desktop ($\ge 992	ext{ px}$) | My Tickets | 8-column table with aligned headers; status badges cleanly centered; pagination aligned at bottom right. | Planned / Not Verified |
+| **VIS-04** | Desktop ($\ge 992	ext{ px}$) | Ticket Detail | Read-only input fields have distinct `#F0F4F2` background; active attachments display download & delete buttons. | Planned / Not Verified |
+| **VIS-05** | Tablet ($768 - 991	ext{ px}$) | Create Ticket | Form controls adjust width responsively; labels remain above controls; no text truncation on headers. | Planned / Not Verified |
+| **VIS-06** | Tablet ($768 - 991	ext{ px}$) | My Tickets | Filter toolbar wraps cleanly to 2 rows; table columns retain readable padding without breaking page width. | Planned / Not Verified |
+| **VIS-07** | Tablet ($768 - 991	ext{ px}$) | Modals | Soft-removal modal stays centered with comfortable backdrop padding (`min 24px` margin). | Planned / Not Verified |
+| **VIS-08** | Mobile ($< 768	ext{ px}$) | Global | Document body has `overflow-x: hidden`; zero unintended horizontal page scroll across all routes. | Planned / Not Verified |
+| **VIS-09** | Mobile ($< 768	ext{ px}$) | Navigation | Header collapses gracefully; user identity remains accessible; buttons have at least `44px` touch height. | Planned / Not Verified |
+| **VIS-10** | Mobile ($< 768	ext{ px}$) | Create Ticket | Single-column vertical stack for all fields; submit button stretches full width (`100%`). | Planned / Not Verified |
+| **VIS-11** | Mobile ($< 768	ext{ px}$) | My Tickets | Data table automatically transforms into responsive card list; badges remain legible without clipping. | Planned / Not Verified |
+| **VIS-12** | Mobile ($< 768	ext{ px}$) | Empty / No-Results | Empty and No-Results cards center cleanly with legible text and easily clickable action buttons. | Planned / Not Verified |
+| **VIS-13** | All Sizes | Validation States | Required asterisks (`*`) appear in red; error text appears directly below inputs; no popup-only errors. | Planned / Not Verified |
+| **VIS-14** | All Sizes | Buttons & Spinners | Primary buttons show loading spinner when busy; double-click is prevented during active requests. | Planned / Not Verified |

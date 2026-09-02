@@ -143,7 +143,7 @@ The IT department requires a professional self-service ticketing system for corp
 ---
 
 ## 8. API Contract Summary
-- `GET /api/requesters/active` -> List active development requesters (HTTP 200).
+- `GET /api/requesters` -> List active development requesters (HTTP 200).
 - `GET /api/categories` -> List active categories (HTTP 200).
 - `GET /api/related-systems` -> List active related systems (HTTP 200).
 - `POST /api/tickets` -> Create new ticket for current requester (Headers: `X-Requester-Id` or body `requesterId`) (HTTP 201, 400, 422).
