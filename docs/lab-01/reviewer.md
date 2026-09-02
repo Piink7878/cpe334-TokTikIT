@@ -1,7 +1,8 @@
 # Lab 1 — Peer Review Record  (fill this in)
 
-**Author:** <เบญญาภา> — <67070501030> — GitHub: @<Piink7878>
-**Peer reviewer:** <กมนนัทธ์> — <67070501001> — GitHub: @<Kamonnatt23>
+**Author:** <เบญญาภา> — <67070501030> — GitHub: @Piink7878
+
+**Peer reviewer:** <กมนนัทธ์> — <67070501001> — GitHub: @Kamonnatt23
 
 ## Pull Requests I authored (reviewed by my partner)
 | PR | Reviewer | Decision | Review Comment | My Response | Evidence Link |
@@ -12,7 +13,6 @@
 | Feature/3 category seed #10 | Kamonnatt23 | Approve | - | - | https://github.com/Piink7878/cpe334-TokTikIT/pull/10 |
 | fix/feature 3: add error handling and disconnect to seed script #11 | Kamonnatt23 | Request changes | งานดีมากเลย! โค้ดส่วน Schema กับ Migration ทำมาได้ครบถ้วน ส่วนไฟล์ Seed ก็ใส่ข้อมูล 4 หมวดหมู่และใช้ upsert เพื่อให้รันซ้ำได้โดยข้อมูลไม่ซ้ำซ้อน ตรงตามโจทย์เป๊ะเลย แต่มีจุดเล็กๆ ฝากแก้เพิ่มนิดนึงน้า ในไฟล์ server/prisma/seed.ts ตอนจบการทำงานของ seed ฝากเติมคำสั่งจัดการ Error และปิดการเชื่อมต่อฐานข้อมูล prisma.$disconnect() ให้หน่อยจ้า ไม่งั้นเดี๋ยวเวลารันในระบบแล้วสคริปต์มันอาจจะค้างได้ | เราอัปเดตไฟล์ server/prisma/seed.ts โดยใส่ try-catch-finally และเพิ่ม prisma.$disconnect() ดักไว้ทั้งกรณี success และ error ตามที่แนะนำเรียบร้อย ลองรัน npx prisma db seed ทดสอบแล้วสคริปต์ก็จบการทำงานได้คลีน ไม่ค้าง ช่วยตรวจดูอีกทีและ Approve ให้หน่อยนะ ขอบคุณฮัฟ | https://github.com/Piink7878/cpe334-TokTikIT/pull/11 |
 | Feature/4 category list #12 | Kamonnatt23 | Request changes | ก่อนจะกด Merge มีจุดเล็กๆ ที่อยากให้เช็คเพื่อความชัวร์หน่อยน้า:ในไฟล์ server/src/app.ts: เช็คดูว่าข้างบนสุดของไฟล์มีการ import { getPrisma } from "./prisma"; (หรือจาก path ที่ถูกต้อง) มาแล้วหรือยัง เพราะในโค้ดมีการเรียกใช้ getPrisma() ถ้าลืม import เดี๋ยวเซิร์ฟเวอร์จะรันไม่ขึ้นจ้าในไฟล์ UI (client/src/App.tsx): เผื่อไว้กรณีที่รันแล้วฐานข้อมูลยังไม่มีข้อมูล (categories ว่างเปล่า)แนะนำให้เพิ่มข้อความบอกผู้ใช้หน่อย เช่น ถ้า categories.length === 0 ให้แสดงข้อความว่า "No categories available" แทนที่จะปล่อยให้เป็น List โล่งๆ ถ้าเช็ค import ในไฟล์ app.ts เรียบร้อยแล้ว ก็ลุยต่อได้เลยจ้า | เราแก้แนะ ทั้งเช็คการ import Prisma ในไฟล์ app.ts ที่มีอยู่เรียบร้อยแล้ว การเพิ่ม empty state ให้แสดงข้อความ "No categories available" กรณีที่ไม่มีข้อมูล และการปรับ try-catch ใน api.ts เพื่อให้ UI แสดง error alert ชัดเจนเวลา backend ปิดอยู่ ทุกอย่าง already พร้อมและผ่านการทดสอบแล้ว ฝากตรวจหน่อยเน้อ | https://github.com/Piink7878/cpe334-TokTikIT/pull/12 |
-|  |  |  |  |  |  |
 
 ## Pull Requests I reviewed for my partner
 
@@ -26,5 +26,4 @@
 | Chore/add reviewer doc #10 | Approved | เจ๋ง | - | https://github.com/Kamonnatt23/toktickit/pull/10 |
 | Update doc #11 | Approved | เทิดระเบ่ | - | https://github.com/Kamonnatt23/toktickit/pull/11 |
 | Chore/update reviewer table #12 | Approved | เก๋ | - | https://github.com/Kamonnatt23/toktickit/pull/12 |
-| Revise reviewer.md with detailed comments and decisions #13 | Approved | ปังปุริยู่ | - | https://github.com/Kamonnatt23/toktickit/pull/13 |
-|  |  |  |  |  |    
+| Revise reviewer.md with detailed comments and decisions #13 | Approved | ปังปุริยู่ | - | https://github.com/Kamonnatt23/toktickit/pull/13 |    

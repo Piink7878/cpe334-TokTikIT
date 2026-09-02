@@ -7,5 +7,3 @@
 | UI-01 | `client/tests/lab-01/App.test.tsx` | Vitest | TokTickIT heading renders | Pass |
 | UI-02 | `client/tests/lab-01/App.test.tsx` | Vitest | Loading state changes to category list | Pass |
 | UI-03 | `client/tests/lab-01/App.test.tsx` | Vitest | API failure displays a useful error message | Pass |
-
-Paste your passing terminal output / screenshot below.
