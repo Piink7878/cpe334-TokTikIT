@@ -146,8 +146,8 @@ The IT department requires a professional self-service ticketing system for corp
 - `GET /api/requesters` -> List active development requesters (HTTP 200).
 - `GET /api/categories` -> List active categories (HTTP 200).
 - `GET /api/related-systems` -> List active related systems (HTTP 200).
-- `POST /api/tickets` -> Create new ticket for current requester (Headers: `X-Requester-Id` or body `requesterId`) (HTTP 201, 400, 422).
-- `GET /api/tickets?search=&categoryId=&priority=&status=&page=1&limit=10&sortBy=createdAt&sortOrder=desc` -> Paginated list of owned tickets (HTTP 200, 400).
+- `POST /api/tickets` -> Create new ticket for current requester (Headers: `X-Requester-Id`) (HTTP 201, 400, 422).
+- `GET /api/tickets?search=&categoryId=&requestedPriority=&status=&page=1&pageSize=8&sortBy=createdAt&sortOrder=desc` -> Paginated list of owned tickets (HTTP 200, 400).
 - `GET /api/tickets/:id` -> Retrieve owned ticket details (HTTP 200, 403, 404).
 - `POST /api/tickets/:id/attachments` -> Upload attachment (multipart/form-data) (HTTP 201, 400, 403, 413, 422).
 - `GET /api/attachments/:id/download` -> Download active attachment file (HTTP 200, 403, 404, 410).

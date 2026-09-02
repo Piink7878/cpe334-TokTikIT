@@ -135,7 +135,7 @@ Creates a new support ticket initialized with Current Status `New`. Generates th
 - **Method / Endpoint**: `POST /api/tickets`
 - **Request Headers**:
   - `Content-Type: application/json`
-  - `X-Requester-Id: 1` (or requester ID supplied in body)
+  - `X-Requester-Id: 1` (Required. This header is the absolute source of truth for the active requester's identity)
 - **Request Body**:
   ```json
   {
@@ -148,7 +148,7 @@ Creates a new support ticket initialized with Current Status `New`. Generates th
   }
   ```
 - **Validation Rules**:
-  - `requesterId`: Required integer matching an active RequesterUser. Must strictly match the `X-Requester-Id` header; if they mismatch, the system returns `400 Bad Request` to prevent ambiguity.
+  - `requesterId`: Optional integer. The `X-Requester-Id` header is the single source of truth. If this field is provided in the body, it must strictly match the header; if they mismatch, the system returns `400 Bad Request` to prevent ambiguity.
   - `categoryId`: Required integer matching an active Category.
   - `relatedSystemId`: Required integer matching an active RelatedSystem.
   - `summary`: Required string, 5–150 characters after trimming.
