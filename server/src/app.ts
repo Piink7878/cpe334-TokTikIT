@@ -493,6 +493,12 @@ app.post("/api/tickets/:id/attachments", (req, res, next) => {
 
     const prisma = getPrisma();
     
+    const requester = await prisma.developmentRequester.findUnique({ where: { id: requesterId } });
+    if (!requester || !requester.isActive) {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid or inactive requester" } });
+    }
+
     const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
     if (!ticket) {
       if (req.file) fs.unlink(req.file.path, () => {});
@@ -561,6 +567,12 @@ app.get("/api/attachments/:id/download", async (req: Request, res: Response): Pr
     }
 
     const prisma = getPrisma();
+
+    const requester = await prisma.developmentRequester.findUnique({ where: { id: requesterId } });
+    if (!requester || !requester.isActive) {
+      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid or inactive requester" } });
+    }
+
     const attachment = await prisma.attachment.findUnique({
       where: { id: attachmentId },
       include: { ticket: true }
@@ -617,6 +629,12 @@ app.delete("/api/attachments/:id", async (req: Request, res: Response): Promise<
     }
 
     const prisma = getPrisma();
+
+    const requester = await prisma.developmentRequester.findUnique({ where: { id: requesterId } });
+    if (!requester || !requester.isActive) {
+      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid or inactive requester" } });
+    }
+
     const attachment = await prisma.attachment.findUnique({
       where: { id: attachmentId },
       include: { ticket: true }
