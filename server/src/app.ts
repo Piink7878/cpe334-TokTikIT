@@ -233,7 +233,16 @@ app.post("/api/tickets", (req, res, next) => {
         status: ticket.currentStatus,
         createdAt: ticket.createdAt,
         updatedAt: ticket.updatedAt,
-        attachments: ticket.attachments ? ticket.attachments.map(att => ({
+        attachments: ticket.attachments ? ticket.attachments.map((att: {
+            id: number;
+            originalName: string;
+            sizeBytes: number;
+            mimeType: string;
+            isRemoved: boolean;
+            removedAt: Date | null;
+            removalReason: string | null;
+            createdAt: Date;
+        }) => ({
             id: att.id,
             originalFilename: att.originalName,
             fileSize: att.sizeBytes,
@@ -253,6 +262,117 @@ app.post("/api/tickets", (req, res, next) => {
         fs.unlink(file.path, () => {});
       }
     }
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/tickets - List Requester Tickets (My Tickets)
+// ---------------------------------------------------------------------------
+app.get("/api/tickets", async (req: Request, res: Response): Promise<any> => {
+  try {
+    const requesterIdHeader = req.headers["x-requester-id"];
+    if (!requesterIdHeader) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Missing X-Requester-Id header" } });
+    }
+    const requesterId = parseInt(requesterIdHeader as string, 10);
+    if (isNaN(requesterId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid X-Requester-Id header" } });
+    }
+
+    const {
+      search,
+      categoryId,
+      requestedPriority,
+      itPriority,
+      status,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      page = "1",
+      pageSize = "8"
+    } = req.query;
+
+    const parsedPage = parseInt(page as string, 10);
+    const parsedPageSize = parseInt(pageSize as string, 10);
+
+    if (isNaN(parsedPage) || parsedPage < 1 || isNaN(parsedPageSize) || parsedPageSize < 1) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid pagination parameters" } });
+    }
+
+    const where: any = { requesterId };
+
+    if (search && typeof search === "string") {
+      where.OR = [
+        { ticketNumber: { contains: search, mode: "insensitive" } },
+        { summary: { contains: search, mode: "insensitive" } }
+      ];
+    }
+    if (categoryId) {
+      const parsedCategoryId = parseInt(categoryId as string, 10);
+      if (!isNaN(parsedCategoryId)) {
+        where.categoryId = parsedCategoryId;
+      }
+    }
+    if (requestedPriority && typeof requestedPriority === "string") {
+      where.requestedPriority = requestedPriority;
+    }
+    if (itPriority && typeof itPriority === "string") {
+      where.itPriority = itPriority;
+    }
+    if (status && typeof status === "string") {
+      where.currentStatus = status;
+    }
+
+    const validSortFields = ["ticketNumber", "createdAt", "updatedAt", "summary"];
+    const sortField = validSortFields.includes(sortBy as string) ? (sortBy as string) : "createdAt";
+    const orderDirection = sortOrder === "asc" ? "asc" : "desc";
+
+    const skip = (parsedPage - 1) * parsedPageSize;
+
+    const prisma = getPrisma();
+
+    const [tickets, totalItems] = await Promise.all([
+      prisma.ticket.findMany({
+        where,
+        orderBy: { [sortField]: orderDirection },
+        skip,
+        take: parsedPageSize,
+        include: {
+          category: { select: { id: true, name: true } },
+          relatedSystem: { select: { id: true, name: true } }
+        }
+      }),
+      prisma.ticket.count({ where })
+    ]);
+
+    const totalPages = Math.ceil(totalItems / parsedPageSize);
+
+    const formattedData = tickets.map(t => ({
+      id: t.id,
+      ticketNumber: t.ticketNumber,
+      summary: t.summary,
+      category: t.category,
+      relatedSystem: t.relatedSystem,
+      requestedPriority: t.requestedPriority,
+      itPriority: t.itPriority,
+      status: t.currentStatus,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt
+    }));
+
+    return res.status(200).json({
+      data: formattedData,
+      pagination: {
+        page: parsedPage,
+        pageSize: parsedPageSize,
+        totalItems,
+        totalPages,
+        hasNextPage: parsedPage < totalPages,
+        hasPreviousPage: parsedPage > 1
+      }
+    });
+  } catch (error) {
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });
   }
