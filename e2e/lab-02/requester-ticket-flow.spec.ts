@@ -35,6 +35,9 @@ test.describe('Requester Ticket Flow', () => {
 
     // Wait for the form to be fully rendered with all values filled
     await expect(page.locator('textarea[name="description"]')).toHaveValue(descriptionText);
+    
+    // Verify there is no horizontal overflow before capturing screenshot
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBeTruthy();
     await page.screenshot({ path: `artifacts/lab-02/screenshots/create-ticket/${viewName}.png` });
 
     // Submit
@@ -63,6 +66,7 @@ test.describe('Requester Ticket Flow', () => {
 
     // Wait for list to fully render and take screenshot of My Tickets page
     // (The visibility of ticketLink above confirms the list has rendered)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBeTruthy();
     await page.screenshot({ path: `artifacts/lab-02/screenshots/my-tickets/${viewName}.png` });
 
     // 5. Click the ticket to open the 'Requester Ticket Detail' screen and verify the read-only data matches the submission.
@@ -83,6 +87,38 @@ test.describe('Requester Ticket Flow', () => {
 
     // Wait for the attachments tab to render properly then take a screenshot of Ticket Detail page
     await expect(page.locator('.nav-tabs')).toBeVisible();
+    
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBeTruthy();
     await page.screenshot({ path: `artifacts/lab-02/screenshots/ticket-detail/${viewName}.png` });
+
+    // --- Attachment Lifecycle Test ---
+    // 1. Create a small dummy file (using PDF since it's an allowed MIME type)
+    const dummyFilename = `dummy-${Date.now()}.pdf`;
+    const dummyFileContent = Buffer.from('%PDF-1.4\\n%Dummy PDF content for E2E testing\\n');
+    
+    // 2. Upload the file using the file input
+    await page.setInputFiles('input[type="file"]', {
+      name: dummyFilename,
+      mimeType: 'application/pdf',
+      buffer: dummyFileContent,
+    });
+    
+    // 3. Verify the attachment's metadata (filename) is visible on the screen
+    // We use .first() to prevent strict mode violation, though filename should be unique via timestamp
+    const attachmentItem = page.locator('.card', { hasText: dummyFilename }).first();
+    await expect(attachmentItem).toBeVisible();
+    
+    // 4. Soft-remove the file by clicking 'Remove', filling in a removal reason, and confirming.
+    await attachmentItem.locator('button', { hasText: 'Remove' }).first().click();
+    await page.locator('[data-testid="removal-reason-input"]').fill('Removed during E2E test verification');
+    await page.locator('[data-testid="confirm-remove-btn"]').click();
+    
+    // Wait for modal to close
+    await expect(page.locator('[data-testid="removal-reason-input"]')).toBeHidden();
+    
+    // Verify the download button is no longer available and file unavailable text is shown
+    const removedItem = page.locator('.card', { hasText: dummyFilename }).first();
+    await expect(removedItem.locator('button', { hasText: 'Download' })).toBeHidden();
+    await expect(removedItem.locator('span', { hasText: 'File unavailable' }).first()).toBeVisible();
   });
 });
