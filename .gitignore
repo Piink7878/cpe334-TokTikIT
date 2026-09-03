@@ -12,3 +12,8 @@ server/prisma/*.db
 # logs & OS
 *.log
 .DS_Store
+# Playwright & Test Reports
+playwright-report/
+test-results/
+report/
+*.pdf

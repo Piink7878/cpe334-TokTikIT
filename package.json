@@ -1,0 +1,27 @@
+{
+  "name": "cpe334-toktikit",
+  "version": "1.0.0",
+  "description": "TokTickIT is an IT service desk application full-stack starter built for CPE334 (Introduction to Software Engineering in the Age of AI Agents).",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Piink7878/cpe334-TokTikIT.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Piink7878/cpe334-TokTikIT/issues"
+  },
+  "homepage": "https://github.com/Piink7878/cpe334-TokTikIT#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}
