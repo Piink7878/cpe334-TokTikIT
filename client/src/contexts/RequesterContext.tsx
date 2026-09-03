@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
 export interface Requester {
   id: number;
@@ -14,7 +14,25 @@ interface RequesterContextType {
 const RequesterContext = createContext<RequesterContextType | undefined>(undefined);
 
 export function RequesterProvider({ children }: { children: ReactNode }) {
-  const [selectedRequester, setSelectedRequester] = useState<Requester | null>(null);
+  const [selectedRequester, setSelectedRequester] = useState<Requester | null>(() => {
+    const saved = localStorage.getItem("toktickit_dev_requester_id");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (selectedRequester) {
+      localStorage.setItem("toktickit_dev_requester_id", JSON.stringify(selectedRequester));
+    } else {
+      localStorage.removeItem("toktickit_dev_requester_id");
+    }
+  }, [selectedRequester]);
 
   return (
     <RequesterContext.Provider value={{ selectedRequester, setSelectedRequester }}>
