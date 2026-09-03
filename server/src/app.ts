@@ -160,18 +160,6 @@ app.post("/api/tickets", (req, res, next) => {
     }
 
     const currentYear = new Date().getFullYear();
-    const lastTicket = await prisma.ticket.findFirst({
-      where: { ticketNumber: { startsWith: `TKT-${currentYear}-` } },
-      orderBy: { ticketNumber: "desc" }
-    });
-
-    let sequence = 1;
-    if (lastTicket) {
-      const parts = lastTicket.ticketNumber.split('-');
-      sequence = parseInt(parts[2], 10) + 1;
-    }
-    const ticketNumber = `TKT-${currentYear}-${String(sequence).padStart(6, '0')}`;
-
     const attachmentsData = [];
     if (req.files) {
       for (const file of req.files as Express.Multer.File[]) {
@@ -184,23 +172,53 @@ app.post("/api/tickets", (req, res, next) => {
       }
     }
 
-    const ticket = await prisma.ticket.create({
-      data: {
-        ticketNumber,
-        requesterId,
-        categoryId,
-        relatedSystemId,
-        summary,
-        description,
-        requestedPriority,
-        itPriority: requestedPriority,
-        currentStatus: "NEW",
-        attachments: {
-          create: attachmentsData
+    let maxRetries = 5;
+    let ticket: any = null;
+
+    while (maxRetries > 0) {
+      const lastTicket = await prisma.ticket.findFirst({
+        where: { ticketNumber: { startsWith: `TKT-${currentYear}-` } },
+        orderBy: { ticketNumber: "desc" }
+      });
+
+      let sequence = 1;
+      if (lastTicket) {
+        const parts = lastTicket.ticketNumber.split('-');
+        sequence = parseInt(parts[2], 10) + 1;
+      }
+      const ticketNumber = `TKT-${currentYear}-${String(sequence).padStart(6, '0')}`;
+
+      try {
+        ticket = await prisma.ticket.create({
+          data: {
+            ticketNumber,
+            requesterId,
+            categoryId,
+            relatedSystemId,
+            summary,
+            description,
+            requestedPriority,
+            itPriority: requestedPriority,
+            currentStatus: "NEW",
+            attachments: {
+              create: attachmentsData
+            }
+          },
+          include: { attachments: true }
+        });
+        break; // Successfully created
+      } catch (err: any) {
+        if (err.code === "P2002") {
+          maxRetries--;
+          if (maxRetries === 0) {
+            throw new Error("Concurrency collision on ticket number generation. Max retries exceeded.");
+          }
+          // Loop will retry
+        } else {
+          throw err; // Rethrow other database errors
         }
-      },
-      include: { attachments: true }
-    });
+      }
+    }
 
     const formattedTicket = {
         id: ticket.id,
