@@ -252,7 +252,11 @@ export default function MyTickets() {
               <tbody>
                 {tickets.map(ticket => (
                   <tr key={ticket.id}>
-                    <td className="px-3 py-3" style={{ fontSize: '14px', fontWeight: 500 }}>{ticket.ticketNumber}</td>
+                    <td className="px-3 py-3" style={{ fontSize: '14px', fontWeight: 500 }}>
+                      <Link to={`/tickets/${ticket.id}`} style={{ textDecoration: 'none', color: 'var(--color-primary)' }}>
+                        {ticket.ticketNumber}
+                      </Link>
+                    </td>
                     <td className="px-3 py-3" style={{ fontSize: '14px', color: 'var(--color-text-muted)' }}>
                       {new Date(ticket.createdAt).toLocaleDateString()}
                     </td>
@@ -277,7 +281,9 @@ export default function MyTickets() {
             {tickets.map(ticket => (
               <div key={ticket.id} className="ticket-mobile-card">
                 <div className="ticket-mobile-header">
-                  <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-primary)' }}>{ticket.ticketNumber}</span>
+                  <Link to={`/tickets/${ticket.id}`} style={{ fontWeight: 600, fontSize: '14px', color: 'var(--color-primary)', textDecoration: 'none' }}>
+                    {ticket.ticketNumber}
+                  </Link>
                   <span className={`badge-status ${getStatusBadgeClass(ticket.status)}`}>{ticket.status.replace('_', ' ')}</span>
                 </div>
                 <h3 className="ticket-mobile-title">{ticket.summary}</h3>

@@ -6,6 +6,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import AppLayout from "./components/AppLayout";
 import MyTickets from "./pages/MyTickets";
 import CreateTicket from "./pages/CreateTicket";
+import { RequesterTicketDetail } from "./pages/RequesterTicketDetail";
 
 // UI states for Health Check (Issue 4)
 type UiState = "idle" | "loading" | "success" | "error";
@@ -81,6 +82,7 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route path="/my-tickets" element={<MyTickets />} />
             <Route path="/create-ticket" element={<CreateTicket />} />
+            <Route path="/tickets/:id" element={<RequesterTicketDetail />} />
             <Route path="/health" element={<HealthCheck />} />
             {/* Catch-all for unknown protected routes */}
             <Route path="*" element={<Navigate to="/my-tickets" replace />} />
