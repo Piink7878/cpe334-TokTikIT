@@ -51,3 +51,41 @@ export async function getRequesters() {
   }
   return res.json();
 }
+
+export interface RelatedSystem {
+  id: number;
+  name: string;
+}
+
+export async function getRelatedSystems() {
+  const res = await fetch(`${API_URL}/api/related-systems`);
+  if (!res.ok) {
+    throw new Error("Failed to fetch related systems");
+  }
+  return res.json();
+}
+
+export async function getCategories() {
+  const res = await fetch(`${API_URL}/api/categories`);
+  if (!res.ok) {
+    throw new Error("Failed to fetch categories");
+  }
+  // The API returns the array directly for categories
+  return res.json();
+}
+
+export async function createTicket(formData: FormData, requesterId: number) {
+  const res = await fetch(`${API_URL}/api/tickets`, {
+    method: "POST",
+    headers: {
+      "X-Requester-Id": requesterId.toString()
+    },
+    body: formData
+  });
+  
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to create ticket");
+  }
+  return res.json();
+}

@@ -1,4 +1,4 @@
-import { Outlet, Link, useNavigate } from "react-router-dom";
+import { Outlet, Link, NavLink, useNavigate } from "react-router-dom";
 import { useRequester } from "../contexts/RequesterContext";
 
 export default function AppLayout() {
@@ -21,13 +21,13 @@ export default function AppLayout() {
           <div className="collapse navbar-collapse">
             <ul className="navbar-nav me-auto mb-2 mb-lg-0">
               <li className="nav-item">
-                <Link to="/my-tickets" className="nav-link" style={{ color: "var(--color-text-main)", fontWeight: 500 }}>My Tickets</Link>
+                <NavLink to="/my-tickets" className={({isActive}) => `nav-link ${isActive ? 'fw-bold' : ''}`} style={({isActive}) => ({ color: isActive ? "var(--color-primary)" : "var(--color-text-main)", fontWeight: isActive ? 700 : 500 })}>My Tickets</NavLink>
               </li>
               <li className="nav-item">
-                <Link to="/create-ticket" className="nav-link" style={{ color: "var(--color-text-main)", fontWeight: 500 }}>Create Ticket</Link>
+                <NavLink to="/create-ticket" className={({isActive}) => `nav-link ${isActive ? 'fw-bold' : ''}`} style={({isActive}) => ({ color: isActive ? "var(--color-primary)" : "var(--color-text-main)", fontWeight: isActive ? 700 : 500 })}>Create Ticket</NavLink>
               </li>
               <li className="nav-item">
-                <Link to="/health" className="nav-link" style={{ color: "var(--color-text-muted)" }}>Health</Link>
+                <NavLink to="/health" className={({isActive}) => `nav-link ${isActive ? 'fw-bold' : ''}`} style={({isActive}) => ({ color: isActive ? "var(--color-primary)" : "var(--color-text-muted)" })}>Health</NavLink>
               </li>
             </ul>
           </div>
