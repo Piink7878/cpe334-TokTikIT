@@ -41,4 +41,25 @@ app.get("/api/categories", async (_req: Request, res: Response) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Issue 3 — Requesters list
+// Add:  GET /api/requesters
+//   -> read active requesters from PostgreSQL via getPrisma().developmentRequester.findMany(...)
+//   -> return { data: [...] }
+//   -> on failure, respond 500 with a safe message
+// ---------------------------------------------------------------------------
+app.get("/api/requesters", async (_req: Request, res: Response) => {
+  try {
+    const prisma = getPrisma();
+    const requesters = await prisma.developmentRequester.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true, email: true },
+      orderBy: { id: "asc" }
+    });
+    res.status(200).json({ data: requesters });
+  } catch (error) {
+    res.status(500).json({ error: { message: "Failed to fetch requesters" } });
+  }
+});
+
 export default app;

@@ -38,7 +38,16 @@ export async function checkSystem(): Promise<SystemStatus> {
     throw new Error(`Failed to fetch categories: ${resCategories.statusText}`);
   }
   
+  
   const categories = await resCategories.json();
   
   return { online: true, categories };
+}
+
+export async function getRequesters() {
+  const res = await fetch(`${API_URL}/api/requesters`);
+  if (!res.ok) {
+    throw new Error("Failed to fetch requesters");
+  }
+  return res.json();
 }
