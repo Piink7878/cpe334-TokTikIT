@@ -3,6 +3,45 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 export interface Category {
   id: number;
   name: string;
+  description: string;
+  isActive: boolean;
+}
+
+export interface TicketFilters {
+  search?: string;
+  categoryId?: number;
+  requestedPriority?: string;
+  itPriority?: string;
+  status?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
+}
+
+export interface Ticket {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  category: { id: number; name: string };
+  relatedSystem?: { id: number; name: string };
+  requestedPriority: string;
+  itPriority: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
 }
 
 export interface SystemStatus {
@@ -17,30 +56,30 @@ export interface SystemStatus {
 export async function checkSystem(): Promise<SystemStatus> {
   let resHealth;
   let resCategories;
-  
+
   try {
     resHealth = await fetch(`${API_URL}/api/health`);
   } catch (error) {
     throw new Error("Backend is unreachable (Network Error). Please ensure the server is running.");
   }
-  
+
   if (!resHealth.ok) {
     throw new Error(`Failed to fetch health check: ${resHealth.statusText}`);
   }
-  
+
   try {
     resCategories = await fetch(`${API_URL}/api/categories`);
   } catch (error) {
     throw new Error("Failed to reach categories endpoint (Network Error).");
   }
-  
+
   if (!resCategories.ok) {
     throw new Error(`Failed to fetch categories: ${resCategories.statusText}`);
   }
-  
-  
+
+
   const categories = await resCategories.json();
-  
+
   return { online: true, categories };
 }
 
@@ -82,10 +121,39 @@ export async function createTicket(formData: FormData, requesterId: number) {
     },
     body: formData
   });
-  
+
   if (!res.ok) {
     const errorData = await res.json().catch(() => null);
     throw new Error(errorData?.error?.message || "Failed to create ticket");
   }
+  return res.json();
+}
+
+export async function getTickets(requesterId: number, filters?: TicketFilters): Promise<PaginatedResponse<Ticket>> {
+  const params = new URLSearchParams();
+  if (filters) {
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        params.append(key, String(value));
+      }
+    });
+  }
+
+  const queryString = params.toString();
+  const url = `${API_URL}/api/tickets${queryString ? `?${queryString}` : ''}`;
+
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Requester-Id': requesterId.toString()
+    }
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to fetch tickets");
+  }
+
   return res.json();
 }

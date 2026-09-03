@@ -48,21 +48,105 @@ body {
 }
 
 /* Input Styles */
-.form-select, .form-control {
+.form-select,
+.form-control {
   border-color: var(--color-border-input);
   color: var(--color-text-main);
   height: 38px;
   border-radius: 6px;
 }
 
-.form-select:focus, .form-control:focus {
+.form-select:focus,
+.form-control:focus {
   border-color: var(--color-border-focus);
   box-shadow: 0 0 0 3px rgba(11, 122, 70, 0.2);
 }
 
-.form-select:disabled, .form-control:disabled {
+.form-select:disabled,
+.form-control:disabled {
   background-color: var(--color-surface-muted);
   border-color: var(--color-border-subtle);
   color: var(--color-text-disabled);
   cursor: not-allowed;
+}
+
+/* Badge Styles */
+.badge-status {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: capitalize;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.badge-new {
+  background-color: var(--color-surface-muted);
+  color: var(--color-text-main);
+  border: 1px solid var(--color-border-subtle);
+}
+
+.badge-pending {
+  background-color: #fef08a; /* yellow-200 */
+  color: #854d0e; /* yellow-800 */
+  border: 1px solid #fde047; /* yellow-300 */
+}
+
+.badge-resolved {
+  background-color: #bbf7d0; /* green-200 */
+  color: #166534; /* green-800 */
+  border: 1px solid #86efac; /* green-300 */
+}
+
+.badge-low {
+  background-color: #e0f2fe; /* sky-100 */
+  color: #0369a1; /* sky-700 */
+  border: 1px solid #bae6fd; /* sky-200 */
+}
+
+.badge-high {
+  background-color: #fee2e2; /* red-100 */
+  color: #b91c1c; /* red-700 */
+  border: 1px solid #fecaca; /* red-200 */
+}
+
+/* Mobile Card Styling */
+.ticket-mobile-card {
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  padding: 1rem;
+  background-color: var(--color-surface);
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.ticket-mobile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.5rem;
+}
+
+.ticket-mobile-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-main);
+  margin: 0 0 0.5rem 0;
+}
+
+.ticket-mobile-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  flex-wrap: wrap;
+}
+
+/* Utilities */
+.text-truncate-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
