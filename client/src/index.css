@@ -1,0 +1,68 @@
+:root {
+  --color-primary: #006B3C;
+  --color-primary-hover: #00542F;
+  --color-secondary: #0B7A46;
+  --color-secondary-hover: #085F36;
+  --color-pale-green: #EAF6EF;
+  --color-bg-page: #F5F7F6;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #F0F4F2;
+  --color-border-subtle: #E0E5E2;
+  --color-border-input: #CBD5E1;
+  --color-border-focus: #0B7A46;
+  --color-text-main: #1A2E22;
+  --color-text-muted: #5B6B64;
+  --color-text-disabled: #8C9B94;
+  --color-danger: #D32F2F;
+  --color-danger-bg: #FDF2F2;
+  --color-warning: #B45309;
+  --color-warning-bg: #FEF3C7;
+  --color-info: #1D4ED8;
+  --color-info-bg: #EFF6FF;
+}
+
+body {
+  background-color: var(--color-bg-page);
+  color: var(--color-text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Zen Green Buttons */
+.btn-primary {
+  background-color: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+  color: #FFFFFF !important;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--color-primary-hover) !important;
+  border-color: var(--color-primary-hover) !important;
+}
+
+.btn-primary:disabled {
+  background-color: #E2E8F0 !important;
+  border-color: #E2E8F0 !important;
+  color: var(--color-text-disabled) !important;
+  cursor: not-allowed;
+}
+
+/* Input Styles */
+.form-select, .form-control {
+  border-color: var(--color-border-input);
+  color: var(--color-text-main);
+  height: 38px;
+  border-radius: 6px;
+}
+
+.form-select:focus, .form-control:focus {
+  border-color: var(--color-border-focus);
+  box-shadow: 0 0 0 3px rgba(11, 122, 70, 0.2);
+}
+
+.form-select:disabled, .form-control:disabled {
+  background-color: var(--color-surface-muted);
+  border-color: var(--color-border-subtle);
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
