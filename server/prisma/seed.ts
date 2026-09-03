@@ -35,7 +35,7 @@ async function main() {
       console.log(`Upserted RelatedSystem: ${name}`);
     }
 
-    // 3. Seed Development Requesters (4 active, 1 inactive)
+    // 3. Seed Development Requesters
     const requesters = [
       { name: 'Alice Active', email: 'alice@example.com', isActive: true },
       { name: 'Bob Active', email: 'bob@example.com', isActive: true },
@@ -43,7 +43,6 @@ async function main() {
       { name: 'Diana Active', email: 'diana@example.com', isActive: true },
       { name: 'Eve Inactive', email: 'eve@example.com', isActive: false },
     ];
-
     for (const requester of requesters) {
       await prisma.developmentRequester.upsert({
         where: { email: requester.email },
