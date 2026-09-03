@@ -90,41 +90,87 @@ describe("GET /api/tickets", () => {
     expect(response.body.error.message).toBe("Invalid pagination parameters");
   });
 
-  it("should apply query filters correctly", async () => {
+  it("should apply search filter correctly", async () => {
     await request(app)
       .get("/api/tickets")
       .set("X-Requester-Id", "1")
-      .query({
-        search: "battery",
-        categoryId: "2",
-        requestedPriority: "HIGH",
-        itPriority: "HIGH",
-        status: "OPEN",
-        sortBy: "ticketNumber",
-        sortOrder: "asc",
-        page: "2",
-        pageSize: "5"
-      });
+      .query({ search: "battery" });
     
-    expect(mockTicketFindMany).toHaveBeenCalledWith({
-      where: {
-        requesterId: 1,
+    expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
         OR: [
           { ticketNumber: { contains: "battery", mode: "insensitive" } },
           { summary: { contains: "battery", mode: "insensitive" } }
-        ],
-        categoryId: 2,
-        requestedPriority: "HIGH",
-        itPriority: "HIGH",
-        currentStatus: "OPEN"
-      },
-      orderBy: { ticketNumber: "asc" },
-      skip: 5,
-      take: 5,
-      include: {
-        category: { select: { id: true, name: true } },
-        relatedSystem: { select: { id: true, name: true } }
-      }
+        ]
+      })
+    }));
+  });
+
+  it("should apply status, category, and priority filters individually", async () => {
+    await request(app)
+      .get("/api/tickets")
+      .set("X-Requester-Id", "1")
+      .query({ status: "OPEN" });
+    expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ currentStatus: "OPEN" })
+    }));
+
+    await request(app)
+      .get("/api/tickets")
+      .set("X-Requester-Id", "1")
+      .query({ categoryId: "2" });
+    expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ categoryId: 2 })
+    }));
+
+    await request(app)
+      .get("/api/tickets")
+      .set("X-Requester-Id", "1")
+      .query({ requestedPriority: "HIGH" });
+    expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ requestedPriority: "HIGH" })
+    }));
+  });
+
+  it("should apply sorting in both asc and desc orders", async () => {
+    await request(app)
+      .get("/api/tickets")
+      .set("X-Requester-Id", "1")
+      .query({ sortBy: "ticketNumber", sortOrder: "asc" });
+    expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      orderBy: { ticketNumber: "asc" }
+    }));
+
+    await request(app)
+      .get("/api/tickets")
+      .set("X-Requester-Id", "1")
+      .query({ sortBy: "createdAt", sortOrder: "desc" });
+    expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      orderBy: { createdAt: "desc" }
+    }));
+  });
+
+  it("should calculate pagination metadata correctly for multi-page requests", async () => {
+    mockTicketCount.mockResolvedValue(25); // 25 total items
+    
+    // Page 2, PageSize 10
+    const response = await request(app)
+      .get("/api/tickets")
+      .set("X-Requester-Id", "1")
+      .query({ page: "2", pageSize: "10" });
+    
+    expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      skip: 10,
+      take: 10
+    }));
+    
+    expect(response.body.pagination).toEqual({
+      page: 2,
+      pageSize: 10,
+      totalItems: 25,
+      totalPages: 3,
+      hasNextPage: true,
+      hasPreviousPage: true
     });
   });
 

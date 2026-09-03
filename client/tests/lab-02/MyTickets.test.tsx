@@ -163,4 +163,101 @@ describe('MyTickets Component', () => {
       expect(screen.getByText('Backend connection failed')).toBeInTheDocument();
     });
   });
+
+  it('triggers API with correct parameters when searching', async () => {
+    mockGetTickets.mockResolvedValue({ data: [], pagination: { page: 1, pageSize: 8, totalItems: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false } });
+    renderWithContext(<MyTickets />);
+    
+    // Wait for initial load
+    await waitFor(() => expect(mockGetTickets).toHaveBeenCalledTimes(1));
+
+    const searchInput = screen.getByPlaceholderText('Search...');
+    fireEvent.change(searchInput, { target: { value: 'laptop' } });
+
+    await waitFor(() => {
+      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({
+        search: 'laptop',
+        page: 1 // should reset to page 1
+      }));
+    });
+  });
+
+  it('triggers API with correct parameters when selecting dropdown filters', async () => {
+    mockGetTickets.mockResolvedValue({ data: [], pagination: { page: 1, pageSize: 8, totalItems: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false } });
+    renderWithContext(<MyTickets />);
+    
+    await waitFor(() => expect(mockGetTickets).toHaveBeenCalledTimes(1));
+
+    // Change Category
+    const categorySelect = screen.getByLabelText('Category');
+    fireEvent.change(categorySelect, { target: { value: '1' } }); // Hardware category
+
+    await waitFor(() => {
+      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({ categoryId: '1', page: 1 }));
+    });
+
+    // Change Status
+    const statusSelect = screen.getByLabelText('Status');
+    fireEvent.change(statusSelect, { target: { value: 'OPEN' } });
+
+    await waitFor(() => {
+      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({ status: 'OPEN', categoryId: '1', page: 1 }));
+    });
+  });
+
+  it('triggers API with correct parameters when changing sort order', async () => {
+    mockGetTickets.mockResolvedValue({ data: [], pagination: { page: 1, pageSize: 8, totalItems: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false } });
+    renderWithContext(<MyTickets />);
+    
+    await waitFor(() => expect(mockGetTickets).toHaveBeenCalledTimes(1));
+
+    const sortSelect = screen.getByLabelText('Sort By');
+    fireEvent.change(sortSelect, { target: { value: 'ticketNumber-asc' } });
+
+    await waitFor(() => {
+      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({
+        sortBy: 'ticketNumber',
+        sortOrder: 'asc',
+        page: 1
+      }));
+    });
+  });
+
+  it('triggers API with correct parameters when paginating', async () => {
+    mockGetTickets.mockResolvedValue({
+      data: [{
+        id: 1,
+        ticketNumber: 'TKT-1',
+        summary: 'A ticket',
+        category: { id: 1, name: 'Hardware' },
+        requestedPriority: 'LOW',
+        itPriority: 'LOW',
+        status: 'NEW',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }],
+      pagination: {
+        page: 1,
+        pageSize: 8,
+        totalItems: 20,
+        totalPages: 3,
+        hasNextPage: true,
+        hasPreviousPage: false
+      }
+    });
+    
+    renderWithContext(<MyTickets />);
+    
+    await waitFor(() => expect(mockGetTickets).toHaveBeenCalledTimes(1));
+    mockGetTickets.mockClear(); // clear first call
+
+    // Click next page
+    const nextBtn = screen.getByText('Next >');
+    expect(nextBtn).not.toBeDisabled();
+    fireEvent.click(nextBtn);
+
+    await waitFor(() => {
+      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({ page: 2 }));
+    });
+  });
 });
