@@ -41,7 +41,7 @@ model RelatedSystem {
 
 model Ticket {
   id                Int                  @id @default(autoincrement())
-  ticketNumber      String               @unique // สร้างจาก Backend ระบบ
+  ticketNumber      String               @unique // added unique constraint
   requesterId       Int
   requester         DevelopmentRequester @relation(fields: [requesterId], references: [id])
   categoryId        Int
