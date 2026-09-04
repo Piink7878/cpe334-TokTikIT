@@ -1,266 +1,172 @@
-# TokTickIT (ตอกติกกิต)
+# TokTickIT — CPE334 Lab 2
 
-TokTickIT is an IT service desk application full-stack starter built for CPE334 (Introduction to Software Engineering in the Age of AI Agents).
-
-This repository provides a Lab 1 foundation with a React frontend, Express backend, PostgreSQL database integration via Prisma ORM, and automated tests for API and UI behavior.
+IT Service Desk ticketing MVP. Requester-facing, full-stack: React + Express + PostgreSQL.
 
 ## Tech Stack
 
-- Frontend: React + TypeScript + Vite + Bootstrap
-- Backend: Node.js + Express + TypeScript
-- Database and ORM: PostgreSQL + Prisma ORM
-- Testing: Vitest and Supertest
+| Layer | Tools |
+|---|---|
+| Frontend | React 18 + TypeScript + Vite |
+| Backend | Node.js + Express + TypeScript |
+| Database | PostgreSQL + Prisma ORM |
+| File Storage | Local disk (`server/uploads/lab-02/`) |
+| Testing | Vitest + Supertest (API), Playwright (E2E) |
+
+---
 
 ## Prerequisites
 
-Before running the project locally, make sure you have:
-
-- Node.js (v18 or higher recommended)
-- PostgreSQL database instance
+- Node.js v18+
+- PostgreSQL (running locally or remote)
 - Git
-- GitHub CLI (gh)
 
-## Project Architecture
+---
 
-TokTickIT is organized as a two-app monorepo:
+## Setup
 
-- client: React + Vite frontend
-- server: Express + Prisma backend API
-- docs: Lab-related documentation and evidence
-
-Repository structure:
-
-```text
-cpe334-TokTikIT/
-├─ README.md
-├─ client/
-│  ├─ .env.example
-│  ├─ index.html
-│  ├─ package.json
-│  ├─ tsconfig.json
-│  ├─ vite.config.ts
-│  ├─ src/
-│  │  ├─ api.ts
-│  │  ├─ App.tsx
-│  │  ├─ main.tsx
-│  │  └─ vite-env.d.ts
-│  └─ tests/
-│     ├─ setup.ts
-│     └─ lab-01/
-│        └─ App.test.tsx
-├─ docs/
-│  └─ lab-01/
-│     ├─ ai_use.md
-│     ├─ reviewer.md
-│     └─ tests.md
-└─ server/
-	├─ .env.example
-	├─ package.json
-	├─ tsconfig.json
-	├─ vitest.config.ts
-	├─ prisma/
-	│  ├─ schema.prisma
-	│  └─ seed.ts
-	├─ src/
-	│  ├─ app.ts
-	│  ├─ index.ts
-	│  └─ prisma.ts
-	└─ tests/
-		└─ lab-01/
-			├─ categories.test.ts
-			└─ health.test.ts
-```
-
-## Environment Setup and Configuration
-
-Create local environment files for both apps from their examples.
-
-### Server
-
-From the server directory:
+### 1. Clone & Install Dependencies
 
 ```bash
-cp .env.example .env
-```
+git clone https://github.com/Piink7878/cpe334-TokTikIT.git
+cd cpe334-TokTikIT
 
-PowerShell alternative:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Required values in server/.env:
-
-- DATABASE_URL: PostgreSQL connection string used by Prisma
-- PORT: backend API port (default in example: 3000)
-
-### Client
-
-From the client directory:
-
-```bash
-cp .env.example .env
-```
-
-PowerShell alternative:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Required value in client/.env:
-
-- VITE_API_URL: base URL of the backend API (example: http://localhost:3000)
-
-### Security Notice
-
-Never commit .env files, credentials, or any secrets to Git.
-
-- Keep only .env.example in version control
-- Ensure .env is ignored by .gitignore
-- Rotate any credential immediately if leaked
-
-## Local Setup and Execution Guide
-
-### Step 1: Install Dependencies
-
-Install dependencies for both applications:
-
-```bash
-cd server
-npm install
-
-cd ../client
-npm install
-```
-
-Optional (from repository root):
-
-```bash
 npm --prefix server install
 npm --prefix client install
 ```
 
-### Step 2: Database Migration and Seed
+### 2. Configure Environment Variables
 
-From the server directory:
-
-1. Run Prisma migration:
+**Server** — copy and fill in your DB connection:
 
 ```bash
-npx prisma migrate dev
+# Windows (PowerShell)
+Copy-Item server/.env.example server/.env
 ```
 
-2. Seed initial categories:
+Edit `server/.env`:
+
+```env
+DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/toktickit?schema=public"
+PORT=3000
+```
+
+**Client** — copy (default value works for local dev):
 
 ```bash
-npx prisma db seed
+Copy-Item client/.env.example client/.env
 ```
 
-Lab 1 seed data must include these four categories:
+`client/.env` contains:
 
-- Account and Access
-- Hardware
-- Software
-- Network
-
-### Step 3: Run the Application
-
-Start backend API server (from server directory):
-
-```bash
-npm run dev
+```env
+VITE_API_URL="http://localhost:3000"
 ```
 
-Start frontend dev server (from client directory):
+### 3. Database Migration & Seed
 
-```bash
-npm run dev
-```
-
-Default local URLs:
-
-- Backend API: http://localhost:3000
-- Frontend App: http://localhost:5173
-
-## API Endpoints (Lab 1 Scope)
-
-### GET /api/health
-
-- Expected status: 200
-- Expected JSON response:
-
-```json
-{ "status": "ok", "service": "TokTickIT API" }
-```
-
-### GET /api/categories
-
-- Expected status: 200
-- Data source: PostgreSQL via Prisma ORM
-- Expected behavior: returns list of the four seeded categories
-- Typical response shape:
-
-```json
-[
-  { "id": 1, "name": "Account and Access" },
-  { "id": 2, "name": "Hardware" },
-  { "id": 3, "name": "Software" },
-  { "id": 4, "name": "Network" }
-]
-```
-
-## Running Automated Tests
-
-Run backend tests (Supertest + Vitest):
+Run from the `server/` directory:
 
 ```bash
 cd server
-npm test
+
+# Apply schema migrations
+npx prisma migrate dev
+
+# Seed initial data (categories, related systems, requesters)
+npm run prisma:seed
 ```
 
-Run frontend tests (Vitest):
+Seed data includes:
+- **4 Categories**: Account and Access, Hardware, Software, Network
+- **6 Related Systems**: Email, Campus Wi-Fi, VPN, LEB2 App, Grade Submission App, Corporate Laptop
+- **4 Active Requesters**: Alice Active, Bob Active, Charlie Active, Diana Active
+- **1 Inactive Requester**: Eve Inactive
+
+---
+
+## Running Locally
+
+Open **two terminals**:
+
+**Terminal 1 — Backend API** (port 3000):
+
+```bash
+cd server
+npm run dev
+```
+
+**Terminal 2 — Frontend** (port 5173):
 
 ```bash
 cd client
-npm test
+npm run dev
 ```
 
-Alternative explicit Vitest commands:
+Then open: **http://localhost:5173**
+
+---
+
+## Running Tests
+
+**Backend unit & API tests:**
 
 ```bash
 cd server
-npx vitest run
-
-cd ../client
-npx vitest run
+npm test
 ```
 
-## Git Workflow and Branching Policy
+**E2E tests (Playwright):**
 
-Use the following branch model for Lab 1:
+```bash
+# from repo root
+npx playwright test
+```
 
-- main: protected stable release branch
-- lab1-staging: integration branch for Lab 1
-- feature/\*: short-lived feature branches per issue
+---
 
-Examples of feature branches:
+## Key API Endpoints
 
-- feature/1-project-foundation
-- feature/2-health-check
-- feature/3-category-seed
-- feature/4-category-list
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/requesters` | List active requesters |
+| `GET` | `/api/categories` | List categories |
+| `GET` | `/api/related-systems` | List related systems |
+| `POST` | `/api/tickets` | Create ticket (`X-Requester-Id` header required) |
+| `GET` | `/api/tickets` | List own tickets (search, filter, sort, paginate) |
+| `GET` | `/api/tickets/:id` | Get ticket details |
+| `POST` | `/api/tickets/:id/attachments` | Upload attachment (max 5 MB, JPG/PNG/WEBP/PDF) |
+| `GET` | `/api/attachments/:id/download` | Download attachment |
+| `DELETE` | `/api/attachments/:id` | Soft-remove attachment (requires `removalReason`) |
 
-Recommended flow:
+Full spec: [`docs/lab-02/api-spec.md`](docs/lab-02/api-spec.md)
 
-1. Branch from lab1-staging using feature/<issue-number>-<topic>
-2. Commit small, focused changes with clear messages
-3. Push branch and open a pull request into lab1-staging
-4. After review and checks pass, merge to lab1-staging
-5. Promote to main only when lab deliverable is stable
+---
 
-## Notes for Lab Submission
+## Project Structure
 
-- Keep implementation and tests aligned with docs in docs/lab-01/
-- Include evidence of passing tests in docs/lab-01/tests.md
-- Record AI usage and review outcomes in the provided documentation files
+```
+cpe334-TokTikIT/
+├── client/          # React + Vite frontend
+│   ├── src/
+│   └── tests/
+├── server/          # Express + Prisma backend
+│   ├── prisma/      # schema.prisma + seed.ts
+│   ├── src/         # app.ts, index.ts, middlewares/
+│   ├── tests/
+│   └── uploads/     # uploaded attachment files (gitignored)
+├── docs/
+│   ├── lab-01/
+│   └── lab-02/      # specification, api-spec, ui-spec, tests, ai-use, reviewer
+└── e2e/             # Playwright E2E tests
+```
+
+---
+
+## Git Workflow
+
+- `main` — stable release
+- `lab2-staging` — Lab 2 integration branch
+- `feature/<issue-number>-<topic>` — per-issue feature branches
+
+> ⚠️ Never commit `.env` files. Only `.env.example` belongs in version control.
