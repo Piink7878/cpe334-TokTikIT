@@ -45,8 +45,8 @@ The IT department requires a professional self-service ticketing system for corp
 - **BR-03 (Development Context Non-Security)**: The Development Requester selector is an ephemeral testing harness for Lab 2. It does not provide real security, cryptographic sessions, or access tokens.
 - **BR-04 (Attachment Constraints)**: Permitted file types are strictly limited to `image/jpeg` (.jpg, .jpeg), `image/png` (.png), `image/webp` (.webp), and `application/pdf` (.pdf). The maximum file size is exactly 5,242,880 bytes (5 MB) per file.
 - **BR-05 (Attachment Capacity Limit)**: A ticket may have at most five (5) active (non-removed) attachments at any given time. Uploads that would exceed this threshold must be rejected.
-- **BR-06 (Attachment Soft Removal)**: Attachment deletion must be implemented as a soft removal. The file's physical access/download is revoked, but metadata (`originalFilename`, `fileSize`, `contentType`, `removedAt`, `removedReason`, `removedByRequesterId`) must remain visible in the audit history.
-- **BR-07 (Download Restriction on Removed Files)**: Any attempt to preview or download a soft-removed attachment must be blocked by the server, returning HTTP 410 Gone or 404 Not Found.
+- **BR-06 (Attachment Soft Removal)**: Attachment deletion must be implemented as a soft removal. The file's physical access/download is revoked, but metadata (`originalName`, `storedName`, `mimeType`, `sizeBytes`, `removedAt`, `removalReason`) must remain visible in the audit history.
+- **BR-07 (Download Restriction on Removed Files)**: Any attempt to preview or download a soft-removed attachment must be blocked by the server, returning HTTP 410 Gone.
 - **BR-08 (Data Ownership & Access Control)**: Direct read or write access (listing, detail inspection, attachment upload, attachment download, attachment removal) to a ticket belonging to another requester must be rejected with HTTP 403 Forbidden or 404 Not Found.
 - **BR-09 (Validation Rules & Bounds)**:
   - `Summary`: Required string, minimum 5 characters, maximum 150 characters, trimmed of leading/trailing whitespace.
@@ -88,47 +88,49 @@ The IT department requires a professional self-service ticketing system for corp
 
 ## 7. Data Changes
 ### Database Schema Design (Prisma / PostgreSQL)
-1. **RequesterUser**:
+1. **DevelopmentRequester** (model name in Prisma):
    - `id`: Int (PK, autoincrement)
    - `name`: String
    - `email`: String (Unique)
-   - `department`: String
-   - `isActive`: Boolean (Default: true, index)
+   - `isActive`: Boolean (Default: true)
    - `createdAt`, `updatedAt`: DateTime
+   - ⚠️ Note: `department` field is **not implemented** in the current schema.
 2. **Category**:
    - `id`: Int (PK, autoincrement)
    - `name`: String (Unique) - Account and Access, Hardware, Software, Network
    - `isActive`: Boolean (Default: true)
+   - `createdAt`, `updatedAt`: DateTime
 3. **RelatedSystem**:
    - `id`: Int (PK, autoincrement)
-   - `name`: String (Unique) - Email, Campus Wi-Fi, VPN, LEB2 App, Grade Submission App, Corporate Laptop, Printer
+   - `name`: String (Unique) - Email, Campus Wi-Fi, VPN, LEB2 App, Grade Submission App, Corporate Laptop
    - `isActive`: Boolean (Default: true)
+   - `createdAt`, `updatedAt`: DateTime
 4. **Ticket**:
    - `id`: Int (PK, autoincrement)
-   - `ticketNumber`: String (Unique, Indexed) - `TKT-YYYY-XXXXXX`
-   - `requesterId`: Int (FK -> RequesterUser.id, Indexed)
+   - `ticketNumber`: String (Unique) - `TKT-YYYY-XXXXXX`
+   - `requesterId`: Int (FK -> DevelopmentRequester.id)
    - `categoryId`: Int (FK -> Category.id)
    - `relatedSystemId`: Int (FK -> RelatedSystem.id)
-   - `summary`: String (VarChar 150)
-   - `description`: Text
-   - `requestedPriority`: Enum (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)
-   - `itPriority`: Enum (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`)
-   - `status`: Enum (`NEW`, `OPEN`, `IN_PROGRESS`, `PENDING`, `RESOLVED`, `CLOSED`) (Default: `NEW`, Indexed)
-   - `createdAt`: DateTime (Default: now(), Indexed)
-   - `updatedAt`: DateTime (Updated on change)
+   - `requestedPriority`: Enum (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`) (Default: `MEDIUM`)
+   - `itPriority`: Enum (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`) (Default: `MEDIUM`)
+   - `currentStatus`: Enum (`NEW`, `OPEN`, `IN_PROGRESS`, `PENDING`, `RESOLVED`, `CLOSED`, `CANCELLED`) (Default: `NEW`)
+   - `summary`: String
+   - `description`: String
+   - `createdAt`: DateTime (Default: now())
+   - `updatedAt`: DateTime (auto-updated)
 5. **Attachment**:
    - `id`: Int (PK, autoincrement)
-   - `ticketId`: Int (FK -> Ticket.id, Indexed)
-   - `originalFilename`: String
-   - `storedFilename`: String
-   - `filePath`: String
-   - `fileSize`: Int (bytes)
-   - `contentType`: String (MIME)
-   - `isRemoved`: Boolean (Default: false, Indexed)
+   - `ticketId`: Int (FK -> Ticket.id)
+   - `originalName`: String (original filename from upload)
+   - `storedName`: String (UUID-prefixed filename stored on disk)
+   - `mimeType`: String (MIME type, e.g. `image/png`)
+   - `sizeBytes`: Int (file size in bytes)
+   - `isRemoved`: Boolean (Default: false)
    - `removedAt`: DateTime? (Nullable)
-   - `removedReason`: String? (Nullable)
-   - `removedByRequesterId`: Int? (FK -> RequesterUser.id, Nullable)
+   - `removalReason`: String? (Nullable)
    - `createdAt`: DateTime (Default: now())
+   - `updatedAt`: DateTime (auto-updated)
+   - ⚠️ Note: `removedByRequesterId` and `filePath` fields are **not implemented** in the current schema.
 
 ### Indexes & Constraints Justification
 - `ticketNumber` is marked `UNIQUE` and indexed for O(1) direct lookup.
@@ -136,9 +138,9 @@ The IT department requires a professional self-service ticketing system for corp
 - `Attachment (ticketId, isRemoved)` enables fast retrieval of active attachments without scanning removed records.
 
 ### Seed Data
-- 4 Active Requesters (e.g., Jennifer Anderson, David Lee, Sarah Johnson, Michael Brown) and 1 Inactive Requester (e.g., Jane Inactive).
+- 4 Active Requesters (`Alice Active`, `Bob Active`, `Charlie Active`, `Diana Active`) and 1 Inactive Requester (`Eve Inactive`).
 - 4 Categories (`Account and Access`, `Hardware`, `Software`, `Network`).
-- 7 Related Systems (`Email`, `Campus Wi-Fi`, `VPN`, `LEB2 App`, `Grade Submission App`, `Printer`, `Corporate Laptop`).
+- 6 Related Systems (`Email`, `Campus Wi-Fi`, `VPN`, `LEB2 App`, `Grade Submission App`, `Corporate Laptop`). ⚠️ `Printer` is **not seeded** in the current implementation.
 
 ---
 
@@ -151,7 +153,7 @@ The IT department requires a professional self-service ticketing system for corp
 - `GET /api/tickets/:id` -> Retrieve owned ticket details (HTTP 200, 403, 404).
 - `POST /api/tickets/:id/attachments` -> Upload attachment (multipart/form-data) (HTTP 201, 400, 403, 413, 422).
 - `GET /api/attachments/:id/download` -> Download active attachment file (HTTP 200, 403, 404, 410).
-- `DELETE /api/attachments/:id` -> Soft-remove attachment with body `{ reason: string }` (HTTP 200, 400, 403, 404).
+- `DELETE /api/attachments/:id` -> Soft-remove attachment with body `{ removalReason: string }` (HTTP 200, 400, 403, 404).
 
 ---
 

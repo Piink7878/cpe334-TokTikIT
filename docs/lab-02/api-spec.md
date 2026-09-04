@@ -43,33 +43,29 @@ Retrieves the list of active requesters available for simulated testing selectio
 - **Query Parameters**: None.
 - **Request Body**: None.
 - **Responses**:
-  - **200 OK**:
+  - **200 OK** — Note: `department` field is **not included** (not in current schema):
     ```json
     {
       "data": [
         {
           "id": 1,
-          "name": "Jennifer Anderson",
-          "email": "jennifer.anderson@example.com",
-          "department": "Engineering"
+          "name": "Alice Active",
+          "email": "alice@example.com"
         },
         {
           "id": 2,
-          "name": "David Lee",
-          "email": "david.lee@example.com",
-          "department": "Marketing"
+          "name": "Bob Active",
+          "email": "bob@example.com"
         },
         {
           "id": 3,
-          "name": "Sarah Johnson",
-          "email": "sarah.johnson@example.com",
-          "department": "Human Resources"
+          "name": "Charlie Active",
+          "email": "charlie@example.com"
         },
         {
           "id": 4,
-          "name": "Michael Brown",
-          "email": "michael.brown@example.com",
-          "department": "Finance"
+          "name": "Diana Active",
+          "email": "diana@example.com"
         }
       ]
     }
@@ -86,16 +82,14 @@ Retrieves all reference ticket categories.
 - **Query Parameters**: None.
 - **Request Body**: None.
 - **Responses**:
-  - **200 OK**:
+  - **200 OK** — Returns the array **directly** (no `data` wrapper):
     ```json
-    {
-      "data": [
-        { "id": 1, "name": "Account and Access" },
-        { "id": 2, "name": "Hardware" },
-        { "id": 3, "name": "Software" },
-        { "id": 4, "name": "Network" }
-      ]
-    }
+    [
+      { "id": 1, "name": "Account and Access" },
+      { "id": 2, "name": "Hardware" },
+      { "id": 3, "name": "Software" },
+      { "id": 4, "name": "Network" }
+    ]
     ```
   - **500 Internal Server Error**: Database failure.
 
@@ -249,7 +243,7 @@ Retrieves complete ticket metadata and attachment details. Enforces ownership ch
 - **URL Parameters**:
   - `id`: Integer ticket primary key.
 - **Responses**:
-  - **200 OK**:
+  - **200 OK** — Note: `requester` object does **not** include `department` (not in current schema):
     ```json
     {
       "data": {
@@ -257,9 +251,8 @@ Retrieves complete ticket metadata and attachment details. Enforces ownership ch
         "ticketNumber": "TKT-2026-000101",
         "requester": {
           "id": 1,
-          "name": "Jennifer Anderson",
-          "email": "jennifer.anderson@example.com",
-          "department": "Engineering"
+          "name": "Alice Active",
+          "email": "alice@example.com"
         },
         "category": { "id": 2, "name": "Hardware" },
         "relatedSystem": { "id": 7, "name": "Corporate Laptop" },
@@ -415,7 +408,7 @@ Marks an attachment as soft-removed. Requires a non-empty removal reason. Physic
   - Attachment must currently be active (`isRemoved === false`).
   - Target ticket must belong to `X-Requester-Id`.
 - **Responses**:
-  - **200 OK**:
+  - **200 OK** — Note: `removedByRequesterId` is **not returned** in the response (not tracked in current implementation):
     ```json
     {
       "data": {
@@ -424,8 +417,7 @@ Marks an attachment as soft-removed. Requires a non-empty removal reason. Physic
         "originalFilename": "battery_report.pdf",
         "isRemoved": true,
         "removedAt": "2026-09-02T12:00:00.000Z",
-        "removedReason": "Uploaded outdated configuration file by mistake",
-        "removedByRequesterId": 1
+        "removedReason": "Uploaded outdated configuration file by mistake"
       }
     }
     ```
