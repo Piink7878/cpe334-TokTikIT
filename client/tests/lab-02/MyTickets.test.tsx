@@ -1,0 +1,263 @@
+import React from 'react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import { BrowserRouter } from 'react-router-dom';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
+import MyTickets from '../../src/pages/MyTickets';
+
+// Mock API calls using hoisted variables to ensure they are available when vi.mock is hoisted
+const { mockGetCategories, mockGetTickets } = vi.hoisted(() => ({
+  mockGetCategories: vi.fn(),
+  mockGetTickets: vi.fn()
+}));
+
+vi.mock('../../src/api', () => ({
+  getCategories: (...args: any[]) => mockGetCategories(...args),
+  getTickets: (...args: any[]) => mockGetTickets(...args)
+}));
+
+// Mock useRequester context
+const { mockUseRequester } = vi.hoisted(() => ({
+  mockUseRequester: vi.fn()
+}));
+
+vi.mock('../../src/contexts/RequesterContext', () => ({
+  useRequester: () => mockUseRequester()
+}));
+
+const renderWithContext = (ui: React.ReactElement) => {
+  return render(
+    <BrowserRouter>
+      {ui}
+    </BrowserRouter>
+  );
+};
+
+describe('MyTickets Component', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    
+    // Set default requester
+    mockUseRequester.mockReturnValue({
+      selectedRequester: { id: 1, name: 'Test User' }
+    });
+
+    // Set default categories
+    mockGetCategories.mockResolvedValue([
+      { id: 1, name: 'Hardware' },
+      { id: 2, name: 'Software' }
+    ]);
+    
+    // Set default tickets mock
+    mockGetTickets.mockReset();
+  });
+
+  it('shows loading state initially', () => {
+    // Return a promise that never resolves so it stays in loading state
+    mockGetTickets.mockImplementation(() => new Promise(() => {}));
+    
+    renderWithContext(<MyTickets />);
+    expect(screen.getByText('Loading...')).toBeInTheDocument();
+  });
+
+  it('renders data table correctly when tickets exist', async () => {
+    mockGetTickets.mockResolvedValue({
+      data: [
+        {
+          id: 1,
+          ticketNumber: 'TKT-2026-000001',
+          summary: 'Test ticket summary',
+          category: { id: 1, name: 'Hardware' },
+          requestedPriority: 'HIGH',
+          itPriority: 'HIGH',
+          status: 'NEW',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+      ],
+      pagination: {
+        page: 1,
+        pageSize: 8,
+        totalItems: 1,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false
+      }
+    });
+
+    renderWithContext(<MyTickets />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText('TKT-2026-000001')[0]).toBeInTheDocument();
+    });
+
+    expect(screen.getAllByText('Test ticket summary')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Hardware')[0]).toBeInTheDocument();
+  });
+
+  it('shows Empty State when user has no tickets at all', async () => {
+    mockGetTickets.mockResolvedValue({
+      data: [],
+      pagination: {
+        page: 1, pageSize: 8, totalItems: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false
+      }
+    });
+
+    renderWithContext(<MyTickets />);
+
+    await waitFor(() => {
+      expect(screen.getByText('No tickets found')).toBeInTheDocument();
+    });
+    
+    expect(screen.getByText("You haven't submitted any support tickets yet. Click below to get started.")).toBeInTheDocument();
+  });
+
+  it('shows No-Results State when filters match nothing', async () => {
+    mockGetTickets.mockImplementation(async (requesterId, filters) => {
+      if (filters?.search === 'NotFound') {
+        return {
+          data: [],
+          pagination: { page: 1, pageSize: 8, totalItems: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false }
+        };
+      }
+      return {
+        data: [{ 
+          id: 1, 
+          ticketNumber: 'TKT-1',
+          summary: 'A ticket',
+          category: { id: 1, name: 'Hardware' },
+          requestedPriority: 'LOW',
+          itPriority: 'LOW',
+          status: 'NEW',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }],
+        pagination: { page: 1, pageSize: 8, totalItems: 1, totalPages: 1, hasNextPage: false, hasPreviousPage: false }
+      };
+    });
+
+    renderWithContext(<MyTickets />);
+
+    // Wait for initial render
+    await waitFor(() => {
+      expect(screen.getAllByText('TKT-1')[0]).toBeInTheDocument();
+    });
+
+    // Apply a search filter
+    const searchInput = screen.getByPlaceholderText('Search...');
+    fireEvent.change(searchInput, { target: { value: 'NotFound' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('No matching tickets')).toBeInTheDocument();
+    });
+    
+    expect(screen.getByRole('button', { name: /Clear All Filters/i })).toBeInTheDocument();
+  });
+
+  it('shows Error State when API fails', async () => {
+    mockGetTickets.mockRejectedValue(new Error('Backend connection failed'));
+
+    renderWithContext(<MyTickets />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Backend connection failed')).toBeInTheDocument();
+    });
+  });
+
+  it('triggers API with correct parameters when searching', async () => {
+    mockGetTickets.mockResolvedValue({ data: [], pagination: { page: 1, pageSize: 8, totalItems: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false } });
+    renderWithContext(<MyTickets />);
+    
+    // Wait for initial load
+    await waitFor(() => expect(mockGetTickets).toHaveBeenCalledTimes(1));
+
+    const searchInput = screen.getByPlaceholderText('Search...');
+    fireEvent.change(searchInput, { target: { value: 'laptop' } });
+
+    await waitFor(() => {
+      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({
+        search: 'laptop',
+        page: 1 // should reset to page 1
+      }));
+    });
+  });
+
+  it('triggers API with correct parameters when selecting dropdown filters', async () => {
+    mockGetTickets.mockResolvedValue({ data: [], pagination: { page: 1, pageSize: 8, totalItems: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false } });
+    renderWithContext(<MyTickets />);
+    
+    await waitFor(() => expect(mockGetTickets).toHaveBeenCalledTimes(1));
+
+    // Change Category
+    const categorySelect = screen.getByLabelText('Category');
+    fireEvent.change(categorySelect, { target: { value: '1' } }); // Hardware category
+
+    await waitFor(() => {
+      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({ categoryId: '1', page: 1 }));
+    });
+
+    // Change Status
+    const statusSelect = screen.getByLabelText('Status');
+    fireEvent.change(statusSelect, { target: { value: 'OPEN' } });
+
+    await waitFor(() => {
+      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({ status: 'OPEN', categoryId: '1', page: 1 }));
+    });
+  });
+
+  it('triggers API with correct parameters when changing sort order', async () => {
+    mockGetTickets.mockResolvedValue({ data: [], pagination: { page: 1, pageSize: 8, totalItems: 0, totalPages: 1, hasNextPage: false, hasPreviousPage: false } });
+    renderWithContext(<MyTickets />);
+    
+    await waitFor(() => expect(mockGetTickets).toHaveBeenCalledTimes(1));
+
+    const sortSelect = screen.getByLabelText('Sort By');
+    fireEvent.change(sortSelect, { target: { value: 'ticketNumber-asc' } });
+
+    await waitFor(() => {
+      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({
+        sortBy: 'ticketNumber',
+        sortOrder: 'asc',
+        page: 1
+      }));
+    });
+  });
+
+  it('triggers API with correct parameters when paginating', async () => {
+    mockGetTickets.mockResolvedValue({
+      data: [{
+        id: 1,
+        ticketNumber: 'TKT-1',
+        summary: 'A ticket',
+        category: { id: 1, name: 'Hardware' },
+        requestedPriority: 'LOW',
+        itPriority: 'LOW',
+        status: 'NEW',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }],
+      pagination: {
+        page: 1,
+        pageSize: 8,
+        totalItems: 20,
+        totalPages: 3,
+        hasNextPage: true,
+        hasPreviousPage: false
+      }
+    });
+    
+    renderWithContext(<MyTickets />);
+    
+    await waitFor(() => expect(mockGetTickets).toHaveBeenCalledTimes(1));
+    mockGetTickets.mockClear(); // clear first call
+
+    // Click next page
+    const nextBtn = screen.getByText('Next >');
+    expect(nextBtn).not.toBeDisabled();
+    fireEvent.click(nextBtn);
+
+    await waitFor(() => {
+      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({ page: 2 }));
+    });
+  });
+});

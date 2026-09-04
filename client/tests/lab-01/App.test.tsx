@@ -1,11 +1,31 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import App from "../../src/App.js";
 import * as api from "../../src/api.js";
+
+// Mock useRequester context to bypass ProtectedRoute
+const { mockUseRequester } = vi.hoisted(() => ({
+  mockUseRequester: vi.fn()
+}));
+
+vi.mock('../../src/contexts/RequesterContext.js', () => ({
+  useRequester: () => mockUseRequester(),
+  RequesterProvider: ({ children }: any) => children
+}));
+
 describe("App", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseRequester.mockReturnValue({
+      selectedRequester: { id: 1, name: 'Test User' }
+    });
+    // Set initial route to /health so we test the HealthCheck component
+    window.history.pushState({}, 'Test page', '/health');
+  });
+
   it("UI-01: renders the TokTickIT heading", () => {
     render(<App />);
-    expect(screen.getByText(/TokTickIT/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/TokTickIT/i)[0]).toBeInTheDocument();
   });
 
   it("UI-02: shows Online and the seeded categories on success", async () => {
@@ -24,7 +44,7 @@ describe("App", () => {
     const button = screen.getByRole("button", { name: /Check System/i });
     fireEvent.click(button);
 
-    expect(screen.getByText(/Loading…/i)).toBeInTheDocument();
+    expect(screen.getByText(/Loading/i)).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText("Online")).toBeInTheDocument();
