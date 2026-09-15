@@ -6,7 +6,7 @@ import fs from "fs";
 import path from "path";
 import session from "express-session";
 import bcrypt from "bcryptjs";
-import { requireAuth, requirePasswordChangeEnforcement, requirePasswordChangeEnforcement } from "./middlewares/auth.js";
+import { requireAuth, requirePasswordChangeEnforcement } from "./middlewares/auth.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4). It is intentionally unused until then.
 void getPrisma;
