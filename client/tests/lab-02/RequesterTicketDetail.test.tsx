@@ -3,10 +3,10 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RequesterTicketDetail } from '../../src/pages/RequesterTicketDetail';
 import * as api from '../../src/api';
-import * as auth from '../../src/contexts/RequesterContext';
+import * as auth from '../../src/contexts/AuthContext';
 
 vi.mock('../../src/api');
-vi.mock('../../src/contexts/RequesterContext');
+vi.mock('../../src/contexts/AuthContext');
 
 describe('RequesterTicketDetail Component', () => {
   const mockRequester = { id: 1, name: 'John Doe', email: 'john@example.com' };
@@ -29,7 +29,7 @@ describe('RequesterTicketDetail Component', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    (auth.useRequester as any).mockReturnValue({ selectedRequester: mockRequester });
+    (auth.useAuth as any).mockReturnValue({ user: mockRequester });
   });
 
   const renderComponent = (ticketId = '101') => {
@@ -49,7 +49,7 @@ describe('RequesterTicketDetail Component', () => {
     expect(screen.getByRole('status')).toBeInTheDocument();
     
     await waitFor(() => {
-      expect(api.getTicket).toHaveBeenCalledWith(101, mockRequester.id);
+      expect(api.getTicket).toHaveBeenCalledWith(101);
     });
   });
 

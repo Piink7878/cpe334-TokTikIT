@@ -21,8 +21,8 @@ const { mockUseRequester } = vi.hoisted(() => ({
   mockUseRequester: vi.fn()
 }));
 
-vi.mock('../../src/contexts/RequesterContext', () => ({
-  useRequester: () => mockUseRequester()
+vi.mock('../../src/contexts/AuthContext', () => ({
+  useAuth: () => mockUseRequester()
 }));
 
 const renderWithContext = (ui: React.ReactElement) => {
@@ -39,7 +39,7 @@ describe('MyTickets Component', () => {
     
     // Set default requester
     mockUseRequester.mockReturnValue({
-      selectedRequester: { id: 1, name: 'Test User' }
+      user: { id: 1, fullName: 'Test User' }
     });
 
     // Set default categories
@@ -113,7 +113,7 @@ describe('MyTickets Component', () => {
   });
 
   it('shows No-Results State when filters match nothing', async () => {
-    mockGetTickets.mockImplementation(async (requesterId, filters) => {
+    mockGetTickets.mockImplementation(async (filters) => {
       if (filters?.search === 'NotFound') {
         return {
           data: [],
@@ -175,7 +175,7 @@ describe('MyTickets Component', () => {
     fireEvent.change(searchInput, { target: { value: 'laptop' } });
 
     await waitFor(() => {
-      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({
+      expect(mockGetTickets).toHaveBeenCalledWith(expect.objectContaining({
         search: 'laptop',
         page: 1 // should reset to page 1
       }));
@@ -193,7 +193,7 @@ describe('MyTickets Component', () => {
     fireEvent.change(categorySelect, { target: { value: '1' } }); // Hardware category
 
     await waitFor(() => {
-      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({ categoryId: '1', page: 1 }));
+      expect(mockGetTickets).toHaveBeenCalledWith(expect.objectContaining({ categoryId: '1', page: 1 }));
     });
 
     // Change Status
@@ -201,7 +201,7 @@ describe('MyTickets Component', () => {
     fireEvent.change(statusSelect, { target: { value: 'OPEN' } });
 
     await waitFor(() => {
-      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({ status: 'OPEN', categoryId: '1', page: 1 }));
+      expect(mockGetTickets).toHaveBeenCalledWith(expect.objectContaining({ status: 'OPEN', categoryId: '1', page: 1 }));
     });
   });
 
@@ -215,7 +215,7 @@ describe('MyTickets Component', () => {
     fireEvent.change(sortSelect, { target: { value: 'ticketNumber-asc' } });
 
     await waitFor(() => {
-      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({
+      expect(mockGetTickets).toHaveBeenCalledWith(expect.objectContaining({
         sortBy: 'ticketNumber',
         sortOrder: 'asc',
         page: 1
@@ -257,7 +257,7 @@ describe('MyTickets Component', () => {
     fireEvent.click(nextBtn);
 
     await waitFor(() => {
-      expect(mockGetTickets).toHaveBeenCalledWith(1, expect.objectContaining({ page: 2 }));
+      expect(mockGetTickets).toHaveBeenCalledWith(expect.objectContaining({ page: 2 }));
     });
   });
 });

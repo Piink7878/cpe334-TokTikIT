@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 export interface Category {
   id: number;
@@ -127,12 +127,10 @@ export async function getCategories() {
   return res.json();
 }
 
-export async function createTicket(formData: FormData, requesterId: number) {
+export async function createTicket(formData: FormData) {
   const res = await fetch(`${API_URL}/api/tickets`, {
     method: "POST",
-    headers: {
-      "X-Requester-Id": requesterId.toString()
-    },
+    headers: {},
     body: formData
   });
 
@@ -143,7 +141,7 @@ export async function createTicket(formData: FormData, requesterId: number) {
   return res.json();
 }
 
-export async function getTickets(requesterId: number, filters?: TicketFilters): Promise<PaginatedResponse<Ticket>> {
+export async function getTickets(filters?: TicketFilters): Promise<PaginatedResponse<Ticket>> {
   const params = new URLSearchParams();
   if (filters) {
     Object.entries(filters).forEach(([key, value]) => {
@@ -158,10 +156,7 @@ export async function getTickets(requesterId: number, filters?: TicketFilters): 
 
   const res = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Requester-Id': requesterId.toString()
-    }
+    headers: { 'Content-Type': 'application/json' }
   });
 
   if (!res.ok) {
@@ -172,13 +167,10 @@ export async function getTickets(requesterId: number, filters?: TicketFilters): 
   return res.json();
 }
 
-export async function getTicket(ticketId: number, requesterId: number): Promise<{ data: Ticket }> {
+export async function getTicket(ticketId: number): Promise<{ data: Ticket }> {
   const res = await fetch(`${API_URL}/api/tickets/${ticketId}`, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Requester-Id': requesterId.toString()
-    }
+    headers: { 'Content-Type': 'application/json' }
   });
 
   if (!res.ok) {
@@ -189,15 +181,13 @@ export async function getTicket(ticketId: number, requesterId: number): Promise<
   return res.json();
 }
 
-export async function uploadAttachment(ticketId: number, file: File, requesterId: number) {
+export async function uploadAttachment(ticketId: number, file: File) {
   const formData = new FormData();
   formData.append("file", file);
 
   const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments`, {
     method: "POST",
-    headers: {
-      "X-Requester-Id": requesterId.toString()
-    },
+    headers: {},
     body: formData
   });
 
@@ -209,13 +199,10 @@ export async function uploadAttachment(ticketId: number, file: File, requesterId
   return res.json();
 }
 
-export async function removeAttachment(attachmentId: number, reason: string, requesterId: number) {
+export async function removeAttachment(attachmentId: number, reason: string) {
   const res = await fetch(`${API_URL}/api/attachments/${attachmentId}`, {
     method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Requester-Id": requesterId.toString()
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ removalReason: reason })
   });
 
@@ -227,12 +214,10 @@ export async function removeAttachment(attachmentId: number, reason: string, req
   return res.json();
 }
 
-export async function downloadAttachment(attachmentId: number, originalFilename: string, requesterId: number) {
+export async function downloadAttachment(attachmentId: number, originalFilename: string) {
   const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/download`, {
     method: "GET",
-    headers: {
-      "X-Requester-Id": requesterId.toString()
-    }
+    headers: {}
   });
 
   if (!res.ok) {
