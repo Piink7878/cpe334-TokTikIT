@@ -6,7 +6,10 @@ This document details all REST endpoints required for Sprint 3, covering authent
 
 ### Authentication Mechanism
 *   **Session State:** Secured using a server-managed session ID stored in a secure, `HttpOnly`, `SameSite=Lax` cookie.
-*   **Credentials:** Passwords are hashed. Passwords are only transmitted over the wire during login and user creation.
+*   **Session Expiration:** Sessions expire after a period of inactivity (e.g., 2 hours) or an absolute timeout (e.g., 24 hours).
+*   **Logout Invalidation:** When a user logs out, the server explicitly invalidates the session in the backend store and instructs the client to clear the cookie.
+*   **CSRF Mitigation:** As `SameSite=Lax` is used with cookie-based auth, cross-site requests are mitigated. Mutation endpoints may require an anti-CSRF token if deployed across subdomains.
+*   **Credentials:** Passwords are securely hashed using `bcrypt` (with an appropriate salt round, e.g., 10 or 12). Passwords are only transmitted over the wire during login and user creation.
 *   **Authorization:** All endpoints enforce authorization via the backend session.
 
 ### Safe Error Handling & No Data Leaks
@@ -216,6 +219,20 @@ To avoid leaking information to unauthorized users:
     { "status": "IN_PROGRESS" }
     ```
 *   **Status Codes:** `200 OK`, `400 Bad Request` (invalid transition), `403 Forbidden`, `404 Not Found`
+
+### Ticket Status Transition Matrix
+The following matrix defines the permitted status changes. Requesters cannot transition statuses via the API directly except by calling a specific endpoint to indicate a problem appears resolved (which notifies IT Staff but does not change the formal status to `Resolved`).
+
+| Current Status | Allowed Next Statuses | Permitted Roles | Notes |
+| :--- | :--- | :--- | :--- |
+| **New** | Open, Cancelled | IT Staff, Admin | |
+| **Open** | In Progress, Waiting for Requester, Resolved, Cancelled | IT Staff, Admin | |
+| **In Progress** | Waiting for Requester, Resolved, Open, Cancelled | IT Staff, Admin | |
+| **Waiting for Requester** | In Progress, Resolved, Cancelled | IT Staff, Admin | |
+| **Resolved** | Closed, Reopened | IT Staff, Admin | Requester can call an endpoint to 'indicate resolved', but only IT/Admin sets it to `Resolved` or `Closed`. |
+| **Closed** | Reopened | IT Staff, Admin | |
+| **Reopened** | In Progress, Waiting for Requester, Resolved, Cancelled | IT Staff, Admin | |
+| **Cancelled** | Reopened | IT Staff, Admin | |
 
 ---
 

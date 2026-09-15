@@ -30,3 +30,5 @@ This document provides a comprehensive test plan for the Lab 3 increment, mappin
 | **E2E-01** | E2E | AC-01, AC-13 | End-to-end login flow | Unauth redirected to login; success enters app | `e2e/lab-03/authentication.spec.ts` | Planned |
 | **E2E-02** | E2E | AC-06, AC-11 | Staff ticket lifecycle | Staff finds ticket in queue, updates status | `e2e/lab-03/staff-ticket-flow.spec.ts` | Planned |
 | **E2E-03** | E2E | AC-08, AC-10 | Admin user management flow | Admin creates user, attempts self-deactivation | `e2e/lab-03/user-administration.spec.ts` | Planned |
+| **MIG-01** | API | Migration | Data Migration & Regression | Verifies Lab 2 tickets/attachments persist and are owned by migrated users | `server/tests/lab-03/migration.test.ts` | Planned |
+| **UI-06** | Component | Responsive | Ticket Queue responsiveness | Renders as data table on desktop, cards on mobile | `client/tests/lab-03/Responsive.test.tsx` | Planned |
