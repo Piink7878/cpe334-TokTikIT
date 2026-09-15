@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // On mount, verify session
     const fetchUser = async () => {
       try {
-        const res = await fetch("/api/auth/me", {
+        const res = await fetch("/api/auth/me", { credentials: "include",
           // This ensures cookies are sent
         });
         if (res.ok) {

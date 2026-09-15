@@ -7,7 +7,7 @@ export default function AppLayout() {
 
   const handleLogout = async () => {
     try {
-      const res = await fetch("/api/auth/logout", { method: "POST" });
+      const res = await fetch("/api/auth/logout", { credentials: "include", method: "POST" });
       if (res.ok) {
         logout();
         navigate("/login");

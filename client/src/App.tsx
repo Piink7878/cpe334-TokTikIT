@@ -72,6 +72,24 @@ function HealthCheck() {
   );
 }
 
+import { useAuth } from "./contexts/AuthContext";
+
+function RootRedirect() {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  
+  switch (user.role) {
+    case "REQUESTER":
+      return <Navigate to="/my-tickets" replace />;
+    case "IT_STAFF":
+      return <Navigate to="/staff-queue" replace />; // Placeholder for lab 3
+    case "ADMIN":
+      return <Navigate to="/user-management" replace />; // Placeholder for lab 3
+    default:
+      return <Navigate to="/my-tickets" replace />;
+  }
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -82,12 +100,13 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route path="/change-password" element={<ChangePassword />} />
           <Route element={<AppLayout />}>
+            <Route path="/" element={<RootRedirect />} />
             <Route path="/my-tickets" element={<MyTickets />} />
             <Route path="/create-ticket" element={<CreateTicket />} />
             <Route path="/tickets/:id" element={<RequesterTicketDetail />} />
             <Route path="/health" element={<HealthCheck />} />
             {/* Catch-all for unknown protected routes */}
-            <Route path="*" element={<Navigate to="/my-tickets" replace />} />
+            <Route path="*" element={<RootRedirect />} />
           </Route>
         </Route>
       </Routes>
