@@ -90,6 +90,24 @@ function RootRedirect() {
   }
 }
 
+function StaffQueuePlaceholder() {
+  return (
+    <div className="container py-5 text-center">
+      <h2 className="mb-3">IT Staff Queue</h2>
+      <p className="text-muted">This feature is coming soon.</p>
+    </div>
+  );
+}
+
+function UserManagementPlaceholder() {
+  return (
+    <div className="container py-5 text-center">
+      <h2 className="mb-3">User Management</h2>
+      <p className="text-muted">This feature is coming soon.</p>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -102,6 +120,8 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route path="/" element={<RootRedirect />} />
             <Route path="/my-tickets" element={<MyTickets />} />
+            <Route path="/staff-queue" element={<StaffQueuePlaceholder />} />
+            <Route path="/user-management" element={<UserManagementPlaceholder />} />
             <Route path="/create-ticket" element={<CreateTicket />} />
             <Route path="/tickets/:id" element={<RequesterTicketDetail />} />
             <Route path="/health" element={<HealthCheck />} />

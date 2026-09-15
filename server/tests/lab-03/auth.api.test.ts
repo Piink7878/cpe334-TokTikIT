@@ -96,6 +96,16 @@ describe("Authentication API", () => {
     activeUserCookie = response.headers["set-cookie"][0];
     expect(activeUserCookie).toMatch(/HttpOnly/i);
     expect(activeUserCookie).toMatch(/SameSite=(Lax|Strict)/i);
+    
+    // In test environment (not production), Secure is false, so it shouldn't be present
+    if (process.env.NODE_ENV === "production") {
+      expect(activeUserCookie).toMatch(/Secure/i);
+    } else {
+      expect(activeUserCookie).not.toMatch(/Secure/i);
+    }
+    
+    // Check expiration exists (Max-Age or Expires)
+    expect(activeUserCookie).toMatch(/(Max-Age|Expires)=/i);
   });
 
   it("should retrieve current user via /api/auth/me", async () => {

@@ -22,11 +22,12 @@ app.use(session({
   secret: process.env.SESSION_SECRET || "default_secret_for_local_dev",
   resave: false,
   saveUninitialized: false,
+  rolling: true,
   cookie: {
     httpOnly: true,
     sameSite: "lax",
-    secure: false,
-    maxAge: 24 * 60 * 60 * 1000
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 2 * 60 * 60 * 1000 // 2 hours of inactivity
   }
 }));
 
@@ -53,6 +54,7 @@ app.post("/api/auth/login", async (req: Request, res: Response): Promise<any> =>
     }
 
     req.session.userId = user.id;
+    req.session.establishedAt = Date.now();
     
     return res.status(200).json({
       user: {

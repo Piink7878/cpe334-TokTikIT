@@ -9,6 +9,12 @@ export const requireAuth = async (req: Request, res: Response, next: NextFunctio
     return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid email or password" } }); // generic safe error as requested or just Unauthorized
   }
 
+  // 24h absolute expiration
+  if (req.session.establishedAt && Date.now() - req.session.establishedAt > 24 * 60 * 60 * 1000) {
+    req.session.destroy(() => {});
+    return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Session expired" } });
+  }
+
   try {
     const prisma = getPrisma();
     const user = await prisma.user.findUnique({
