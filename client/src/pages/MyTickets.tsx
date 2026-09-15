@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { getTickets, getCategories, Category, Ticket, TicketFilters, PaginatedResponse } from "../api";
-import { useRequester } from '../contexts/RequesterContext';
+import { useAuth } from "../contexts/AuthContext";
 
 export default function MyTickets() {
-  const { selectedRequester } = useRequester();
+  const { user } = useAuth();
+  const selectedRequester = user;
   
   const [categories, setCategories] = useState<Category[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -41,7 +42,7 @@ export default function MyTickets() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const response = await getTickets(selectedRequester.id, filters);
+      const response = await getTickets(filters);
       setTickets(response.data);
       setPagination(response.pagination);
       

@@ -1,13 +1,20 @@
 import { Outlet, Link, NavLink, useNavigate } from "react-router-dom";
-import { useRequester } from "../contexts/RequesterContext";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function AppLayout() {
-  const { selectedRequester, setSelectedRequester } = useRequester();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  const handleChangeRequester = () => {
-    setSelectedRequester(null);
-    navigate("/");
+  const handleLogout = async () => {
+    try {
+      const res = await fetch("/api/auth/logout", { credentials: "include", method: "POST" });
+      if (res.ok) {
+        logout();
+        navigate("/login");
+      }
+    } catch (err) {
+      console.error("Logout failed", err);
+    }
   };
 
   return (
@@ -33,15 +40,15 @@ export default function AppLayout() {
           </div>
 
           <div className="d-flex align-items-center">
-            {selectedRequester && (
+            {user && (
               <span className="me-3" style={{ fontSize: 14, color: "var(--color-text-main)" }}>
-                <span className="badge me-2" style={{ backgroundColor: "var(--color-pale-green)", color: "var(--color-primary)" }}>Dev Mode</span>
-                <span className="fw-medium">{selectedRequester.name}</span>
-                <span className="text-muted ms-1 d-none d-md-inline">({selectedRequester.email})</span>
+                <span className="badge me-2" style={{ backgroundColor: "var(--color-pale-green)", color: "var(--color-primary)" }}>{user.role}</span>
+                <span className="fw-medium">{user.fullName}</span>
+                <span className="text-muted ms-1 d-none d-md-inline">({user.email})</span>
               </span>
             )}
-            <button className="btn btn-sm btn-outline-secondary" onClick={handleChangeRequester}>
-              Change Requester
+            <button className="btn btn-sm btn-outline-secondary" onClick={handleLogout}>
+              Logout
             </button>
           </div>
         </div>

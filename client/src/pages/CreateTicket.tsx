@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useRequester } from "../contexts/RequesterContext";
+import { useAuth } from "../contexts/AuthContext";
 import { getCategories, getRelatedSystems, createTicket, Category, RelatedSystem } from "../api";
 
 export default function CreateTicket() {
-  const { selectedRequester } = useRequester();
+  const { user } = useAuth();
+  const selectedRequester = user;
   
   const [categories, setCategories] = useState<Category[]>([]);
   const [relatedSystems, setRelatedSystems] = useState<RelatedSystem[]>([]);
@@ -127,7 +128,7 @@ export default function CreateTicket() {
     });
 
     try {
-      const response = await createTicket(data, selectedRequester.id);
+      const response = await createTicket(data);
       setSuccessTicketNumber(response.data.ticketNumber);
     } catch (err: any) {
       setErrorMsg(err.message || "An unexpected error occurred while creating the ticket.");
@@ -188,7 +189,7 @@ export default function CreateTicket() {
             </div>
             <div className="col-md-6">
               <label className="form-label d-block mb-1 text-muted fw-semibold" style={{ fontSize: 14 }}>Requester</label>
-              <input type="text" className="form-control" value={selectedRequester?.name || ""} disabled style={{ backgroundColor: "var(--color-surface-muted)", color: "var(--color-text-muted)" }} />
+              <input type="text" className="form-control" value={selectedRequester?.fullName || ""} disabled style={{ backgroundColor: "var(--color-surface-muted)", color: "var(--color-text-muted)" }} />
             </div>
           </div>
 

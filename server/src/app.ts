@@ -4,6 +4,9 @@ import { getPrisma } from "./prisma.js";
 import { upload } from "./middlewares/upload.js";
 import fs from "fs";
 import path from "path";
+import session from "express-session";
+import bcrypt from "bcryptjs";
+import { requireAuth, requirePasswordChangeEnforcement } from "./middlewares/auth.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4). It is intentionally unused until then.
 void getPrisma;
@@ -12,8 +15,140 @@ void getPrisma;
 // Supertest can import `app` without opening a port. Do not merge these files.
 export const app = express();
 
-app.use(cors());          // already wired: lets the Vite dev server call this API
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || "default_secret_for_local_dev",
+  resave: false,
+  saveUninitialized: false,
+  rolling: true,
+  cookie: {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 2 * 60 * 60 * 1000 // 2 hours of inactivity
+  }
+}));
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/login
+// ---------------------------------------------------------------------------
+app.post("/api/auth/login", async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Email and password are required" } });
+    }
+
+    const prisma = getPrisma();
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user || !user.isActive) {
+      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid email or password" } });
+    }
+
+    const isValid = await bcrypt.compare(password, user.passwordHash);
+    if (!isValid) {
+      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid email or password" } });
+    }
+
+    req.session.userId = user.id;
+    req.session.establishedAt = Date.now();
+    
+    return res.status(200).json({
+      user: {
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        mustChangePassword: user.mustChangePassword
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/logout
+// ---------------------------------------------------------------------------
+app.post("/api/auth/logout", requireAuth, (req: Request, res: Response) => {
+  req.session.destroy((err) => {
+    if (err) {
+      return res.status(500).json({ error: { message: "Failed to logout" } });
+    }
+    res.clearCookie("connect.sid");
+    return res.status(200).json({ message: "Logged out successfully" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/auth/me
+// ---------------------------------------------------------------------------
+app.get("/api/auth/me", requireAuth, (req: Request, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Unauthorized" } });
+  }
+  return res.status(200).json({
+    user: {
+      id: req.user.id,
+      fullName: req.user.fullName,
+      email: req.user.email,
+      role: req.user.role,
+      mustChangePassword: req.user.mustChangePassword
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/auth/change-password
+// ---------------------------------------------------------------------------
+app.post("/api/auth/change-password", requireAuth, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Current password, new password, and confirm password are required" } });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "New password and confirm password must match" } });
+    }
+
+    const prisma = getPrisma();
+    const user = await prisma.user.findUnique({ where: { id: req.user!.id } });
+    if (!user) {
+      return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Unauthorized" } });
+    }
+
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isCurrentPasswordValid) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid current password" } });
+    }
+
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character." } });
+    }
+
+    const newPasswordHash = await bcrypt.hash(newPassword, 12);
+    
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: newPasswordHash,
+        mustChangePassword: false
+      }
+    });
+
+    return res.status(200).json({ message: "Password updated successfully" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Issue 2 — API health check
@@ -68,15 +203,15 @@ app.get("/api/related-systems", async (_req: Request, res: Response) => {
 //   -> return { data: [...] }
 //   -> on failure, respond 500 with a safe message
 // ---------------------------------------------------------------------------
-app.get("/api/requesters", async (_req: Request, res: Response) => {
+app.get("/api/requesters", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response) => {
   try {
     const prisma = getPrisma();
-    const requesters = await prisma.developmentRequester.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, email: true },
+    const requesters = await prisma.user.findMany({
+      where: { role: "REQUESTER", isActive: true },
+      select: { id: true, fullName: true, email: true },
       orderBy: { id: "asc" }
     });
-    res.status(200).json({ data: requesters });
+    res.status(200).json({ data: requesters.map(r => ({ id: r.id, name: r.fullName, email: r.email })) });
   } catch (error) {
     res.status(500).json({ error: { message: "Failed to fetch requesters" } });
   }
@@ -85,7 +220,7 @@ app.get("/api/requesters", async (_req: Request, res: Response) => {
 // ---------------------------------------------------------------------------
 // POST /api/tickets
 // ---------------------------------------------------------------------------
-app.post("/api/tickets", (req, res, next) => {
+app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, res, next) => {
   upload.array("attachments", 5)(req, res, (err: any) => {
     if (err) {
       if (err.message === "INVALID_FILE_TYPE") {
@@ -103,26 +238,14 @@ app.post("/api/tickets", (req, res, next) => {
   });
 }, async (req: Request, res: Response): Promise<any> => {
   try {
-    const requesterIdHeader = req.headers["x-requester-id"];
-    if (!requesterIdHeader) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Missing X-Requester-Id header" } });
-    }
-    const requesterId = parseInt(requesterIdHeader as string, 10);
-    if (isNaN(requesterId)) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid X-Requester-Id header" } });
-    }
+    const requesterId = req.user!.id;
 
     const categoryId = parseInt(req.body.categoryId, 10);
     const relatedSystemId = parseInt(req.body.relatedSystemId, 10);
     const summary = req.body.summary?.trim();
     const description = req.body.description?.trim();
     const requestedPriority = req.body.requestedPriority;
-    const bodyRequesterId = req.body.requesterId ? parseInt(req.body.requesterId, 10) : undefined;
-
-    const details = [];
-    if (bodyRequesterId && bodyRequesterId !== requesterId) {
-       details.push({ field: "requesterId", message: "Requester ID mismatch" });
-    }
+    const details: any[] = [];
     if (!summary || summary.length < 5 || summary.length > 150) {
       details.push({ field: "summary", message: "Summary must be between 5 and 150 characters." });
     }
@@ -271,16 +394,9 @@ app.post("/api/tickets", (req, res, next) => {
 // ---------------------------------------------------------------------------
 // GET /api/tickets - List Requester Tickets (My Tickets)
 // ---------------------------------------------------------------------------
-app.get("/api/tickets", async (req: Request, res: Response): Promise<any> => {
+app.get("/api/tickets", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
   try {
-    const requesterIdHeader = req.headers["x-requester-id"];
-    if (!requesterIdHeader) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Missing X-Requester-Id header" } });
-    }
-    const requesterId = parseInt(requesterIdHeader as string, 10);
-    if (isNaN(requesterId)) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid X-Requester-Id header" } });
-    }
+    const requesterId = req.user!.id;
 
     const {
       search,
@@ -382,16 +498,9 @@ app.get("/api/tickets", async (req: Request, res: Response): Promise<any> => {
 // ---------------------------------------------------------------------------
 // GET /api/tickets/:id - Get Ticket Details
 // ---------------------------------------------------------------------------
-app.get("/api/tickets/:id", async (req: Request, res: Response): Promise<any> => {
+app.get("/api/tickets/:id", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
   try {
-    const requesterIdHeader = req.headers["x-requester-id"];
-    if (!requesterIdHeader) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Missing X-Requester-Id header" } });
-    }
-    const requesterId = parseInt(requesterIdHeader as string, 10);
-    if (isNaN(requesterId)) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid X-Requester-Id header" } });
-    }
+    const requesterId = req.user!.id;
 
     const ticketId = parseInt(req.params.id, 10);
     if (isNaN(ticketId)) {
@@ -402,7 +511,7 @@ app.get("/api/tickets/:id", async (req: Request, res: Response): Promise<any> =>
     const ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
       include: {
-        requester: { select: { id: true, name: true, email: true } },
+        requester: { select: { id: true, fullName: true, email: true } },
         category: { select: { id: true, name: true } },
         relatedSystem: { select: { id: true, name: true } },
         attachments: true
@@ -420,7 +529,7 @@ app.get("/api/tickets/:id", async (req: Request, res: Response): Promise<any> =>
     const formattedTicket = {
       id: ticket.id,
       ticketNumber: ticket.ticketNumber,
-      requester: ticket.requester,
+      requester: { id: ticket.requester.id, name: ticket.requester.fullName, email: ticket.requester.email },
       category: ticket.category,
       relatedSystem: ticket.relatedSystem,
       summary: ticket.summary,
@@ -452,7 +561,7 @@ app.get("/api/tickets/:id", async (req: Request, res: Response): Promise<any> =>
 // ---------------------------------------------------------------------------
 // POST /api/tickets/:id/attachments
 // ---------------------------------------------------------------------------
-app.post("/api/tickets/:id/attachments", (req, res, next) => {
+app.post("/api/tickets/:id/attachments", requireAuth, requirePasswordChangeEnforcement, (req, res, next) => {
   upload.single("file")(req, res, (err: any) => {
     if (err) {
       if (err.message === "INVALID_FILE_TYPE") {
@@ -470,16 +579,7 @@ app.post("/api/tickets/:id/attachments", (req, res, next) => {
   });
 }, async (req: Request, res: Response): Promise<any> => {
   try {
-    const requesterIdHeader = req.headers["x-requester-id"];
-    if (!requesterIdHeader) {
-      if (req.file) fs.unlink(req.file.path, () => {});
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Missing X-Requester-Id header" } });
-    }
-    const requesterId = parseInt(requesterIdHeader as string, 10);
-    if (isNaN(requesterId)) {
-      if (req.file) fs.unlink(req.file.path, () => {});
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid X-Requester-Id header" } });
-    }
+    const requesterId = req.user!.id;
 
     const ticketId = parseInt(req.params.id, 10);
     if (isNaN(ticketId)) {
@@ -493,7 +593,7 @@ app.post("/api/tickets/:id/attachments", (req, res, next) => {
 
     const prisma = getPrisma();
     
-    const requester = await prisma.developmentRequester.findUnique({ where: { id: requesterId } });
+    const requester = await prisma.user.findUnique({ where: { id: requesterId } });
     if (!requester || !requester.isActive) {
       if (req.file) fs.unlink(req.file.path, () => {});
       return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid or inactive requester" } });
@@ -550,16 +650,9 @@ app.post("/api/tickets/:id/attachments", (req, res, next) => {
 // ---------------------------------------------------------------------------
 // GET /api/attachments/:id/download
 // ---------------------------------------------------------------------------
-app.get("/api/attachments/:id/download", async (req: Request, res: Response): Promise<any> => {
+app.get("/api/attachments/:id/download", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
   try {
-    const requesterIdHeader = req.headers["x-requester-id"];
-    if (!requesterIdHeader) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Missing X-Requester-Id header" } });
-    }
-    const requesterId = parseInt(requesterIdHeader as string, 10);
-    if (isNaN(requesterId)) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid X-Requester-Id header" } });
-    }
+    const requesterId = req.user!.id;
 
     const attachmentId = parseInt(req.params.id, 10);
     if (isNaN(attachmentId)) {
@@ -568,7 +661,7 @@ app.get("/api/attachments/:id/download", async (req: Request, res: Response): Pr
 
     const prisma = getPrisma();
 
-    const requester = await prisma.developmentRequester.findUnique({ where: { id: requesterId } });
+    const requester = await prisma.user.findUnique({ where: { id: requesterId } });
     if (!requester || !requester.isActive) {
       return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid or inactive requester" } });
     }
@@ -607,16 +700,9 @@ app.get("/api/attachments/:id/download", async (req: Request, res: Response): Pr
 // ---------------------------------------------------------------------------
 // DELETE /api/attachments/:id
 // ---------------------------------------------------------------------------
-app.delete("/api/attachments/:id", async (req: Request, res: Response): Promise<any> => {
+app.delete("/api/attachments/:id", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
   try {
-    const requesterIdHeader = req.headers["x-requester-id"];
-    if (!requesterIdHeader) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Missing X-Requester-Id header" } });
-    }
-    const requesterId = parseInt(requesterIdHeader as string, 10);
-    if (isNaN(requesterId)) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid X-Requester-Id header" } });
-    }
+    const requesterId = req.user!.id;
 
     const attachmentId = parseInt(req.params.id, 10);
     if (isNaN(attachmentId)) {
@@ -630,7 +716,7 @@ app.delete("/api/attachments/:id", async (req: Request, res: Response): Promise<
 
     const prisma = getPrisma();
 
-    const requester = await prisma.developmentRequester.findUnique({ where: { id: requesterId } });
+    const requester = await prisma.user.findUnique({ where: { id: requesterId } });
     if (!requester || !requester.isActive) {
       return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid or inactive requester" } });
     }

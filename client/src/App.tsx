@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useState } from "react";
 import { checkSystem, Category } from "./api";
-import DevelopmentRequesterSelection from "./pages/DevelopmentRequesterSelection";
+import Login from "./pages/Login";
+import ChangePassword from "./pages/ChangePassword";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AppLayout from "./components/AppLayout";
 import MyTickets from "./pages/MyTickets";
@@ -71,21 +72,61 @@ function HealthCheck() {
   );
 }
 
+import { useAuth } from "./contexts/AuthContext";
+
+function RootRedirect() {
+  const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  
+  switch (user.role) {
+    case "REQUESTER":
+      return <Navigate to="/my-tickets" replace />;
+    case "IT_STAFF":
+      return <Navigate to="/staff-queue" replace />; // Placeholder for lab 3
+    case "ADMIN":
+      return <Navigate to="/user-management" replace />; // Placeholder for lab 3
+    default:
+      return <Navigate to="/my-tickets" replace />;
+  }
+}
+
+function StaffQueuePlaceholder() {
+  return (
+    <div className="container py-5 text-center">
+      <h2 className="mb-3">IT Staff Queue</h2>
+      <p className="text-muted">This feature is coming soon.</p>
+    </div>
+  );
+}
+
+function UserManagementPlaceholder() {
+  return (
+    <div className="container py-5 text-center">
+      <h2 className="mb-3">User Management</h2>
+      <p className="text-muted">This feature is coming soon.</p>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<DevelopmentRequesterSelection />} />
+        <Route path="/login" element={<Login />} />
         
         {/* Protected Routes */}
         <Route element={<ProtectedRoute />}>
+          <Route path="/change-password" element={<ChangePassword />} />
           <Route element={<AppLayout />}>
+            <Route path="/" element={<RootRedirect />} />
             <Route path="/my-tickets" element={<MyTickets />} />
+            <Route path="/staff-queue" element={<StaffQueuePlaceholder />} />
+            <Route path="/user-management" element={<UserManagementPlaceholder />} />
             <Route path="/create-ticket" element={<CreateTicket />} />
             <Route path="/tickets/:id" element={<RequesterTicketDetail />} />
             <Route path="/health" element={<HealthCheck />} />
             {/* Catch-all for unknown protected routes */}
-            <Route path="*" element={<Navigate to="/my-tickets" replace />} />
+            <Route path="*" element={<RootRedirect />} />
           </Route>
         </Route>
       </Routes>

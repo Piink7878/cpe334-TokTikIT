@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useRequester } from "../contexts/RequesterContext";
+import { useAuth } from "../contexts/AuthContext";
 import { getTicket, Ticket } from "../api";
 import { AttachmentSection } from "../components/AttachmentSection";
 
 export const RequesterTicketDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { selectedRequester } = useRequester();
+  const { user } = useAuth();
+  const selectedRequester = user;
 
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -17,7 +18,7 @@ export const RequesterTicketDetail: React.FC = () => {
     if (!selectedRequester || !id) return;
     setIsLoading(true);
     try {
-      const response = await getTicket(parseInt(id, 10), selectedRequester.id);
+      const response = await getTicket(parseInt(id, 10));
       setTicket(response.data);
       setError(null);
     } catch (err: any) {

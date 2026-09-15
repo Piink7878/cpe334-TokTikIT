@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL ?? "";
 
 export interface Category {
   id: number;
@@ -72,7 +72,7 @@ export async function checkSystem(): Promise<SystemStatus> {
   let resCategories;
 
   try {
-    resHealth = await fetch(`${API_URL}/api/health`);
+    resHealth = await fetch(`${API_URL}/api/health`, { credentials: "include" });
   } catch (error) {
     throw new Error("Backend is unreachable (Network Error). Please ensure the server is running.");
   }
@@ -82,7 +82,7 @@ export async function checkSystem(): Promise<SystemStatus> {
   }
 
   try {
-    resCategories = await fetch(`${API_URL}/api/categories`);
+    resCategories = await fetch(`${API_URL}/api/categories`, { credentials: "include" });
   } catch (error) {
     throw new Error("Failed to reach categories endpoint (Network Error).");
   }
@@ -98,7 +98,7 @@ export async function checkSystem(): Promise<SystemStatus> {
 }
 
 export async function getRequesters() {
-  const res = await fetch(`${API_URL}/api/requesters`);
+  const res = await fetch(`${API_URL}/api/requesters`, { credentials: "include" });
   if (!res.ok) {
     throw new Error("Failed to fetch requesters");
   }
@@ -111,7 +111,7 @@ export interface RelatedSystem {
 }
 
 export async function getRelatedSystems() {
-  const res = await fetch(`${API_URL}/api/related-systems`);
+  const res = await fetch(`${API_URL}/api/related-systems`, { credentials: "include" });
   if (!res.ok) {
     throw new Error("Failed to fetch related systems");
   }
@@ -127,12 +127,11 @@ export async function getCategories() {
   return res.json();
 }
 
-export async function createTicket(formData: FormData, requesterId: number) {
+export async function createTicket(formData: FormData) {
   const res = await fetch(`${API_URL}/api/tickets`, {
+    credentials: "include",
     method: "POST",
-    headers: {
-      "X-Requester-Id": requesterId.toString()
-    },
+    headers: {},
     body: formData
   });
 
@@ -143,7 +142,7 @@ export async function createTicket(formData: FormData, requesterId: number) {
   return res.json();
 }
 
-export async function getTickets(requesterId: number, filters?: TicketFilters): Promise<PaginatedResponse<Ticket>> {
+export async function getTickets(filters?: TicketFilters): Promise<PaginatedResponse<Ticket>> {
   const params = new URLSearchParams();
   if (filters) {
     Object.entries(filters).forEach(([key, value]) => {
@@ -157,11 +156,9 @@ export async function getTickets(requesterId: number, filters?: TicketFilters): 
   const url = `${API_URL}/api/tickets${queryString ? `?${queryString}` : ''}`;
 
   const res = await fetch(url, {
+    credentials: "include",
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Requester-Id': requesterId.toString()
-    }
+    headers: { 'Content-Type': 'application/json' }
   });
 
   if (!res.ok) {
@@ -172,13 +169,11 @@ export async function getTickets(requesterId: number, filters?: TicketFilters): 
   return res.json();
 }
 
-export async function getTicket(ticketId: number, requesterId: number): Promise<{ data: Ticket }> {
+export async function getTicket(ticketId: number): Promise<{ data: Ticket }> {
   const res = await fetch(`${API_URL}/api/tickets/${ticketId}`, {
+    credentials: "include",
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Requester-Id': requesterId.toString()
-    }
+    headers: { 'Content-Type': 'application/json' }
   });
 
   if (!res.ok) {
@@ -189,15 +184,14 @@ export async function getTicket(ticketId: number, requesterId: number): Promise<
   return res.json();
 }
 
-export async function uploadAttachment(ticketId: number, file: File, requesterId: number) {
+export async function uploadAttachment(ticketId: number, file: File) {
   const formData = new FormData();
   formData.append("file", file);
 
   const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments`, {
+    credentials: "include",
     method: "POST",
-    headers: {
-      "X-Requester-Id": requesterId.toString()
-    },
+    headers: {},
     body: formData
   });
 
@@ -209,13 +203,11 @@ export async function uploadAttachment(ticketId: number, file: File, requesterId
   return res.json();
 }
 
-export async function removeAttachment(attachmentId: number, reason: string, requesterId: number) {
+export async function removeAttachment(attachmentId: number, reason: string) {
   const res = await fetch(`${API_URL}/api/attachments/${attachmentId}`, {
+    credentials: "include",
     method: "DELETE",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Requester-Id": requesterId.toString()
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ removalReason: reason })
   });
 
@@ -227,12 +219,10 @@ export async function removeAttachment(attachmentId: number, reason: string, req
   return res.json();
 }
 
-export async function downloadAttachment(attachmentId: number, originalFilename: string, requesterId: number) {
+export async function downloadAttachment(attachmentId: number, originalFilename: string) {
   const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/download`, {
     method: "GET",
-    headers: {
-      "X-Requester-Id": requesterId.toString()
-    }
+    headers: {}
   });
 
   if (!res.ok) {
