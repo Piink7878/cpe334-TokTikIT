@@ -196,26 +196,6 @@ app.get("/api/related-systems", async (_req: Request, res: Response) => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// Issue 3 — Requesters list
-// Add:  GET /api/requesters
-//   -> read active requesters from PostgreSQL via getPrisma().developmentRequester.findMany(...)
-//   -> return { data: [...] }
-//   -> on failure, respond 500 with a safe message
-// ---------------------------------------------------------------------------
-app.get("/api/requesters", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response) => {
-  try {
-    const prisma = getPrisma();
-    const requesters = await prisma.user.findMany({
-      where: { role: "REQUESTER", isActive: true },
-      select: { id: true, fullName: true, email: true },
-      orderBy: { id: "asc" }
-    });
-    res.status(200).json({ data: requesters.map(r => ({ id: r.id, name: r.fullName, email: r.email })) });
-  } catch (error) {
-    res.status(500).json({ error: { message: "Failed to fetch requesters" } });
-  }
-});
 
 // ---------------------------------------------------------------------------
 // POST /api/tickets
