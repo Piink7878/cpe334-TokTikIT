@@ -159,4 +159,39 @@ describe("StaffTicketQueue Component", () => {
     });
     expect(screen.getByText("Clear Filters / Reset")).toBeInTheDocument();
   });
+
+  it("should update sorting when Sort dropdown is changed", async () => {
+    renderComponent();
+
+    // Initial fetch
+    expect(api.getStaffTickets).toHaveBeenCalled();
+    
+    // Find the Sort select element by checking its options
+    const sortSelect = screen.getAllByRole("combobox").find(select => {
+      const el = select as HTMLSelectElement;
+      return Array.from(el.options).some(opt => opt.value === "createdAt-desc");
+    });
+    
+    expect(sortSelect).toBeDefined();
+
+    // Change to IT Priority High-Low
+    fireEvent.change(sortSelect!, { target: { value: "itPriority-desc" } });
+    
+    await waitFor(() => {
+      expect(api.getStaffTickets).toHaveBeenCalledWith(expect.objectContaining({
+        sortBy: "itPriority",
+        sortOrder: "desc"
+      }));
+    });
+
+    // Change to Status A-Z
+    fireEvent.change(sortSelect!, { target: { value: "status-asc" } });
+
+    await waitFor(() => {
+      expect(api.getStaffTickets).toHaveBeenCalledWith(expect.objectContaining({
+        sortBy: "status",
+        sortOrder: "asc"
+      }));
+    });
+  });
 });
