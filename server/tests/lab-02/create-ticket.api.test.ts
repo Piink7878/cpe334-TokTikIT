@@ -1,16 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
-import { getPrisma } from "../../src/prisma.js";
+import { loginAsRequester, createMockUser } from "./test-utils.js";
 
 const mockCategoryFindUnique = vi.fn();
 const mockSystemFindUnique = vi.fn();
 const mockTicketFindFirst = vi.fn();
 const mockTicketCreate = vi.fn();
+const mockUserFindUnique = vi.fn();
 
 vi.mock("../../src/prisma.js", () => {
   return {
     getPrisma: vi.fn(() => ({
+      user: { findUnique: mockUserFindUnique },
       category: { findUnique: mockCategoryFindUnique },
       relatedSystem: { findUnique: mockSystemFindUnique },
       ticket: { findFirst: mockTicketFindFirst, create: mockTicketCreate }
@@ -19,7 +21,9 @@ vi.mock("../../src/prisma.js", () => {
 });
 
 describe("POST /api/tickets", () => {
-  beforeEach(() => {
+  let agent: ReturnType<typeof request.agent>;
+
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockCategoryFindUnique.mockResolvedValue({ id: 2, name: "Hardware", isActive: true });
     mockSystemFindUnique.mockResolvedValue({ id: 7, name: "Corporate Laptop", isActive: true });
@@ -39,14 +43,21 @@ describe("POST /api/tickets", () => {
       updatedAt: new Date("2026-09-02T10:15:30.000Z"),
       attachments: []
     });
+
+    mockUserFindUnique.mockImplementation(async (args) => {
+      if (args.where.email === "requester1@test.com") return createMockUser(1);
+      if (args.where.id == 1) return createMockUser(1);
+      return null;
+    });
+
+    agent = request.agent(app);
+    await loginAsRequester(agent, 1);
   });
 
   // Base Tests
   it("should create a ticket successfully and return 201", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", "1")
-      .field("requesterId", "1")
       .field("categoryId", "2")
       .field("relatedSystemId", "7")
       .field("summary", "Laptop battery drains quickly")
@@ -59,7 +70,7 @@ describe("POST /api/tickets", () => {
   });
 
   // Edge Cases
-  it("should return 400 if X-Requester-Id is missing", async () => {
+  it("should return 401 if unauthenticated", async () => {
     const response = await request(app)
       .post("/api/tickets")
       .field("categoryId", "2")
@@ -68,30 +79,26 @@ describe("POST /api/tickets", () => {
       .field("description", "Test description text.")
       .field("requestedPriority", "MEDIUM");
     
-    expect(response.status).toBe(400);
-    expect(response.body.error.message).toBe("Missing X-Requester-Id header");
+    expect(response.status).toBe(401);
   });
 
-  it("should return 400 if requesterId in body does not match X-Requester-Id header", async () => {
-    const response = await request(app)
+  it("should ignore custom requesterId in body and use session identity securely", async () => {
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", "1")
-      .field("requesterId", "2") // Mismatch
+      .field("requesterId", "99") // Should be ignored
       .field("categoryId", "2")
       .field("relatedSystemId", "7")
       .field("summary", "Valid summary here")
       .field("description", "Valid description here.")
       .field("requestedPriority", "MEDIUM");
     
-    expect(response.status).toBe(400);
-    expect(response.body.error.details.some((d: any) => d.field === "requesterId")).toBe(true);
+    expect(response.status).toBe(201);
   });
 
   it("should return 404 if relatedSystemId is not found", async () => {
     mockSystemFindUnique.mockResolvedValue(null);
-    const response = await request(app)
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", "1")
       .field("categoryId", "2")
       .field("relatedSystemId", "99") // Not found
       .field("summary", "Valid summary here")
@@ -103,9 +110,8 @@ describe("POST /api/tickets", () => {
   });
 
   it("should return 400 if requestedPriority is invalid", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", "1")
       .field("categoryId", "2")
       .field("relatedSystemId", "7")
       .field("summary", "Valid summary here")
@@ -117,9 +123,8 @@ describe("POST /api/tickets", () => {
   });
 
   it("should return 400 for boundary violations of summary and description", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", "1")
       .field("categoryId", "2")
       .field("relatedSystemId", "7")
       .field("summary", "A".repeat(151)) // > 150 chars
@@ -134,9 +139,8 @@ describe("POST /api/tickets", () => {
   // Attachment Tests
   it("should return 400 if file is larger than 5MB", async () => {
     const largeBuffer = Buffer.alloc(5 * 1024 * 1024 + 1024); // 5MB + 1KB
-    const response = await request(app)
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", "1")
       .field("categoryId", "2")
       .field("relatedSystemId", "7")
       .field("summary", "Valid summary here")
@@ -149,9 +153,8 @@ describe("POST /api/tickets", () => {
   });
 
   it("should return 400 if unsupported file type is uploaded", async () => {
-    const response = await request(app)
+    const response = await agent
       .post("/api/tickets")
-      .set("X-Requester-Id", "1")
       .field("categoryId", "2")
       .field("relatedSystemId", "7")
       .field("summary", "Valid summary here")
@@ -166,9 +169,8 @@ describe("POST /api/tickets", () => {
 
   it("should return 400 if more than 5 files are uploaded", async () => {
     const validBuffer = Buffer.from("fake image data");
-    const req = request(app)
+    const req = agent
       .post("/api/tickets")
-      .set("X-Requester-Id", "1")
       .field("categoryId", "2")
       .field("relatedSystemId", "7")
       .field("summary", "Valid summary here")

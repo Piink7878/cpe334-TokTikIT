@@ -116,7 +116,6 @@ export default function CreateTicket() {
     setErrorMsg(null);
 
     const data = new FormData();
-    data.append("requesterId", selectedRequester.id.toString());
     data.append("categoryId", formData.categoryId);
     data.append("relatedSystemId", formData.relatedSystemId);
     data.append("requestedPriority", formData.requestedPriority);
