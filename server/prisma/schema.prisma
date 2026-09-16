@@ -131,4 +131,5 @@ enum Status {
   CLOSED
   REOPENED
   CANCELLED
+  REJECTED
 }

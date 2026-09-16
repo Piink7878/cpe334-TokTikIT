@@ -870,4 +870,293 @@ app.get("/api/staff/tickets", requireAuth, requirePasswordChangeEnforcement, req
   }
 });
 
+// ---------------------------------------------------------------------------
+// GET /api/staff/assignees - List potential ticket assignees (IT_STAFF, ADMIN)
+// ---------------------------------------------------------------------------
+app.get("/api/staff/assignees", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const prisma = getPrisma();
+    const users = await prisma.user.findMany({
+      where: {
+        isActive: true,
+        role: { in: ["IT_STAFF", "ADMIN"] }
+      },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true
+      },
+      orderBy: { fullName: "asc" }
+    });
+    return res.status(200).json({ data: users });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/staff/tickets/:id - IT Staff Ticket Detail
+// ---------------------------------------------------------------------------
+app.get("/api/staff/tickets/:id", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: ticketId },
+      include: {
+        category: { select: { id: true, name: true } },
+        relatedSystem: { select: { id: true, name: true } },
+        requester: { select: { id: true, fullName: true, email: true } },
+        owner: { select: { id: true, fullName: true, email: true } },
+        attachments: {
+          where: { isRemoved: false },
+          select: { id: true, originalName: true, sizeBytes: true, mimeType: true, createdAt: true }
+        },
+        publicComments: {
+          include: { author: { select: { id: true, fullName: true, role: true } } },
+          orderBy: { createdAt: "asc" }
+        },
+        internalNotes: {
+          include: { author: { select: { id: true, fullName: true, role: true } } },
+          orderBy: { createdAt: "asc" }
+        }
+      }
+    });
+
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    return res.status(200).json({
+      id: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      summary: ticket.summary,
+      description: ticket.description,
+      category: ticket.category,
+      relatedSystem: ticket.relatedSystem,
+      requestedPriority: ticket.requestedPriority,
+      itPriority: ticket.itPriority,
+      status: ticket.currentStatus,
+      requester: ticket.requester,
+      owner: ticket.owner,
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt,
+      attachments: ticket.attachments,
+      publicComments: ticket.publicComments,
+      internalNotes: ticket.internalNotes
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/staff/tickets/:id/claim - Claim a ticket
+// ---------------------------------------------------------------------------
+app.patch("/api/staff/tickets/:id/claim", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    const newStatus = ticket.currentStatus === "NEW" ? "OPEN" : ticket.currentStatus;
+
+    const updatedTicket = await prisma.ticket.update({
+      where: { id: ticketId },
+      data: {
+        ownerId: req.user!.id,
+        currentStatus: newStatus
+      }
+    });
+
+    return res.status(200).json({
+      message: "Ticket claimed successfully",
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/staff/tickets/:id/assign - Assign a ticket
+// ---------------------------------------------------------------------------
+app.patch("/api/staff/tickets/:id/assign", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
+    }
+
+    const { assigneeId } = req.body;
+    if (!assigneeId) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "assigneeId is required" } });
+    }
+
+    const prisma = getPrisma();
+    
+    // Validate assignee
+    const assignee = await prisma.user.findUnique({ where: { id: assigneeId } });
+    if (!assignee || (assignee.role !== "IT_STAFF" && assignee.role !== "ADMIN") || !assignee.isActive) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid assignee" } });
+    }
+
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    const newStatus = ticket.currentStatus === "NEW" ? "OPEN" : ticket.currentStatus;
+
+    const updatedTicket = await prisma.ticket.update({
+      where: { id: ticketId },
+      data: {
+        ownerId: assigneeId,
+        currentStatus: newStatus
+      }
+    });
+
+    return res.status(200).json({
+      message: "Ticket assigned successfully",
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/staff/tickets/:id/priority - Update IT Priority
+// ---------------------------------------------------------------------------
+app.patch("/api/staff/tickets/:id/priority", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
+    }
+
+    const { itPriority } = req.body;
+    const validPriorities = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+    if (!itPriority || !validPriorities.includes(itPriority)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid or missing itPriority" } });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    const updatedTicket = await prisma.ticket.update({
+      where: { id: ticketId },
+      data: { itPriority }
+    });
+
+    return res.status(200).json({
+      message: "Priority updated successfully",
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/staff/tickets/:id/status - Update Ticket Status
+// ---------------------------------------------------------------------------
+app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
+    }
+
+    const { status, rejectionReason } = req.body;
+    if (!status) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "status is required" } });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    const currentStatus = ticket.currentStatus;
+
+    // BR-04: Validate allowed state machine transitions
+    // NEW -> OPEN, REJECTED, CANCELLED
+    // OPEN -> RESOLVED, CANCELLED
+    // RESOLVED -> CLOSED, REOPENED
+    // REOPENED -> RESOLVED, CANCELLED
+    // Terminal states: CLOSED, REJECTED, CANCELLED
+
+    const allowedTransitions: Record<string, string[]> = {
+      NEW: ["OPEN", "REJECTED", "CANCELLED"],
+      OPEN: ["RESOLVED", "CANCELLED", "IN_PROGRESS", "WAITING_FOR_REQUESTER"],
+      IN_PROGRESS: ["WAITING_FOR_REQUESTER", "RESOLVED", "OPEN", "CANCELLED"],
+      WAITING_FOR_REQUESTER: ["IN_PROGRESS", "RESOLVED", "CANCELLED"],
+      RESOLVED: ["CLOSED", "REOPENED"],
+      REOPENED: ["RESOLVED", "CANCELLED", "IN_PROGRESS", "WAITING_FOR_REQUESTER"],
+      CLOSED: [],
+      REJECTED: [],
+      CANCELLED: []
+    };
+
+    const permittedNext = allowedTransitions[currentStatus] || [];
+    
+    if (!permittedNext.includes(status)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: `Invalid transition from ${currentStatus} to ${status}` } });
+    }
+
+    // BR-05: Enforce rejection note
+    if (status === "REJECTED" && (!rejectionReason || typeof rejectionReason !== "string" || rejectionReason.trim() === "")) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "rejectionReason is required when rejecting a ticket" } });
+    }
+
+    const updateData: any = {
+      currentStatus: status
+    };
+
+    if (status === "REJECTED") {
+      updateData.internalNotes = {
+        create: {
+          body: `Ticket rejected. Reason: ${rejectionReason.trim()}`,
+          authorId: req.user!.id
+        }
+      };
+    }
+
+    const updatedTicket = await prisma.ticket.update({
+      where: { id: ticketId },
+      data: updateData
+    });
+
+    return res.status(200).json({
+      message: "Status updated successfully",
+      ticket: updatedTicket
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
 export default app;

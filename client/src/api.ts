@@ -295,3 +295,97 @@ export async function getStaffTickets(filters?: StaffTicketFilters): Promise<Pag
 
   return res.json();
 }
+
+export async function getStaffAssignees() {
+  const res = await fetch(`${API_URL}/api/staff/assignees`, {
+    credentials: "include",
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to fetch assignees");
+  }
+
+  return res.json();
+}
+
+export async function getStaffTicketDetail(ticketId: number) {
+  const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}`, {
+    credentials: "include",
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to fetch ticket details");
+  }
+
+  return res.json();
+}
+
+export async function claimTicket(ticketId: number) {
+  const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}/claim`, {
+    credentials: "include",
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to claim ticket");
+  }
+
+  return res.json();
+}
+
+export async function assignTicket(ticketId: number, assigneeId: string) {
+  const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}/assign`, {
+    credentials: "include",
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ assigneeId })
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to assign ticket");
+  }
+
+  return res.json();
+}
+
+export async function updateTicketPriority(ticketId: number, itPriority: string) {
+  const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}/priority`, {
+    credentials: "include",
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ itPriority })
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to update priority");
+  }
+
+  return res.json();
+}
+
+export async function updateTicketStatus(ticketId: number, status: string, rejectionReason?: string) {
+  const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}/status`, {
+    credentials: "include",
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status, rejectionReason })
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to update status");
+  }
+
+  return res.json();
+}
+

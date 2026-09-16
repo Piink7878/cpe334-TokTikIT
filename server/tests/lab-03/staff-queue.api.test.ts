@@ -19,6 +19,7 @@ describe("IT Staff Ticket Queue API", () => {
   let adminCookie: string;
   let requesterCookie: string;
   let staffUser: any;
+  let adminUser: any;
   let requesterUser: any;
   let category: any;
   let relatedSystem: any;
@@ -41,7 +42,7 @@ describe("IT Staff Ticket Queue API", () => {
       }
     });
 
-    const adminUser = await prisma.user.create({
+    adminUser = await prisma.user.create({
       data: {
         email: `admin_${suffix}@example.com`,
         fullName: "Admin User",
@@ -114,7 +115,12 @@ describe("IT Staff Ticket Queue API", () => {
     await prisma.ticket.deleteMany({ where: { id: { in: [ticket1.id, ticket2.id] } } });
     await prisma.category.deleteMany({ where: { id: category.id } });
     await prisma.relatedSystem.deleteMany({ where: { id: relatedSystem.id } });
-    await prisma.user.deleteMany({ where: { email: { contains: "example.com" }, role: { in: ["IT_STAFF", "ADMIN", "REQUESTER"] } } });
+    const emailsToDelete = [
+      staffUser.email,
+      adminUser.email,
+      requesterUser.email
+    ];
+    await prisma.user.deleteMany({ where: { email: { in: emailsToDelete } } });
   });
 
   it("should deny access to unauthenticated requests", async () => {
