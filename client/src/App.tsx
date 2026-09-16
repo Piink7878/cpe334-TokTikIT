@@ -74,6 +74,8 @@ function HealthCheck() {
 
 import { useAuth } from "./contexts/AuthContext";
 
+import StaffTicketQueue from "./pages/StaffTicketQueue";
+
 function RootRedirect() {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
@@ -82,21 +84,12 @@ function RootRedirect() {
     case "REQUESTER":
       return <Navigate to="/my-tickets" replace />;
     case "IT_STAFF":
-      return <Navigate to="/staff-queue" replace />; // Placeholder for lab 3
+      return <Navigate to="/staff-queue" replace />;
     case "ADMIN":
-      return <Navigate to="/user-management" replace />; // Placeholder for lab 3
+      return <Navigate to="/user-management" replace />;
     default:
       return <Navigate to="/my-tickets" replace />;
   }
-}
-
-function StaffQueuePlaceholder() {
-  return (
-    <div className="container py-5 text-center">
-      <h2 className="mb-3">IT Staff Queue</h2>
-      <p className="text-muted">This feature is coming soon.</p>
-    </div>
-  );
 }
 
 function UserManagementPlaceholder() {
@@ -104,6 +97,28 @@ function UserManagementPlaceholder() {
     <div className="container py-5 text-center">
       <h2 className="mb-3">User Management</h2>
       <p className="text-muted">This feature is coming soon.</p>
+    </div>
+  );
+}
+
+import { useParams, Link } from "react-router-dom";
+
+function StaffTicketDetailPlaceholder() {
+  const { id } = useParams();
+  return (
+    <div className="container py-5 text-center">
+      <h2 className="mb-3 text-primary">Staff Ticket Detail</h2>
+      <p className="text-muted mb-4">Viewing details for Ticket ID: <strong>{id}</strong></p>
+      <div className="alert alert-info d-inline-block text-start mb-4">
+        <i className="bi bi-info-circle me-2"></i>
+        This detailed view is pending implementation.
+      </div>
+      <div>
+        <Link to="/staff-queue" className="btn btn-outline-primary">
+          <i className="bi bi-arrow-left me-2"></i>
+          Back to Queue
+        </Link>
+      </div>
     </div>
   );
 }
@@ -120,7 +135,8 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route path="/" element={<RootRedirect />} />
             <Route path="/my-tickets" element={<MyTickets />} />
-            <Route path="/staff-queue" element={<StaffQueuePlaceholder />} />
+            <Route path="/staff-queue" element={<StaffTicketQueue />} />
+            <Route path="/staff/tickets/:id" element={<StaffTicketDetailPlaceholder />} />
             <Route path="/user-management" element={<UserManagementPlaceholder />} />
             <Route path="/create-ticket" element={<CreateTicket />} />
             <Route path="/tickets/:id" element={<RequesterTicketDetail />} />
