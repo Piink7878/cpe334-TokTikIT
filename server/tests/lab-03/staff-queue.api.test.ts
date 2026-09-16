@@ -233,4 +233,32 @@ describe("IT Staff Ticket Queue API", () => {
     expect(res.body.data[0].ticketNumber).toBe(ticket2.ticketNumber);
     expect(res.body.data[1].ticketNumber).toBe(ticket1.ticketNumber);
   });
+
+  it("should sort tickets by itPriority", async () => {
+    const res = await request(app)
+      .get(`/api/staff/tickets?categoryId=${category.id}&sortBy=itPriority&sortOrder=asc`)
+      .set("Cookie", staffCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBeGreaterThanOrEqual(2);
+    const p1 = res.body.data[0].itPriority;
+    const p2 = res.body.data[1].itPriority;
+    const priorityValues: Record<string, number> = { "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4 };
+    expect(priorityValues[p1] <= priorityValues[p2]).toBe(true);
+  });
+
+  it("should sort tickets by status", async () => {
+    const res = await request(app)
+      .get(`/api/staff/tickets?categoryId=${category.id}&sortBy=status&sortOrder=asc`)
+      .set("Cookie", staffCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBeGreaterThanOrEqual(2);
+    
+    const statusValues: Record<string, number> = {
+      "NEW": 1, "OPEN": 2, "IN_PROGRESS": 3, "WAITING_FOR_REQUESTER": 4,
+      "RESOLVED": 5, "CLOSED": 6, "REOPENED": 7, "CANCELLED": 8
+    };
+    const s1 = res.body.data[0].status;
+    const s2 = res.body.data[1].status;
+    expect(statusValues[s1] <= statusValues[s2]).toBe(true);
+  });
 });

@@ -116,7 +116,7 @@ describe("StaffTicketQueue Component", () => {
     expect(screen.getAllByText("Unassigned").length).toBeGreaterThan(0);
   });
 
-  it("renders empty state if no tickets returned", async () => {
+  it("renders empty state if no tickets returned and no filters active", async () => {
     (api.getStaffTickets as any).mockResolvedValue({
       data: [],
       pagination: {
@@ -132,7 +132,31 @@ describe("StaffTicketQueue Component", () => {
     renderComponent();
     
     await waitFor(() => {
-      expect(screen.getByText("No tickets found.")).toBeInTheDocument();
+      expect(screen.getByText("No tickets in the queue")).toBeInTheDocument();
     });
+  });
+
+  it("renders no results state if tickets empty but filters active", async () => {
+    (api.getStaffTickets as any).mockResolvedValue({
+      data: [],
+      pagination: {
+        page: 1,
+        limit: 10,
+        totalItems: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    });
+
+    renderComponent();
+
+    const searchInput = screen.getByPlaceholderText("Search ticket number or summary");
+    fireEvent.change(searchInput, { target: { value: "Missing Server" } });
+
+    await waitFor(() => {
+      expect(screen.getByText("No tickets match your search criteria")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Clear Filters / Reset")).toBeInTheDocument();
   });
 });

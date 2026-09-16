@@ -96,6 +96,8 @@ export default function StaffTicketQueue() {
     }
   };
 
+  const hasActiveFilters = search.trim() !== "" || status !== "" || priority !== "" || categoryId !== "" || ownerId !== "";
+
   return (
     <div className="container py-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
@@ -241,8 +243,27 @@ export default function StaffTicketQueue() {
       ) : tickets.length === 0 ? (
         <div className="card text-center shadow-sm py-5">
           <div className="card-body">
-            <h5 className="text-muted">No tickets found.</h5>
-            <p className="text-muted mb-0">Try adjusting your filters or search terms.</p>
+            {hasActiveFilters ? (
+              <>
+                <h5 className="text-muted">No tickets match your search criteria</h5>
+                <p className="text-muted mb-3">Try adjusting your filters or search terms.</p>
+                <button 
+                  className="btn btn-outline-secondary"
+                  onClick={() => {
+                    setSearch("");
+                    setStatus("");
+                    setPriority("");
+                    setCategoryId("");
+                    setOwnerId("");
+                    setPage(1);
+                  }}
+                >
+                  Clear Filters / Reset
+                </button>
+              </>
+            ) : (
+              <h5 className="text-muted">No tickets in the queue</h5>
+            )}
           </div>
         </div>
       ) : (

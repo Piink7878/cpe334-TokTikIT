@@ -800,8 +800,16 @@ app.get("/api/staff/tickets", requireAuth, requirePasswordChangeEnforcement, req
       where.ownerId = ownerId;
     }
 
-    const validSortFields = ["ticketNumber", "createdAt", "updatedAt", "summary"];
-    const sortField = validSortFields.includes(sortBy as string) ? (sortBy as string) : "createdAt";
+    const validSortFields = ["ticketNumber", "createdAt", "updatedAt", "summary", "itPriority", "status"];
+    const sortFieldMap: Record<string, string> = {
+      ticketNumber: "ticketNumber",
+      createdAt: "createdAt",
+      updatedAt: "updatedAt",
+      summary: "summary",
+      itPriority: "itPriority",
+      status: "currentStatus"
+    };
+    const sortField = validSortFields.includes(sortBy as string) ? sortFieldMap[sortBy as string] : "createdAt";
     const orderDirection = sortOrder === "asc" ? "asc" : "desc";
 
     const skip = (parsedPage - 1) * parsedLimit;
