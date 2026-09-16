@@ -241,3 +241,57 @@ export async function downloadAttachment(attachmentId: number, originalFilename:
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
 }
+
+export interface StaffTicketFilters {
+  search?: string;
+  categoryId?: number;
+  requestedPriority?: string;
+  itPriority?: string;
+  status?: string;
+  ownerId?: string | 'unassigned';
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+}
+
+export interface StaffTicket {
+  id: number;
+  ticketNumber: string;
+  summary: string;
+  category: { id: number; name: string };
+  requestedPriority: string;
+  itPriority: string;
+  status: string;
+  requester: { id: number; name: string };
+  owner: { id: number; name: string } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getStaffTickets(filters?: StaffTicketFilters): Promise<PaginatedResponse<StaffTicket>> {
+  const params = new URLSearchParams();
+  if (filters) {
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        params.append(key, String(value));
+      }
+    });
+  }
+
+  const queryString = params.toString();
+  const url = `${API_URL}/api/staff/tickets${queryString ? `?${queryString}` : ''}`;
+
+  const res = await fetch(url, {
+    credentials: "include",
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to fetch staff tickets");
+  }
+
+  return res.json();
+}

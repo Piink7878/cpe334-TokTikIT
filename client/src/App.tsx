@@ -74,6 +74,8 @@ function HealthCheck() {
 
 import { useAuth } from "./contexts/AuthContext";
 
+import StaffTicketQueue from "./pages/StaffTicketQueue";
+
 function RootRedirect() {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
@@ -82,21 +84,12 @@ function RootRedirect() {
     case "REQUESTER":
       return <Navigate to="/my-tickets" replace />;
     case "IT_STAFF":
-      return <Navigate to="/staff-queue" replace />; // Placeholder for lab 3
+      return <Navigate to="/staff-queue" replace />;
     case "ADMIN":
-      return <Navigate to="/user-management" replace />; // Placeholder for lab 3
+      return <Navigate to="/user-management" replace />;
     default:
       return <Navigate to="/my-tickets" replace />;
   }
-}
-
-function StaffQueuePlaceholder() {
-  return (
-    <div className="container py-5 text-center">
-      <h2 className="mb-3">IT Staff Queue</h2>
-      <p className="text-muted">This feature is coming soon.</p>
-    </div>
-  );
 }
 
 function UserManagementPlaceholder() {
@@ -120,7 +113,7 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route path="/" element={<RootRedirect />} />
             <Route path="/my-tickets" element={<MyTickets />} />
-            <Route path="/staff-queue" element={<StaffQueuePlaceholder />} />
+            <Route path="/staff-queue" element={<StaffTicketQueue />} />
             <Route path="/user-management" element={<UserManagementPlaceholder />} />
             <Route path="/create-ticket" element={<CreateTicket />} />
             <Route path="/tickets/:id" element={<RequesterTicketDetail />} />

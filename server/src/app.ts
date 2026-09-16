@@ -6,7 +6,7 @@ import fs from "fs";
 import path from "path";
 import session from "express-session";
 import bcrypt from "bcryptjs";
-import { requireAuth, requirePasswordChangeEnforcement } from "./middlewares/auth.js";
+import { requireAuth, requirePasswordChangeEnforcement, requireRole } from "./middlewares/auth.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4). It is intentionally unused until then.
 void getPrisma;
@@ -735,6 +735,122 @@ app.delete("/api/attachments/:id", requireAuth, requirePasswordChangeEnforcement
         isRemoved: updatedAttachment.isRemoved,
         removedAt: updatedAttachment.removedAt,
         removedReason: updatedAttachment.removalReason
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/staff/tickets - IT Staff Ticket Queue
+// ---------------------------------------------------------------------------
+app.get("/api/staff/tickets", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const {
+      search,
+      categoryId,
+      requestedPriority,
+      itPriority,
+      status,
+      ownerId,
+      sortBy = "createdAt",
+      sortOrder = "desc",
+      page = "1",
+      limit = "10"
+    } = req.query;
+
+    const parsedPage = parseInt(page as string, 10);
+    const parsedLimit = parseInt(limit as string, 10);
+
+    if (isNaN(parsedPage) || parsedPage < 1 || isNaN(parsedLimit) || parsedLimit < 1) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid pagination parameters" } });
+    }
+
+    const where: any = {};
+
+    if (search && typeof search === "string") {
+      where.OR = [
+        { ticketNumber: { contains: search, mode: "insensitive" } },
+        { summary: { contains: search, mode: "insensitive" } }
+      ];
+    }
+    if (categoryId) {
+      const parsedCategoryId = parseInt(categoryId as string, 10);
+      if (!isNaN(parsedCategoryId)) {
+        where.categoryId = parsedCategoryId;
+      }
+    }
+    if (requestedPriority && typeof requestedPriority === "string") {
+      where.requestedPriority = requestedPriority;
+    }
+    if (itPriority && typeof itPriority === "string") {
+      where.itPriority = itPriority;
+    }
+    if (status && typeof status === "string") {
+      where.currentStatus = status;
+    }
+    if (ownerId === "unassigned") {
+      where.ownerId = null;
+    } else if (ownerId && typeof ownerId === "string") {
+      where.ownerId = ownerId;
+    }
+
+    const validSortFields = ["ticketNumber", "createdAt", "updatedAt", "summary"];
+    const sortField = validSortFields.includes(sortBy as string) ? (sortBy as string) : "createdAt";
+    const orderDirection = sortOrder === "asc" ? "asc" : "desc";
+
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    const prisma = getPrisma();
+
+    const [tickets, totalItems] = await Promise.all([
+      prisma.ticket.findMany({
+        where,
+        orderBy: { [sortField]: orderDirection },
+        skip,
+        take: parsedLimit,
+        include: {
+          category: { select: { id: true, name: true } },
+          requester: { select: { id: true, fullName: true } },
+          owner: { select: { id: true, fullName: true } }
+        }
+      }),
+      prisma.ticket.count({ where })
+    ]);
+
+    const totalPages = Math.ceil(totalItems / parsedLimit);
+
+    const formattedData = tickets.map(t => ({
+      id: t.id,
+      ticketNumber: t.ticketNumber,
+      summary: t.summary,
+      category: t.category,
+      requestedPriority: t.requestedPriority,
+      itPriority: t.itPriority,
+      status: t.currentStatus,
+      requester: {
+        id: t.requesterId,
+        name: t.requester.fullName
+      },
+      owner: t.ownerId ? {
+        id: t.ownerId,
+        name: t.owner!.fullName
+      } : null,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt
+    }));
+
+    return res.status(200).json({
+      data: formattedData,
+      pagination: {
+        page: parsedPage,
+        limit: parsedLimit,
+        totalItems,
+        totalPages,
+        hasNextPage: parsedPage < totalPages,
+        hasPreviousPage: parsedPage > 1
       }
     });
   } catch (error) {
