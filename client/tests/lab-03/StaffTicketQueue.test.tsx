@@ -93,15 +93,15 @@ describe("StaffTicketQueue Component", () => {
   };
 
   it("renders loading state initially", () => {
-    renderComponent();
-    expect(screen.getByText("Loading queue...")).toBeInTheDocument();
+    const { container } = renderComponent();
+    expect(container.querySelector(".placeholder-glow")).toBeInTheDocument();
   });
 
   it("renders the table with tickets after loading", async () => {
-    renderComponent();
+    const { container } = renderComponent();
     
     await waitFor(() => {
-      expect(screen.queryByText("Loading queue...")).not.toBeInTheDocument();
+      expect(container.querySelector(".placeholder-glow")).not.toBeInTheDocument();
     });
 
     expect(screen.getAllByText("TKT-2026-000001").length).toBeGreaterThan(0);

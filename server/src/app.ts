@@ -761,11 +761,14 @@ app.get("/api/staff/tickets", requireAuth, requirePasswordChangeEnforcement, req
       limit = "10"
     } = req.query;
 
-    const parsedPage = parseInt(page as string, 10);
-    const parsedLimit = parseInt(limit as string, 10);
+    let parsedPage = parseInt(page as string, 10);
+    let parsedLimit = parseInt(limit as string, 10);
 
-    if (isNaN(parsedPage) || parsedPage < 1 || isNaN(parsedLimit) || parsedLimit < 1) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid pagination parameters" } });
+    if (isNaN(parsedPage) || parsedPage < 1) {
+      parsedPage = 1;
+    }
+    if (isNaN(parsedLimit) || parsedLimit < 1) {
+      parsedLimit = 10;
     }
 
     const where: any = {};

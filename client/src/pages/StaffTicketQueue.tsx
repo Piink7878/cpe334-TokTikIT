@@ -148,7 +148,7 @@ export default function StaffTicketQueue() {
               </select>
             </div>
             
-            <div className="col-md-2">
+            <div className="col-md-3">
               <select className="form-select" value={ownerId} onChange={e => { setOwnerId(e.target.value); setPage(1); }}>
                 <option value="">Any Owner</option>
                 <option value="unassigned">Unassigned</option>
@@ -156,7 +156,23 @@ export default function StaffTicketQueue() {
               </select>
             </div>
 
-            <div className="col-md-1">
+            <div className="col-md-3">
+              <select className="form-select" value={`${sortBy}-${sortOrder}`} onChange={e => {
+                const [sb, so] = e.target.value.split("-");
+                setSortBy(sb);
+                setSortOrder(so as "asc" | "desc");
+                setPage(1);
+              }}>
+                <option value="createdAt-desc">Sort: Newest First</option>
+                <option value="createdAt-asc">Sort: Oldest First</option>
+                <option value="itPriority-desc">Sort: IT Priority (High-Low)</option>
+                <option value="itPriority-asc">Sort: IT Priority (Low-High)</option>
+                <option value="status-asc">Sort: Status (A-Z)</option>
+                <option value="status-desc">Sort: Status (Z-A)</option>
+              </select>
+            </div>
+
+            <div className="col-md-2">
               <button type="submit" className="btn btn-primary w-100">Search</button>
             </div>
           </form>
@@ -170,11 +186,57 @@ export default function StaffTicketQueue() {
       )}
 
       {loading ? (
-        <div className="text-center py-5">
-          <div className="spinner-border text-primary" role="status">
-            <span className="visually-hidden">Loading...</span>
+        <div className="card shadow-sm">
+          <div className="table-responsive d-none d-md-block">
+            <table className="table table-hover mb-0 align-middle">
+              <thead className="table-light">
+                <tr>
+                  <th>Ticket No</th>
+                  <th>Created Date</th>
+                  <th>Summary</th>
+                  <th>Category</th>
+                  <th>Req Priority</th>
+                  <th>IT Priority</th>
+                  <th>Status</th>
+                  <th>Owner</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...Array(5)].map((_, i) => (
+                  <tr key={i}>
+                    <td><span className="placeholder-glow"><span className="placeholder col-8"></span></span></td>
+                    <td><span className="placeholder-glow"><span className="placeholder col-10"></span></span></td>
+                    <td><span className="placeholder-glow"><span className="placeholder col-12"></span></span></td>
+                    <td><span className="placeholder-glow"><span className="placeholder col-8"></span></span></td>
+                    <td><span className="placeholder-glow"><span className="placeholder col-6"></span></span></td>
+                    <td><span className="placeholder-glow"><span className="placeholder col-6"></span></span></td>
+                    <td><span className="placeholder-glow"><span className="placeholder col-6"></span></span></td>
+                    <td><span className="placeholder-glow"><span className="placeholder col-8"></span></span></td>
+                    <td><span className="placeholder-glow"><span className="placeholder col-12"></span></span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          <p className="mt-2 text-muted">Loading queue...</p>
+          <div className="d-block d-md-none">
+            <ul className="list-group list-group-flush">
+              {[...Array(3)].map((_, i) => (
+                <li key={i} className="list-group-item p-3">
+                  <div className="placeholder-glow mb-2">
+                    <span className="placeholder col-4 me-2"></span>
+                    <span className="placeholder col-3"></span>
+                  </div>
+                  <div className="placeholder-glow mb-3">
+                    <span className="placeholder col-8"></span>
+                  </div>
+                  <div className="placeholder-glow">
+                    <span className="placeholder col-12"></span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       ) : tickets.length === 0 ? (
         <div className="card text-center shadow-sm py-5">

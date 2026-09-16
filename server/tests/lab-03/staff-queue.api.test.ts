@@ -175,6 +175,33 @@ describe("IT Staff Ticket Queue API", () => {
     expect(res.body.data[0].status).toBe("IN_PROGRESS");
   });
 
+  it("should apply itPriority filter", async () => {
+    const res = await request(app)
+      .get(`/api/staff/tickets?categoryId=${category.id}&itPriority=LOW`)
+      .set("Cookie", staffCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(1);
+    expect(res.body.data[0].itPriority).toBe("LOW");
+  });
+
+  it("should apply specific ownerId filter", async () => {
+    const res = await request(app)
+      .get(`/api/staff/tickets?categoryId=${category.id}&ownerId=${staffUser.id}`)
+      .set("Cookie", staffCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.data.length).toBe(1);
+    expect(res.body.data[0].owner.id).toBe(staffUser.id);
+  });
+
+  it("should fallback safely for invalid pagination parameters", async () => {
+    const res = await request(app)
+      .get(`/api/staff/tickets?categoryId=${category.id}&page=-5&limit=invalid`)
+      .set("Cookie", staffCookie);
+    expect(res.status).toBe(200);
+    expect(res.body.pagination.page).toBe(1); // Default fallback
+    expect(res.body.pagination.limit).toBe(10); // Default fallback
+  });
+
   it("should handle pagination", async () => {
     const res = await request(app)
       .get(`/api/staff/tickets?categoryId=${category.id}&page=1&limit=1`)
