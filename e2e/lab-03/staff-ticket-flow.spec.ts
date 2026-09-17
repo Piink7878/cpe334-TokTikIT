@@ -1,7 +1,4 @@
-import { test, expect } from '@playwright/test';
-import { PrismaClient } from '../../server/node_modules/@prisma/client';
-
-const prisma = new PrismaClient();
+import { test, expect, request } from '@playwright/test';
 
 test.describe('IT Staff Ticket Flow (Lab 3)', () => {
   let ticketId: number;
@@ -9,54 +6,53 @@ test.describe('IT Staff Ticket Flow (Lab 3)', () => {
   let summaryText: string;
 
   test.beforeAll(async () => {
-    // 1. Ensure clean prerequisites
-    const req = await prisma.user.findFirst({ where: { role: 'REQUESTER', isActive: true } });
-    const cat = await prisma.category.findFirst();
-    const sys = await prisma.relatedSystem.findFirst();
-
-    if (!req || !cat || !sys) {
-      throw new Error('Database missing seed data (Requester, Category, or RelatedSystem)');
-    }
-
     const timestamp = Date.now();
-    ticketNumber = `STAFF-E2E-${timestamp}`;
     summaryText = `E2E Staff Ticket ${timestamp}`;
 
-    // Seed a fresh unassigned NEW ticket
-    const ticket = await prisma.ticket.create({
+    // Create an API context using a valid seeded requester account (req2@toktikit.local)
+    const apiContext = await request.newContext({ baseURL: 'http://localhost:5173' });
+
+    // 1. Log in as Requester
+    const loginRes = await apiContext.post('/api/auth/login', {
       data: {
-        ticketNumber,
-        summary: summaryText,
-        description: 'Detailed description for testing IT Staff ticket flow end-to-end.',
-        currentStatus: 'NEW',
-        requestedPriority: 'MEDIUM',
-        itPriority: 'MEDIUM',
-        categoryId: cat.id,
-        relatedSystemId: sys.id,
-        requesterId: req.id,
-        ownerId: null
+        email: 'req2@toktikit.local',
+        password: 'Password123!'
       }
     });
-    ticketId = ticket.id;
-  });
+    expect(loginRes.ok()).toBeTruthy();
 
-  test.afterAll(async () => {
-    // Guaranteed teardown even on mid-test failure
-    try {
-      if (ticketId) {
-        await prisma.internalNote.deleteMany({ where: { ticketId } });
-        await prisma.publicComment.deleteMany({ where: { ticketId } });
-        await prisma.attachment.deleteMany({ where: { ticketId } });
-        await prisma.ticket.deleteMany({ where: { id: ticketId } });
+    // 2. Fetch categories and related systems for valid foreign key IDs
+    const catRes = await apiContext.get('/api/categories');
+    expect(catRes.ok()).toBeTruthy();
+    const categories = await catRes.json();
+    const categoryId = categories[0].id;
+
+    const sysRes = await apiContext.get('/api/related-systems');
+    expect(sysRes.ok()).toBeTruthy();
+    const sysData = await sysRes.json();
+    const relatedSystemId = sysData.data[0].id;
+
+    // 3. Dynamically create a fresh unassigned NEW ticket via API (pure black-box)
+    const ticketRes = await apiContext.post('/api/tickets', {
+      multipart: {
+        categoryId: String(categoryId),
+        relatedSystemId: String(relatedSystemId),
+        summary: summaryText,
+        description: 'Detailed description for testing IT Staff ticket flow end-to-end.',
+        requestedPriority: 'MEDIUM'
       }
-    } catch (err) {
-      console.error('Error in staff-ticket-flow afterAll teardown:', err);
-    } finally {
-      await prisma.$disconnect();
-    }
+    });
+    expect(ticketRes.ok()).toBeTruthy();
+    const ticketJson = await ticketRes.json();
+    ticketId = ticketJson.data.id;
+    ticketNumber = ticketJson.data.ticketNumber;
+
+    await apiContext.dispose();
   });
 
-  test('Full IT Staff workflow: Login -> Queue -> Open -> Claim -> Priority -> Status -> Comment -> Note', async ({ page }) => {
+  test('Full IT Staff workflow: Login -> Queue -> Open -> Claim -> Priority -> Status -> Comment -> Note -> Persistence Check -> Requester Note Authorization (BR-04)', async ({ page }) => {
+    test.slow();
+
     // 1. Login as IT Staff (staff2@toktikit.local does not require password change)
     await page.goto('/login');
     await page.waitForSelector('input[type="email"]');
@@ -64,8 +60,8 @@ test.describe('IT Staff Ticket Flow (Lab 3)', () => {
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
 
-    // Verify redirected to staff-queue and user shell displays IT Staff info
-    await expect(page).toHaveURL(/.*\/staff-queue/);
+    // Verify redirected to staff-queue and user shell displays IT Staff info (typo-free regex)
+    await expect(page).toHaveURL(/\/staff-queue/);
     await expect(page.locator('.navbar')).toContainText('IT Staff Two');
     await expect(page.locator('.navbar')).toContainText('IT_STAFF');
 
@@ -112,21 +108,63 @@ test.describe('IT Staff Ticket Flow (Lab 3)', () => {
 
     // 6. Post a Public Comment
     const publicCommentText = `Public update from staff at ${Date.now()}`;
-    await page.fill('textarea[placeholder="Write a message to the requester..."]', publicCommentText);
+    const commentTextarea = page.locator('textarea[placeholder="Write a message to the requester..."]');
+    await commentTextarea.fill(publicCommentText);
     await page.click('button:has-text("Post Comment")');
 
-    // Verify comment is displayed in activity timeline with Public Comment badge
-    await expect(page.locator('text=Public Comment').first()).toBeVisible();
-    await expect(page.locator(`text=${publicCommentText}`)).toBeVisible();
+    // Verify public comment posted successfully and appears in activity timeline
+    await expect(page.locator('.alert-success')).toContainText('Public comment added successfully');
+    await expect(commentTextarea).toHaveValue('');
+    await expect(page.locator('.card:has-text("Activity & Communication")').locator(`text=${publicCommentText}`)).toBeVisible();
 
     // 7. Post an Internal Note
     const internalNoteText = `Internal operational note at ${Date.now()}`;
-    await page.fill('textarea[placeholder="Write an internal operational note..."]', internalNoteText);
-    await page.click('button:has-text("Save Internal Note")');
+    const noteTextarea = page.locator('textarea[placeholder="Write an internal operational note..."]');
+    await expect(noteTextarea).toBeVisible();
+    await noteTextarea.fill(internalNoteText);
+    const saveNoteButton = page.locator('button:has-text("Save Internal Note")');
+    await expect(saveNoteButton).toBeEnabled();
+    await saveNoteButton.click();
 
-    // Verify internal note is displayed in activity timeline with Internal Note badge
-    await expect(page.locator('text=Internal Note').first()).toBeVisible();
-    await expect(page.locator(`text=${internalNoteText}`)).toBeVisible();
+    // Verify internal note saved successfully and appears in activity timeline
+    await expect(page.locator('.alert-success')).toContainText('Internal note added successfully');
+    await expect(noteTextarea).toHaveValue('');
+    await expect(page.locator('.card:has-text("Activity & Communication")').locator(`text=${internalNoteText}`)).toBeVisible();
+
+    // 8. Persistence check (No direct DB connections): Reload page and assert values persist in UI
+    await page.reload();
     await page.waitForLoadState('networkidle');
+
+    await expect(page.locator('h2')).toContainText(ticketNumber);
+    await expect(page.locator('h2')).toContainText('IN PROGRESS');
+    await expect(page.locator('text=IT Staff Two').first()).toBeVisible();
+    await expect(page.locator('#priority-select')).toHaveValue('CRITICAL');
+    await expect(page.locator('.card:has-text("Activity & Communication")').locator(`text=${publicCommentText}`)).toBeVisible();
+    await expect(page.locator('.card:has-text("Activity & Communication")').locator(`text=${internalNoteText}`)).toBeVisible();
+
+    // 9. Requester Note Authorization (BR-04):
+    // Logout as IT Staff
+    await page.click('button:has-text("Logout")');
+    await expect(page).toHaveURL(/\/login/);
+
+    // Log in as the Ticket's Requester (req2@toktikit.local)
+    await page.fill('input[type="email"]', 'req2@toktikit.local');
+    await page.fill('input[type="password"]', 'Password123!');
+    await page.click('button[type="submit"]');
+    await expect(page).toHaveURL(/\/my-tickets/);
+
+    // Navigate to that specific Ticket Detail page
+    await page.goto(`/tickets/${ticketId}`);
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator(`text=${ticketNumber}`).first()).toBeVisible();
+
+    // Open Public Comments tab to view comments
+    const commentsTab = page.locator('button:has-text("Public Comments")');
+    await commentsTab.click();
+    await expect(page.locator(`text=${publicCommentText}`)).toBeVisible();
+
+    // Explicitly assert that the Internal Note is NOT visible/rendered in the DOM (BR-04)
+    await expect(page.locator(`text=${internalNoteText}`)).toHaveCount(0);
+    await expect(page.locator('text=Internal Note')).toHaveCount(0);
   });
 });
