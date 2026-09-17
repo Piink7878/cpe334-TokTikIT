@@ -92,14 +92,7 @@ function RootRedirect() {
   }
 }
 
-function UserManagementPlaceholder() {
-  return (
-    <div className="container py-5 text-center">
-      <h2 className="mb-3">User Management</h2>
-      <p className="text-muted">This feature is coming soon.</p>
-    </div>
-  );
-}
+import UserManagement from "./pages/UserManagement";
 
 import StaffTicketDetail from "./pages/StaffTicketDetail";
 
@@ -117,7 +110,7 @@ export default function App() {
             <Route path="/my-tickets" element={<MyTickets />} />
             <Route path="/staff-queue" element={<StaffTicketQueue />} />
             <Route path="/staff/tickets/:id" element={<StaffTicketDetail />} />
-            <Route path="/user-management" element={<UserManagementPlaceholder />} />
+            <Route path="/user-management" element={<UserManagement />} />
             <Route path="/create-ticket" element={<CreateTicket />} />
             <Route path="/tickets/:id" element={<RequesterTicketDetail />} />
             <Route path="/health" element={<HealthCheck />} />

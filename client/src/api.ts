@@ -437,3 +437,58 @@ export async function indicateProblemResolved(ticketId: number) {
   }
   return res.json();
 }
+
+export async function getUsers(search?: string, role?: string) {
+  const params = new URLSearchParams();
+  if (search) params.append("search", search);
+  if (role) params.append("role", role);
+  const qs = params.toString();
+  const res = await fetch(`${API_URL}/api/admin/users${qs ? `?${qs}` : ""}`, { credentials: "include" });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to load users");
+  }
+  return res.json();
+}
+
+export async function createUser(data: any) {
+  const res = await fetch(`${API_URL}/api/admin/users`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to create user");
+  }
+  return res.json();
+}
+
+export async function updateUser(id: string, data: any) {
+  const res = await fetch(`${API_URL}/api/admin/users/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to update user");
+  }
+  return res.json();
+}
+
+export async function resetUserPassword(id: string, newPassword: string) {
+  const res = await fetch(`${API_URL}/api/admin/users/${id}/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ newPassword })
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to reset password");
+  }
+  return res.json();
+}
