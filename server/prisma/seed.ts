@@ -174,14 +174,14 @@ async function main() {
           data: {
             ticketId: tkt1.id,
             authorId: staff1.id,
-            body: 'We are looking into the email server issues. Thank you for your patience.',
+            content: 'We are looking into the email server issues. Thank you for your patience.',
           },
         });
         await prisma.internalNote.create({
           data: {
             ticketId: tkt1.id,
             authorId: staff1.id,
-            body: 'Found some error logs indicating the database connection pool is full. Rebooting nodes.',
+            content: 'Found some error logs indicating the database connection pool is full. Rebooting nodes.',
           },
         });
         console.log('Inserted Comments and Notes for TKT-1001');
@@ -196,7 +196,7 @@ async function main() {
           data: {
             ticketId: tkt3.id,
             authorId: staff2.id,
-            body: 'Please provide the duration for the extension. Are we extending this for another semester or permanently?',
+            content: 'Please provide the duration for the extension. Are we extending this for another semester or permanently?',
           },
         });
         console.log('Inserted Comments for TKT-1003');

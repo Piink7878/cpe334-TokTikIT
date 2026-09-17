@@ -5,7 +5,10 @@ import { RequesterTicketDetail } from '../../src/pages/RequesterTicketDetail';
 import * as api from '../../src/api';
 import * as auth from '../../src/contexts/AuthContext';
 
-vi.mock('../../src/api');
+vi.mock('../../src/api', () => ({
+  getTicket: vi.fn(),
+  getPublicComments: vi.fn(),
+}));
 vi.mock('../../src/contexts/AuthContext');
 
 describe('RequesterTicketDetail Component', () => {
@@ -55,6 +58,7 @@ describe('RequesterTicketDetail Component', () => {
 
   it('renders read-only fields correctly', async () => {
     (api.getTicket as any).mockResolvedValueOnce({ data: mockTicket });
+    (api.getPublicComments as any).mockResolvedValue({ data: [] });
     renderComponent();
 
     await waitFor(() => {
@@ -71,14 +75,12 @@ describe('RequesterTicketDetail Component', () => {
 
   it('shows disabled tabs for out of scope features', async () => {
     (api.getTicket as any).mockResolvedValueOnce({ data: mockTicket });
+    (api.getPublicComments as any).mockResolvedValue({ data: [] });
     renderComponent();
 
     await waitFor(() => {
       expect(screen.getByText(/Public Comments/)).toBeInTheDocument();
     });
-
-    const commentsTab = screen.getByText(/Public Comments/);
-    expect(commentsTab).toBeDisabled();
 
     const serviceActionsTab = screen.getByText(/Service Actions/);
     expect(serviceActionsTab).toBeDisabled();

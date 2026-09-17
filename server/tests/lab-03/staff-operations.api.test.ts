@@ -77,8 +77,8 @@ describe("IT Staff Ticket Operations API", () => {
         ticketNumber: "INC-OPS-" + Date.now(),
         summary: "Test Ticket",
         description: "Test Desc",
-        categoryId: cat.id,
-        relatedSystemId: sys.id,
+        categoryId: cat!.id,
+        relatedSystemId: sys!.id,
         requesterId: requester!.id,
         currentStatus: "NEW",
         requestedPriority: "MEDIUM",
@@ -126,7 +126,7 @@ describe("IT Staff Ticket Operations API", () => {
 
       const notes = await prisma.internalNote.findMany({ where: { ticketId: testTicketId } });
       expect(notes.length).toBe(1);
-      expect(notes[0].body).toBe("Status changed from NEW to OPEN");
+      expect(notes[0].content).toBe("Status changed from NEW to OPEN");
       expect(notes[0].authorId).toBe(itStaffId);
     });
 
@@ -147,7 +147,7 @@ describe("IT Staff Ticket Operations API", () => {
 
       const notes = await prisma.internalNote.findMany({ where: { ticketId: testTicketId } });
       expect(notes.length).toBe(1);
-      expect(notes[0].body).toBe("Status changed from NEW to OPEN");
+      expect(notes[0].content).toBe("Status changed from NEW to OPEN");
       expect(notes[0].authorId).toBe(adminId);
     });
 
@@ -194,7 +194,7 @@ describe("IT Staff Ticket Operations API", () => {
 
       const notes = await prisma.internalNote.findMany({ where: { ticketId: testTicketId } });
       expect(notes.length).toBe(1);
-      expect(notes[0].body).toBe("Status changed from NEW to OPEN");
+      expect(notes[0].content).toBe("Status changed from NEW to OPEN");
       expect(notes[0].authorId).toBe(itStaffId);
     });
 
@@ -222,7 +222,7 @@ describe("IT Staff Ticket Operations API", () => {
       // Verify internal note was created accurately
       const notes = await prisma.internalNote.findMany({ where: { ticketId: testTicketId } });
       expect(notes.length).toBe(1);
-      expect(notes[0].body).toBe("Status changed from NEW to REJECTED. Reason: Not a real issue");
+      expect(notes[0].content).toBe("Status changed from NEW to REJECTED. Reason: Not a real issue");
       expect(notes[0].authorId).toBe(itStaffId);
     });
 
@@ -238,7 +238,7 @@ describe("IT Staff Ticket Operations API", () => {
 
       const notes = await prisma.internalNote.findMany({ where: { ticketId: testTicketId } });
       expect(notes.length).toBe(1);
-      expect(notes[0].body).toBe("Status changed from OPEN to RESOLVED");
+      expect(notes[0].content).toBe("Status changed from OPEN to RESOLVED");
       expect(notes[0].authorId).toBe(itStaffId);
       expect(notes[0].createdAt).toBeDefined(); // Timestamp assertion
     });

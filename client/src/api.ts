@@ -389,3 +389,51 @@ export async function updateTicketStatus(ticketId: number, status: string, rejec
   return res.json();
 }
 
+export async function getPublicComments(ticketId: number) {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, { credentials: "include" });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to load comments");
+  }
+  return res.json();
+}
+
+export async function addPublicComment(ticketId: number, content: string) {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ content })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(()=>null);
+    throw new Error(data?.error?.message || "Failed to add comment");
+  }
+  return res.json();
+}
+
+export async function addInternalNote(ticketId: number, content: string) {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/internal-notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ content })
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(()=>null);
+    throw new Error(data?.error?.message || "Failed to add note");
+  }
+  return res.json();
+}
+
+export async function indicateProblemResolved(ticketId: number) {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/indicate-resolved`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(()=>null);
+    throw new Error(data?.error?.message || "Failed to indicate resolved");
+  }
+  return res.json();
+}

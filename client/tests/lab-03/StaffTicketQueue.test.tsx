@@ -76,7 +76,7 @@ describe("StaffTicketQueue Component", () => {
     // Mock useAuth internally if needed, or rely on AuthProvider
     // but the real AuthProvider fetches /api/auth/me on mount which can be problematic in unit tests.
     // Let's just mock the AuthContext context value directly if needed, or mock global fetch.
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ user: mockUser }),
     }) as any;
