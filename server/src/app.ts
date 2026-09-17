@@ -1485,6 +1485,9 @@ app.post("/api/tickets/:id/comments", requireAuth, requirePasswordChangeEnforcem
     if (!content || typeof content !== "string" || content.trim() === "") {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Comment content cannot be empty" } });
     }
+    if (content.trim().length > 3000) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Comment content cannot exceed 3000 characters" } });
+    }
 
     const prisma = getPrisma();
     const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
@@ -1598,6 +1601,9 @@ app.post("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEn
     const { content } = req.body;
     if (!content || typeof content !== "string" || content.trim() === "") {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Note content cannot be empty" } });
+    }
+    if (content.trim().length > 3000) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Note content cannot exceed 3000 characters" } });
     }
 
     const prisma = getPrisma();

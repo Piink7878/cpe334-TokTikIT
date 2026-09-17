@@ -357,7 +357,7 @@ describe("StaffTicketDetail UI", () => {
     });
   });
 
-  it("should submit a Public Comment and assert API call", async () => {
+  it("should submit a Public Comment and assert API call and UI update", async () => {
     const mockTicket = {
       id: 1,
       ticketNumber: "INC-123",
@@ -377,9 +377,18 @@ describe("StaffTicketDetail UI", () => {
       internalNotes: []
     };
 
-    (api.getStaffTicketDetail as any).mockResolvedValue(mockTicket);
+    (api.getStaffTicketDetail as any).mockResolvedValueOnce(mockTicket);
     (api.getStaffAssignees as any).mockResolvedValue({ data: [] });
     (api.postTicketComment as any).mockResolvedValue({ data: { id: 1 } });
+
+    // Mock subsequent fetch
+    const updatedTicket = {
+      ...mockTicket,
+      publicComments: [
+        { id: 1, body: "This is a public comment", author: { fullName: "Staff User", role: "IT_STAFF" }, createdAt: new Date().toISOString() }
+      ]
+    };
+    (api.getStaffTicketDetail as any).mockResolvedValueOnce(updatedTicket);
 
     const user = userEvent.setup();
     renderComponent();
@@ -400,9 +409,13 @@ describe("StaffTicketDetail UI", () => {
     await waitFor(() => {
       expect(api.postTicketComment).toHaveBeenCalledWith(1, "This is a public comment");
     });
+
+    await waitFor(() => {
+      expect(screen.getByText("This is a public comment")).toBeInTheDocument();
+    });
   });
 
-  it("should submit an Internal Note and assert API call", async () => {
+  it("should submit an Internal Note and assert API call and UI update", async () => {
     const mockTicket = {
       id: 1,
       ticketNumber: "INC-123",
@@ -422,9 +435,18 @@ describe("StaffTicketDetail UI", () => {
       internalNotes: []
     };
 
-    (api.getStaffTicketDetail as any).mockResolvedValue(mockTicket);
+    (api.getStaffTicketDetail as any).mockResolvedValueOnce(mockTicket);
     (api.getStaffAssignees as any).mockResolvedValue({ data: [] });
     (api.postInternalNote as any).mockResolvedValue({ data: { id: 1 } });
+
+    // Mock subsequent fetch
+    const updatedTicket = {
+      ...mockTicket,
+      internalNotes: [
+        { id: 1, body: "This is an internal note", author: { fullName: "Staff User" }, createdAt: new Date().toISOString() }
+      ]
+    };
+    (api.getStaffTicketDetail as any).mockResolvedValueOnce(updatedTicket);
 
     const user = userEvent.setup();
     renderComponent();
@@ -444,6 +466,10 @@ describe("StaffTicketDetail UI", () => {
 
     await waitFor(() => {
       expect(api.postInternalNote).toHaveBeenCalledWith(1, "This is an internal note");
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("This is an internal note")).toBeInTheDocument();
     });
   });
 });

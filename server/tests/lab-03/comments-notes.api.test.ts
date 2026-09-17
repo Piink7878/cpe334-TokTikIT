@@ -202,21 +202,38 @@ describe("Comments and Internal Notes API", () => {
   });
 
   it("should enforce append-only guarantee for comments and notes (no PUT, PATCH, DELETE)", async () => {
-    // Verify no endpoints exist to modify or delete comments
-    let res = await request(app).put(`/api/tickets/${req1TicketId}/comments/1`).set("Cookie", staffCookie);
+    // 1. Create a real comment to get a valid ID
+    const commentRes = await request(app)
+      .post(`/api/tickets/${req1TicketId}/comments`)
+      .set("Cookie", staffCookie)
+      .send({ content: "Temp comment for append-only test" });
+    const commentId = commentRes.body.data.id;
+
+    // Verify no endpoints exist to modify or delete comments using the real ID
+    let res = await request(app).put(`/api/tickets/${req1TicketId}/comments/${commentId}`).set("Cookie", staffCookie);
     expect([404, 405]).toContain(res.status);
 
-    res = await request(app).patch(`/api/tickets/${req1TicketId}/comments/1`).set("Cookie", staffCookie);
+    res = await request(app).patch(`/api/tickets/${req1TicketId}/comments/${commentId}`).set("Cookie", staffCookie);
     expect([404, 405]).toContain(res.status);
 
-    res = await request(app).delete(`/api/tickets/${req1TicketId}/comments/1`).set("Cookie", staffCookie);
+    res = await request(app).delete(`/api/tickets/${req1TicketId}/comments/${commentId}`).set("Cookie", staffCookie);
     expect([404, 405]).toContain(res.status);
 
-    // Verify no endpoints exist to modify or delete internal notes
-    res = await request(app).put(`/api/tickets/${req1TicketId}/internal-notes/1`).set("Cookie", staffCookie);
+    // 2. Create a real internal note to get a valid ID
+    const noteRes = await request(app)
+      .post(`/api/tickets/${req1TicketId}/internal-notes`)
+      .set("Cookie", staffCookie)
+      .send({ content: "Temp note for append-only test" });
+    const noteId = noteRes.body.data.id;
+
+    // Verify no endpoints exist to modify or delete internal notes using the real ID
+    res = await request(app).put(`/api/tickets/${req1TicketId}/internal-notes/${noteId}`).set("Cookie", staffCookie);
     expect([404, 405]).toContain(res.status);
 
-    res = await request(app).delete(`/api/tickets/${req1TicketId}/internal-notes/1`).set("Cookie", staffCookie);
+    res = await request(app).patch(`/api/tickets/${req1TicketId}/internal-notes/${noteId}`).set("Cookie", staffCookie);
+    expect([404, 405]).toContain(res.status);
+
+    res = await request(app).delete(`/api/tickets/${req1TicketId}/internal-notes/${noteId}`).set("Cookie", staffCookie);
     expect([404, 405]).toContain(res.status);
   });
 

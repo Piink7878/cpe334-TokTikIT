@@ -97,9 +97,19 @@ describe('RequesterTicketDetail Component', () => {
     });
   });
 
-  it('submits a public comment when form is filled and button clicked', async () => {
+  it('submits a public comment when form is filled and button clicked and updates the UI', async () => {
     (api.getTicket as any).mockResolvedValueOnce({ data: mockTicket });
-    (api.postTicketComment as any).mockResolvedValueOnce({ data: { id: 1, body: 'New comment' } });
+    (api.postTicketComment as any).mockResolvedValueOnce({ data: { id: 1, body: 'This is a test comment' } });
+    
+    // Mock the subsequent fetchTicket call to return the ticket WITH the new comment
+    const updatedTicket = {
+      ...mockTicket,
+      publicComments: [
+        { id: 1, body: 'This is a test comment', author: { fullName: 'John Doe', role: 'REQUESTER' }, createdAt: new Date().toISOString() }
+      ]
+    };
+    (api.getTicket as any).mockResolvedValueOnce({ data: updatedTicket });
+
     const user = userEvent.setup();
     renderComponent();
 
@@ -119,6 +129,43 @@ describe('RequesterTicketDetail Component', () => {
     await waitFor(() => {
       expect(api.postTicketComment).toHaveBeenCalledWith(101, 'This is a test comment');
     });
+
+    // Assert that the newly submitted text appears in the rendered DOM
+    await waitFor(() => {
+      expect(screen.getByText('This is a test comment')).toBeInTheDocument();
+    });
+  });
+
+  it('ensures zero information leakage for internal notes on Requester UI', async () => {
+    // Create a mock ticket contaminated with internalNotes
+    const maliciousTicket = {
+      ...mockTicket,
+      internalNotes: [
+        { id: 1, body: 'TOP SECRET INTERNAL NOTE', author: { fullName: 'Staff' }, createdAt: new Date().toISOString() }
+      ],
+      publicComments: [
+        { id: 2, body: 'Publicly visible comment', author: { fullName: 'Staff', role: 'IT_STAFF' }, createdAt: new Date().toISOString() }
+      ]
+    };
+    (api.getTicket as any).mockResolvedValueOnce({ data: maliciousTicket });
+    
+    const user = userEvent.setup();
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Public Comments/)).toBeInTheDocument();
+    });
+
+    const commentsTab = screen.getByText(/Public Comments/);
+    await user.click(commentsTab);
+
+    // Public comment should be visible
+    expect(screen.getByText('Publicly visible comment')).toBeInTheDocument();
+    
+    // Internal note contents must NOT be visible
+    expect(screen.queryByText('TOP SECRET INTERNAL NOTE')).not.toBeInTheDocument();
+    // Ensure no Internal Note label is rendered either
+    expect(screen.queryByText(/Internal Note/i)).not.toBeInTheDocument();
   });
 
   it('calls indicateTicketResolved when Problem Appears Resolved is clicked and confirmed', async () => {
