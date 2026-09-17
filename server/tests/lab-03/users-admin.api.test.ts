@@ -19,7 +19,9 @@ describe("Admin User Management API Tests (Lab 3)", () => {
     "dup@example.com",
     "iso-role@example.com",
     "updateme@example.com",
-    "iso-deactivate@example.com"
+    "iso-deactivate@example.com",
+    "adminA@example.com",
+    "adminB@example.com"
   ];
 
   beforeAll(async () => {
@@ -93,34 +95,31 @@ describe("Admin User Management API Tests (Lab 3)", () => {
   });
 
   it("should prevent changing the role of the last active Admin", async () => {
-    // Isolated data fixture: Create a fresh admin user specifically for this test
-    const bcrypt = await import("bcryptjs");
-    const passwordHash = await bcrypt.hash("Password123!", 10);
-    const tempAdmin = await prisma.user.create({
-      data: { email: "iso-role@example.com", fullName: "Iso Admin", role: "ADMIN", passwordHash, isActive: true }
+    // Temporarily deactivate other admins to ensure this is the last one
+    const otherAdmins = await prisma.user.findMany({
+      where: { role: "ADMIN", isActive: true, id: { not: adminUserId } }
     });
-
-    // Isolate from shared DB state by mocking the transaction to simulate this being the last admin
-    const txSpy = vi.spyOn(prisma, '$transaction').mockImplementation(async (cb: any) => {
-      return cb({
-        user: {
-          findUnique: (args: any) => prisma.user.findUnique(args),
-          update: (args: any) => prisma.user.update(args),
-          count: vi.fn().mockResolvedValue(1)
-        }
+    if (otherAdmins.length > 0) {
+      await prisma.user.updateMany({
+        where: { id: { in: otherAdmins.map(a => a.id) } },
+        data: { isActive: false }
       });
-    });
+    }
 
-    const res = await request(app).put(`/api/admin/users/${tempAdmin.id}`).set("Cookie", adminSessionCookie).send({
+    const res = await request(app).put(`/api/admin/users/${adminUserId}`).set("Cookie", adminSessionCookie).send({
       role: "IT_STAFF"
     });
     
     expect(res.status).toBe(400);
     expect(res.body.error.message).toContain("last active Admin");
 
-    // Clean up
-    txSpy.mockRestore();
-    await prisma.user.delete({ where: { id: tempAdmin.id } });
+    // Restore
+    if (otherAdmins.length > 0) {
+      await prisma.user.updateMany({
+        where: { id: { in: otherAdmins.map(a => a.id) } },
+        data: { isActive: true }
+      });
+    }
   });
 
   it("should return 400 when updating user with invalid role", async () => {
@@ -179,36 +178,53 @@ describe("Admin User Management API Tests (Lab 3)", () => {
     expect(filterRes.body.data.every((u: any) => u.role === "IT_STAFF")).toBe(true);
   });
 
-  it("should prevent deactivating the last active Admin", async () => {
-    // Isolated data fixture: Create a fresh admin user specifically for this test
+  it("should prevent deactivating the last active Admin under concurrent load", async () => {
     const bcrypt = await import("bcryptjs");
     const passwordHash = await bcrypt.hash("Password123!", 10);
-    const tempAdmin = await prisma.user.create({
-      data: { email: "iso-deactivate@example.com", fullName: "Iso Admin", role: "ADMIN", passwordHash, isActive: true }
+    
+    const adminA = await prisma.user.create({
+      data: { email: "adminA@example.com", fullName: "Admin A", role: "ADMIN", passwordHash, isActive: true }
     });
-
-    // To hit the "last active Admin" logic for deactivation (instead of "own account"),
-    // we use adminSessionCookie (adminUserId) to deactivate tempAdmin,
-    // and mock the transaction count to 1 to simulate tempAdmin being the last admin.
-    const txSpy = vi.spyOn(prisma, '$transaction').mockImplementation(async (cb: any) => {
-      return cb({
-        user: {
-          findUnique: (args: any) => prisma.user.findUnique(args),
-          update: (args: any) => prisma.user.update(args),
-          count: vi.fn().mockResolvedValue(1)
-        }
-      });
-    });
-
-    const res = await request(app).put(`/api/admin/users/${tempAdmin.id}`).set("Cookie", adminSessionCookie).send({
-      isActive: false
+    const adminB = await prisma.user.create({
+      data: { email: "adminB@example.com", fullName: "Admin B", role: "ADMIN", passwordHash, isActive: true }
     });
     
-    expect(res.status).toBe(400);
-    expect(res.body.error.message).toContain("last active Admin");
-
-    // Clean up
-    txSpy.mockRestore();
-    await prisma.user.delete({ where: { id: tempAdmin.id } });
+    const loginA = await request(app).post("/api/auth/login").send({ email: "adminA@example.com", password: "Password123!" });
+    console.log("LOGIN A:", loginA.status, loginA.body);
+    const cookieA = loginA.headers["set-cookie"]?.[0] || "";
+    
+    const loginB = await request(app).post("/api/auth/login").send({ email: "adminB@example.com", password: "Password123!" });
+    console.log("LOGIN B:", loginB.status, loginB.body);
+    const cookieB = loginB.headers["set-cookie"]?.[0] || "";
+    
+    // Ensure only A and B are active
+    await prisma.user.updateMany({
+      where: { role: "ADMIN", id: { notIn: [adminA.id, adminB.id] } },
+      data: { isActive: false }
+    });
+    
+    // Concurrent requests from the SAME admin (adminA) to avoid 401 if adminB gets deactivated first
+    const [res1, res2] = await Promise.all([
+      request(app).put(`/api/admin/users/${adminB.id}`).set("Cookie", cookieA).send({ isActive: false }),
+      request(app).put(`/api/admin/users/${adminA.id}`).set("Cookie", cookieA).send({ role: "IT_STAFF" })
+    ]);
+    
+    const statuses = [res1.status, res2.status].sort();
+    console.log("RES1:", res1.status, res1.body);
+    console.log("RES2:", res2.status, res2.body);
+    
+    // One succeeds (200), one fails due to 400 validation (or 500 Serializable isolation conflict)
+    expect(statuses[0]).toBe(200);
+    expect(statuses[1] === 400 || statuses[1] === 500).toBe(true);
+    
+    const activeAdmins = await prisma.user.count({ where: { role: "ADMIN", isActive: true } });
+    expect(activeAdmins).toBe(1);
+    
+    // Restore
+    await prisma.user.updateMany({
+      where: { role: "ADMIN", id: { notIn: [adminA.id, adminB.id] } },
+      data: { isActive: true }
+    });
+    await prisma.user.deleteMany({ where: { id: { in: [adminA.id, adminB.id] } } });
   });
 });

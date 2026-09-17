@@ -1,4 +1,5 @@
 import express, { Request, Response } from "express";
+import { Prisma } from "@prisma/client";
 import cors from "cors";
 import { getPrisma } from "./prisma.js";
 import { upload } from "./middlewares/upload.js";
@@ -1458,6 +1459,12 @@ const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "User ID required" }});
     }
     const { name, email, role, isActive } = req.body;
+    if (role) {
+      const validRoles = ["REQUESTER", "IT_STAFF", "ADMIN"];
+      if (!validRoles.includes(role)) {
+         return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid role" } });
+      }
+    }
     
     const prisma = getPrisma();
 
@@ -1479,20 +1486,22 @@ const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
           throw new Error("VALIDATION_ERROR:Cannot deactivate your own account");
         }
         if (user.role === "ADMIN") {
-          const activeAdmins = await tx.user.count({
-            where: { role: "ADMIN", isActive: true }
-          });
-          if (activeAdmins <= 1) {
+          // Lock active admin rows to prevent concurrent deactivations (Race Condition BR-17)
+          const activeAdmins: any[] = await tx.$queryRaw`
+            SELECT id FROM "User" WHERE "role" = 'ADMIN'::"Role" AND "isActive" = true FOR UPDATE
+          `;
+          if (activeAdmins.length <= 1) {
             throw new Error("VALIDATION_ERROR:Cannot deactivate the last active Admin");
           }
         }
       }
 
       if (role && role !== "ADMIN" && user.role === "ADMIN" && user.isActive) {
-          const activeAdmins = await tx.user.count({
-            where: { role: "ADMIN", isActive: true }
-          });
-          if (activeAdmins <= 1) {
+          // Lock active admin rows to prevent concurrent role changes
+          const activeAdmins: any[] = await tx.$queryRaw`
+            SELECT id FROM "User" WHERE "role" = 'ADMIN'::"Role" AND "isActive" = true FOR UPDATE
+          `;
+          if (activeAdmins.length <= 1) {
             throw new Error("VALIDATION_ERROR:Cannot remove the ADMIN role from the last active Admin");
           }
       }
@@ -1501,10 +1510,6 @@ const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
       if (name) updateData.fullName = name;
       if (email) updateData.email = email;
       if (role) {
-        const validRoles = ["REQUESTER", "IT_STAFF", "ADMIN"];
-        if (!validRoles.includes(role)) {
-           throw new Error("VALIDATION_ERROR:Invalid role");
-        }
         updateData.role = role;
       }
       if (isActive !== undefined) updateData.isActive = isActive;
@@ -1513,6 +1518,8 @@ const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
         where: { id: userId },
         data: updateData
       });
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable
     });
 
     return res.status(200).json({
