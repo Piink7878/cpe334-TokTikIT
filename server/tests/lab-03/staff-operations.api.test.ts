@@ -194,7 +194,7 @@ describe("IT Staff Ticket Operations API", () => {
       expect(res.status).toBe(400);
     });
 
-    it("should require rejection reason for REJECTED transition", async () => {
+    it("should require rejection reason for REJECTED transition and log it accurately", async () => {
       // Missing reason
       let res = await request(app).patch(`/api/staff/tickets/${testTicketId}/status`)
         .set("Cookie", itStaffSessionCookie)
@@ -208,10 +208,28 @@ describe("IT Staff Ticket Operations API", () => {
       expect(res.status).toBe(200);
       expect(res.body.ticket.currentStatus).toBe("REJECTED");
 
-      // Verify internal note was created
+      // Verify internal note was created accurately
       const notes = await prisma.internalNote.findMany({ where: { ticketId: testTicketId } });
       expect(notes.length).toBe(1);
-      expect(notes[0].body).toContain("Not a real issue");
+      expect(notes[0].body).toBe("Status changed from NEW to REJECTED. Reason: Not a real issue");
+      expect(notes[0].authorId).toBe(itStaffId);
+    });
+
+    it("should allow valid transition OPEN -> RESOLVED and log it with actor ID and timestamp", async () => {
+      // First, set it to OPEN so we can transition to RESOLVED
+      await prisma.ticket.update({ where: { id: testTicketId }, data: { currentStatus: "OPEN" } });
+      
+      const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/status`)
+        .set("Cookie", itStaffSessionCookie)
+        .send({ status: "RESOLVED" });
+      expect(res.status).toBe(200);
+      expect(res.body.ticket.currentStatus).toBe("RESOLVED");
+
+      const notes = await prisma.internalNote.findMany({ where: { ticketId: testTicketId } });
+      expect(notes.length).toBe(1);
+      expect(notes[0].body).toBe("Status changed from OPEN to RESOLVED");
+      expect(notes[0].authorId).toBe(itStaffId);
+      expect(notes[0].createdAt).toBeDefined(); // Timestamp assertion
     });
     
     it("should enforce terminal states cannot transition", async () => {
