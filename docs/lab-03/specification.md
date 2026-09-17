@@ -109,9 +109,10 @@ Develop a fully functional IT Service Desk ticketing system that supports robust
 *   `GET /api/tickets/:id`: Returns ticket details (subject to RBAC).
 *   `PATCH /api/tickets/:id`: Updates ticket (Status, Assignee, Priority) - IT/Admin only.
 *   `POST /api/tickets/:id/comments`: Adds a public comment or internal note (`is_internal_note` flag restricted to IT/Admin).
-*   `GET /api/users`: Returns all users with search by name or email and an optional role filter (Admin only).
-*   `POST /api/users`: Creates a new user and issues an initial password using the approved local-lab behavior (Admin only).
-*   `PATCH /api/users/:id`: Updates user role/status (Admin only).
+*   `GET /api/admin/users`: Returns all users with search by name or email and an optional role filter (Admin only).
+*   `POST /api/admin/users`: Creates a new user and issues an initial password using the approved local-lab behavior (Admin only).
+*   `PUT /api/admin/users/:id`: Updates user name, email, role, or active status (Admin only).
+*   `POST /api/admin/users/:id/reset-password`: Resets a user's password and sets the mustChangePassword flag (Admin only).
 
 ## 9. Acceptance Criteria
 *   **AC-01:** Given an active user with valid credentials, when the user logs in, then the backend establishes authenticated access and returns the permitted user identity and role.

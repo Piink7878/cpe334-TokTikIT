@@ -67,6 +67,42 @@ describe("Admin User Management API Tests (Lab 3)", () => {
     expect(res.status).toBe(403);
   });
 
+  it("should return 403 Forbidden when Requester tries to POST /api/admin/users", async () => {
+    const res = await request(app).post("/api/admin/users").set("Cookie", requesterSessionCookie)
+      .send({ name: "X", email: "x@example.com", role: "REQUESTER", password: "Password123!" });
+    expect(res.status).toBe(403);
+  });
+
+  it("should return 403 Forbidden when IT Staff tries to POST /api/admin/users", async () => {
+    const res = await request(app).post("/api/admin/users").set("Cookie", itStaffSessionCookie)
+      .send({ name: "X", email: "x@example.com", role: "REQUESTER", password: "Password123!" });
+    expect(res.status).toBe(403);
+  });
+
+  it("should return 403 Forbidden when Requester tries to PUT /api/admin/users/:id", async () => {
+    const res = await request(app).put(`/api/admin/users/${adminUserId}`).set("Cookie", requesterSessionCookie)
+      .send({ name: "Hacked" });
+    expect(res.status).toBe(403);
+  });
+
+  it("should return 403 Forbidden when IT Staff tries to PUT /api/admin/users/:id", async () => {
+    const res = await request(app).put(`/api/admin/users/${adminUserId}`).set("Cookie", itStaffSessionCookie)
+      .send({ name: "Hacked" });
+    expect(res.status).toBe(403);
+  });
+
+  it("should return 403 Forbidden when Requester tries to POST /api/admin/users/:id/reset-password", async () => {
+    const res = await request(app).post(`/api/admin/users/${adminUserId}/reset-password`).set("Cookie", requesterSessionCookie)
+      .send({ newPassword: "NewPass123!" });
+    expect(res.status).toBe(403);
+  });
+
+  it("should return 403 Forbidden when IT Staff tries to POST /api/admin/users/:id/reset-password", async () => {
+    const res = await request(app).post(`/api/admin/users/${adminUserId}/reset-password`).set("Cookie", itStaffSessionCookie)
+      .send({ newPassword: "NewPass123!" });
+    expect(res.status).toBe(403);
+  });
+
   it("should create a user successfully and prevent duplicate emails", async () => {
     const createRes = await request(app).post("/api/admin/users").set("Cookie", adminSessionCookie).send({
       name: "New User",
