@@ -1486,22 +1486,20 @@ const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
           throw new Error("VALIDATION_ERROR:Cannot deactivate your own account");
         }
         if (user.role === "ADMIN") {
-          // Lock active admin rows to prevent concurrent deactivations (Race Condition BR-17)
-          const activeAdmins: any[] = await tx.$queryRaw`
-            SELECT id FROM "User" WHERE "role" = 'ADMIN'::"Role" AND "isActive" = true FOR UPDATE
-          `;
-          if (activeAdmins.length <= 1) {
+          const activeAdmins = await tx.user.count({
+            where: { role: "ADMIN", isActive: true }
+          });
+          if (activeAdmins <= 1) {
             throw new Error("VALIDATION_ERROR:Cannot deactivate the last active Admin");
           }
         }
       }
 
       if (role && role !== "ADMIN" && user.role === "ADMIN" && user.isActive) {
-          // Lock active admin rows to prevent concurrent role changes
-          const activeAdmins: any[] = await tx.$queryRaw`
-            SELECT id FROM "User" WHERE "role" = 'ADMIN'::"Role" AND "isActive" = true FOR UPDATE
-          `;
-          if (activeAdmins.length <= 1) {
+          const activeAdmins = await tx.user.count({
+            where: { role: "ADMIN", isActive: true }
+          });
+          if (activeAdmins <= 1) {
             throw new Error("VALIDATION_ERROR:Cannot remove the ADMIN role from the last active Admin");
           }
       }
@@ -1531,13 +1529,16 @@ const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
     });
 
   } catch (error: any) {
-    if (error.message.startsWith("NOT_FOUND:")) {
+    if (error.code === 'P2034') {
+      return res.status(409).json({ error: { code: "CONFLICT", message: "Conflict occurred during update, please try again" } });
+    }
+    if (error.message?.startsWith("NOT_FOUND:")) {
       return res.status(404).json({ error: { code: "NOT_FOUND", message: error.message.split(":")[1] } });
     }
-    if (error.message.startsWith("CONFLICT:")) {
+    if (error.message?.startsWith("CONFLICT:")) {
       return res.status(409).json({ error: { code: "CONFLICT", message: error.message.split(":")[1] } });
     }
-    if (error.message.startsWith("VALIDATION_ERROR:")) {
+    if (error.message?.startsWith("VALIDATION_ERROR:")) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: error.message.split(":")[1] } });
     }
     console.error(error);

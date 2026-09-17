@@ -190,11 +190,9 @@ describe("Admin User Management API Tests (Lab 3)", () => {
     });
     
     const loginA = await request(app).post("/api/auth/login").send({ email: "adminA@example.com", password: "Password123!" });
-    console.log("LOGIN A:", loginA.status, loginA.body);
     const cookieA = loginA.headers["set-cookie"]?.[0] || "";
     
     const loginB = await request(app).post("/api/auth/login").send({ email: "adminB@example.com", password: "Password123!" });
-    console.log("LOGIN B:", loginB.status, loginB.body);
     const cookieB = loginB.headers["set-cookie"]?.[0] || "";
     
     // Ensure only A and B are active
@@ -203,19 +201,39 @@ describe("Admin User Management API Tests (Lab 3)", () => {
       data: { isActive: false }
     });
     
-    // Concurrent requests from the SAME admin (adminA) to avoid 401 if adminB gets deactivated first
+    // Inject a small delay in requireAuth's findUnique to ensure both requests 
+    // pass authentication before either transaction can commit and deactivate the user.
+    const originalFindUnique = prisma.user.findUnique;
+    const findSpy = vi.spyOn(prisma.user, 'findUnique').mockImplementation(async (args) => {
+      if (args.where && args.where.id && Object.keys(args.where).length === 1) {
+        await new Promise(r => setTimeout(r, 50));
+      }
+      return originalFindUnique.call(prisma.user, args);
+    });
+    
+    const server = app.listen(0);
+    const port = (server.address() as any).port;
+    
     const [res1, res2] = await Promise.all([
-      request(app).put(`/api/admin/users/${adminB.id}`).set("Cookie", cookieA).send({ isActive: false }),
-      request(app).put(`/api/admin/users/${adminA.id}`).set("Cookie", cookieA).send({ role: "IT_STAFF" })
+      fetch(`http://localhost:${port}/api/admin/users/${adminB.id}`, { 
+        method: 'PUT', 
+        headers: { 'Cookie': cookieA, 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ isActive: false }) 
+      }),
+      fetch(`http://localhost:${port}/api/admin/users/${adminA.id}`, { 
+        method: 'PUT', 
+        headers: { 'Cookie': cookieB, 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ isActive: false }) 
+      })
     ]);
     
-    const statuses = [res1.status, res2.status].sort();
-    console.log("RES1:", res1.status, res1.body);
-    console.log("RES2:", res2.status, res2.body);
+    server.close();
     
-    // One succeeds (200), one fails due to 400 validation (or 500 Serializable isolation conflict)
+    const statuses = [res1.status, res2.status].sort();
+    
+    // Exactly one succeeds (200), exactly one fails with conflict (409), validation (400), or unauthorized (401 due to race)
     expect(statuses[0]).toBe(200);
-    expect(statuses[1] === 400 || statuses[1] === 500).toBe(true);
+    expect([400, 401, 409]).toContain(statuses[1]);
     
     const activeAdmins = await prisma.user.count({ where: { role: "ADMIN", isActive: true } });
     expect(activeAdmins).toBe(1);
