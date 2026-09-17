@@ -118,11 +118,16 @@ describe("IT Staff Ticket Operations API", () => {
   });
 
   describe("PATCH /api/staff/tickets/:id/claim", () => {
-    it("should allow IT Staff to claim and shift NEW to OPEN", async () => {
+    it("should allow IT Staff to claim and shift NEW to OPEN, and log the transition", async () => {
       const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/claim`).set("Cookie", itStaffSessionCookie);
       expect(res.status).toBe(200);
       expect(res.body.ticket.ownerId).toBe(itStaffId);
       expect(res.body.ticket.currentStatus).toBe("OPEN");
+
+      const notes = await prisma.internalNote.findMany({ where: { ticketId: testTicketId } });
+      expect(notes.length).toBe(1);
+      expect(notes[0].body).toBe("Status changed from NEW to OPEN");
+      expect(notes[0].authorId).toBe(itStaffId);
     });
 
     it("should reject Requester with 403 Forbidden", async () => {
@@ -132,12 +137,18 @@ describe("IT Staff Ticket Operations API", () => {
   });
 
   describe("PATCH /api/staff/tickets/:id/assign", () => {
-    it("should allow Admin to assign to IT Staff", async () => {
+    it("should allow Admin to assign to IT Staff, and log the NEW to OPEN transition", async () => {
       const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/assign`)
         .set("Cookie", adminSessionCookie)
         .send({ assigneeId: itStaffId });
       expect(res.status).toBe(200);
       expect(res.body.ticket.ownerId).toBe(itStaffId);
+      expect(res.body.ticket.currentStatus).toBe("OPEN");
+
+      const notes = await prisma.internalNote.findMany({ where: { ticketId: testTicketId } });
+      expect(notes.length).toBe(1);
+      expect(notes[0].body).toBe("Status changed from NEW to OPEN");
+      expect(notes[0].authorId).toBe(adminId);
     });
 
     it("should reject invalid assignee", async () => {

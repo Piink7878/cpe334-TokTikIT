@@ -21,7 +21,8 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
   RESOLVED: "bg-success text-white",
   CLOSED: "bg-dark text-white",
   REOPENED: "bg-danger text-white",
-  CANCELLED: "bg-secondary text-white"
+  CANCELLED: "bg-secondary text-white",
+  REJECTED: "bg-danger text-white"
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -174,6 +175,11 @@ export default function StaffTicketDetail() {
 
   const permittedNext = allowedTransitions[ticket.status] || [];
 
+  const combinedActivity = [
+    ...(ticket.publicComments || []).map((pc: any) => ({ ...pc, type: 'public' })),
+    ...(ticket.internalNotes || []).map((note: any) => ({ ...note, type: 'internal' }))
+  ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
   return (
     <div className="container py-5">
       {successMsg && <div className="alert alert-success alert-dismissible fade show">{successMsg}<button type="button" className="btn-close" onClick={() => setSuccessMsg("")}></button></div>}
@@ -204,27 +210,28 @@ export default function StaffTicketDetail() {
               <h5 className="mb-0">Activity & Communication</h5>
             </div>
             <div className="card-body">
-              {ticket.publicComments.length === 0 && ticket.internalNotes.length === 0 ? (
+              {combinedActivity.length === 0 ? (
                 <p className="text-muted text-center mb-0">No activity recorded yet.</p>
               ) : (
                 <div className="d-flex flex-column gap-3">
-                  {ticket.publicComments.map((pc: any) => (
-                    <div key={`pc-${pc.id}`} className="border rounded p-3">
-                      <div className="d-flex justify-content-between align-items-center mb-2">
-                        <strong><i className="bi bi-chat-text me-1"></i> {pc.author.fullName} (Public)</strong>
-                        <span className="text-muted small">{new Date(pc.createdAt).toLocaleString()}</span>
+                  {combinedActivity.map((item: any) => (
+                    item.type === 'public' ? (
+                      <div key={`pc-${item.id}`} className="border rounded p-3">
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <strong><i className="bi bi-chat-text me-1"></i> {item.author.fullName} <span className="badge bg-secondary ms-2">Public Comment</span></strong>
+                          <span className="text-muted small">{new Date(item.createdAt).toLocaleString()}</span>
+                        </div>
+                        <div style={{ whiteSpace: "pre-wrap" }}>{item.body}</div>
                       </div>
-                      <div style={{ whiteSpace: "pre-wrap" }}>{pc.body}</div>
-                    </div>
-                  ))}
-                  {ticket.internalNotes.map((note: any) => (
-                    <div key={`note-${note.id}`} className="border rounded p-3 bg-light" style={{ borderColor: "var(--color-primary) !important", borderLeft: "4px solid var(--color-primary)" }}>
-                      <div className="d-flex justify-content-between align-items-center mb-2">
-                        <strong className="text-primary"><i className="bi bi-journal-text me-1"></i> {note.author.fullName} (Internal Note)</strong>
-                        <span className="text-muted small">{new Date(note.createdAt).toLocaleString()}</span>
+                    ) : (
+                      <div key={`note-${item.id}`} className="border rounded p-3 bg-light" style={{ borderColor: "var(--color-primary) !important", borderLeft: "4px solid var(--color-primary)" }}>
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <strong className="text-primary"><i className="bi bi-journal-text me-1"></i> {item.author.fullName} <span className="badge bg-primary ms-2">Internal Note</span></strong>
+                          <span className="text-muted small">{new Date(item.createdAt).toLocaleString()}</span>
+                        </div>
+                        <div style={{ whiteSpace: "pre-wrap" }}>{item.body}</div>
                       </div>
-                      <div style={{ whiteSpace: "pre-wrap" }}>{note.body}</div>
-                    </div>
+                    )
                   ))}
                 </div>
               )}

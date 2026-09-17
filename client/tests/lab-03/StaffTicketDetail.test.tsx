@@ -190,4 +190,167 @@ describe("StaffTicketDetail UI", () => {
       expect(api.updateTicketStatus).toHaveBeenCalledWith(1, "REJECTED", "Not an IT issue");
     });
   });
+  it("should trigger claim ticket and assert API call", async () => {
+    const mockTicket = {
+      id: 1,
+      ticketNumber: "INC-123",
+      summary: "Cannot access VPN",
+      description: "It says invalid password",
+      category: { id: 1, name: "Network" },
+      relatedSystem: { id: 1, name: "VPN" },
+      requestedPriority: "HIGH",
+      itPriority: "HIGH",
+      status: "NEW",
+      requester: { id: "req-1", fullName: "John Doe", email: "john@example.com" },
+      owner: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      attachments: [],
+      publicComments: [],
+      internalNotes: []
+    };
+
+    (api.getStaffTicketDetail as any).mockResolvedValue(mockTicket);
+    (api.getStaffAssignees as any).mockResolvedValue({ data: [] });
+    (api.claimTicket as any).mockResolvedValue({ message: "Success" });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText("INC-123")).toBeInTheDocument();
+    });
+
+    const claimBtn = screen.getByRole("button", { name: "Claim Ticket" });
+    fireEvent.click(claimBtn);
+
+    await waitFor(() => {
+      expect(api.claimTicket).toHaveBeenCalledWith(1);
+    });
+  });
+
+  it("should select assignee, assign ticket, and assert API call", async () => {
+    const mockTicket = {
+      id: 1,
+      ticketNumber: "INC-123",
+      summary: "Cannot access VPN",
+      description: "It says invalid password",
+      category: { id: 1, name: "Network" },
+      relatedSystem: { id: 1, name: "VPN" },
+      requestedPriority: "HIGH",
+      itPriority: "HIGH",
+      status: "NEW",
+      requester: { id: "req-1", fullName: "John Doe", email: "john@example.com" },
+      owner: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      attachments: [],
+      publicComments: [],
+      internalNotes: []
+    };
+    const mockAssignees = [
+      { id: "staff-2", fullName: "Staff Two", role: "IT_STAFF" }
+    ];
+
+    (api.getStaffTicketDetail as any).mockResolvedValue(mockTicket);
+    (api.getStaffAssignees as any).mockResolvedValue({ data: mockAssignees });
+    (api.assignTicket as any).mockResolvedValue({ message: "Success" });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText("INC-123")).toBeInTheDocument();
+    });
+
+    const assigneeSelect = screen.getByLabelText(/Assignment/i);
+    fireEvent.change(assigneeSelect, { target: { value: "staff-2" } });
+
+    const assignBtn = screen.getByRole("button", { name: "Assign" });
+    fireEvent.click(assignBtn);
+
+    await waitFor(() => {
+      expect(api.assignTicket).toHaveBeenCalledWith(1, "staff-2");
+    });
+  });
+
+  it("should change IT Priority and assert API call", async () => {
+    const mockTicket = {
+      id: 1,
+      ticketNumber: "INC-123",
+      summary: "Cannot access VPN",
+      description: "It says invalid password",
+      category: { id: 1, name: "Network" },
+      relatedSystem: { id: 1, name: "VPN" },
+      requestedPriority: "HIGH",
+      itPriority: "HIGH",
+      status: "NEW",
+      requester: { id: "req-1", fullName: "John Doe", email: "john@example.com" },
+      owner: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      attachments: [],
+      publicComments: [],
+      internalNotes: []
+    };
+
+    (api.getStaffTicketDetail as any).mockResolvedValue(mockTicket);
+    (api.getStaffAssignees as any).mockResolvedValue({ data: [] });
+    (api.updateTicketPriority as any).mockResolvedValue({ message: "Success" });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText("INC-123")).toBeInTheDocument();
+    });
+
+    const prioritySelect = screen.getByLabelText(/IT Priority/i);
+    fireEvent.change(prioritySelect, { target: { value: "CRITICAL" } });
+
+    const updateBtn = screen.getByRole("button", { name: "Update" });
+    fireEvent.click(updateBtn);
+
+    await waitFor(() => {
+      expect(api.updateTicketPriority).toHaveBeenCalledWith(1, "CRITICAL");
+    });
+  });
+
+  it("should trigger standard status transition and assert API call", async () => {
+    const mockTicket = {
+      id: 1,
+      ticketNumber: "INC-123",
+      summary: "Cannot access VPN",
+      description: "It says invalid password",
+      category: { id: 1, name: "Network" },
+      relatedSystem: { id: 1, name: "VPN" },
+      requestedPriority: "HIGH",
+      itPriority: "HIGH",
+      status: "OPEN", // OPEN allows RESOLVED
+      requester: { id: "req-1", fullName: "John Doe", email: "john@example.com" },
+      owner: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      attachments: [],
+      publicComments: [],
+      internalNotes: []
+    };
+
+    (api.getStaffTicketDetail as any).mockResolvedValue(mockTicket);
+    (api.getStaffAssignees as any).mockResolvedValue({ data: [] });
+    (api.updateTicketStatus as any).mockResolvedValue({ message: "Success" });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText("INC-123")).toBeInTheDocument();
+    });
+
+    const statusSelect = screen.getByLabelText(/Status Transition/i);
+    fireEvent.change(statusSelect, { target: { value: "RESOLVED" } });
+
+    const changeBtn = screen.getByRole("button", { name: "Change" });
+    fireEvent.click(changeBtn);
+
+    await waitFor(() => {
+      expect(api.updateTicketStatus).toHaveBeenCalledWith(1, "RESOLVED", undefined);
+    });
+  });
 });

@@ -975,12 +975,23 @@ app.patch("/api/staff/tickets/:id/claim", requireAuth, requirePasswordChangeEnfo
 
     const newStatus = ticket.currentStatus === "NEW" ? "OPEN" : ticket.currentStatus;
 
+    const updateData: any = {
+      ownerId: req.user!.id,
+      currentStatus: newStatus
+    };
+
+    if (ticket.currentStatus === "NEW") {
+      updateData.internalNotes = {
+        create: {
+          body: "Status changed from NEW to OPEN",
+          authorId: req.user!.id
+        }
+      };
+    }
+
     const updatedTicket = await prisma.ticket.update({
       where: { id: ticketId },
-      data: {
-        ownerId: req.user!.id,
-        currentStatus: newStatus
-      }
+      data: updateData
     });
 
     return res.status(200).json({
@@ -1023,12 +1034,23 @@ app.patch("/api/staff/tickets/:id/assign", requireAuth, requirePasswordChangeEnf
 
     const newStatus = ticket.currentStatus === "NEW" ? "OPEN" : ticket.currentStatus;
 
+    const updateData: any = {
+      ownerId: assigneeId,
+      currentStatus: newStatus
+    };
+
+    if (ticket.currentStatus === "NEW") {
+      updateData.internalNotes = {
+        create: {
+          body: "Status changed from NEW to OPEN",
+          authorId: req.user!.id
+        }
+      };
+    }
+
     const updatedTicket = await prisma.ticket.update({
       where: { id: ticketId },
-      data: {
-        ownerId: assigneeId,
-        currentStatus: newStatus
-      }
+      data: updateData
     });
 
     return res.status(200).json({
