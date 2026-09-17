@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import StaffTicketDetail from "../../src/pages/StaffTicketDetail";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "../../src/contexts/AuthContext";
@@ -15,7 +16,9 @@ vi.mock("../../src/api", async () => {
     claimTicket: vi.fn(),
     assignTicket: vi.fn(),
     updateTicketPriority: vi.fn(),
-    updateTicketStatus: vi.fn()
+    updateTicketStatus: vi.fn(),
+    postTicketComment: vi.fn(),
+    postInternalNote: vi.fn()
   };
 });
 
@@ -351,6 +354,96 @@ describe("StaffTicketDetail UI", () => {
 
     await waitFor(() => {
       expect(api.updateTicketStatus).toHaveBeenCalledWith(1, "RESOLVED", undefined);
+    });
+  });
+
+  it("should submit a Public Comment and assert API call", async () => {
+    const mockTicket = {
+      id: 1,
+      ticketNumber: "INC-123",
+      summary: "Cannot access VPN",
+      description: "It says invalid password",
+      category: { id: 1, name: "Network" },
+      relatedSystem: { id: 1, name: "VPN" },
+      requestedPriority: "HIGH",
+      itPriority: "HIGH",
+      status: "OPEN",
+      requester: { id: "req-1", fullName: "John Doe", email: "john@example.com" },
+      owner: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      attachments: [],
+      publicComments: [],
+      internalNotes: []
+    };
+
+    (api.getStaffTicketDetail as any).mockResolvedValue(mockTicket);
+    (api.getStaffAssignees as any).mockResolvedValue({ data: [] });
+    (api.postTicketComment as any).mockResolvedValue({ data: { id: 1 } });
+
+    const user = userEvent.setup();
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText("INC-123")).toBeInTheDocument();
+    });
+
+    const publicTab = screen.getByRole("tab", { name: /Public Comment/i });
+    await user.click(publicTab);
+
+    const textarea = screen.getByPlaceholderText(/Write a public comment/i);
+    await user.type(textarea, "This is a public comment");
+
+    const postBtn = screen.getByRole("button", { name: /Post Comment/i });
+    await user.click(postBtn);
+
+    await waitFor(() => {
+      expect(api.postTicketComment).toHaveBeenCalledWith(1, "This is a public comment");
+    });
+  });
+
+  it("should submit an Internal Note and assert API call", async () => {
+    const mockTicket = {
+      id: 1,
+      ticketNumber: "INC-123",
+      summary: "Cannot access VPN",
+      description: "It says invalid password",
+      category: { id: 1, name: "Network" },
+      relatedSystem: { id: 1, name: "VPN" },
+      requestedPriority: "HIGH",
+      itPriority: "HIGH",
+      status: "OPEN",
+      requester: { id: "req-1", fullName: "John Doe", email: "john@example.com" },
+      owner: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      attachments: [],
+      publicComments: [],
+      internalNotes: []
+    };
+
+    (api.getStaffTicketDetail as any).mockResolvedValue(mockTicket);
+    (api.getStaffAssignees as any).mockResolvedValue({ data: [] });
+    (api.postInternalNote as any).mockResolvedValue({ data: { id: 1 } });
+
+    const user = userEvent.setup();
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText("INC-123")).toBeInTheDocument();
+    });
+
+    const internalTab = screen.getByRole("tab", { name: /Internal Note/i });
+    await user.click(internalTab);
+
+    const textarea = screen.getByPlaceholderText(/Write an internal note/i);
+    await user.type(textarea, "This is an internal note");
+
+    const postBtn = screen.getByRole("button", { name: /Add Internal Note/i });
+    await user.click(postBtn);
+
+    await waitFor(() => {
+      expect(api.postInternalNote).toHaveBeenCalledWith(1, "This is an internal note");
     });
   });
 });

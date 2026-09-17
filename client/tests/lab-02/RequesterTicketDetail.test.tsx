@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RequesterTicketDetail } from '../../src/pages/RequesterTicketDetail';
@@ -94,5 +95,56 @@ describe('RequesterTicketDetail Component', () => {
     await waitFor(() => {
       expect(screen.getByText('Ticket not found')).toBeInTheDocument();
     });
+  });
+
+  it('submits a public comment when form is filled and button clicked', async () => {
+    (api.getTicket as any).mockResolvedValueOnce({ data: mockTicket });
+    (api.postTicketComment as any).mockResolvedValueOnce({ data: { id: 1, body: 'New comment' } });
+    const user = userEvent.setup();
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Public Comments/)).toBeInTheDocument();
+    });
+
+    const commentsTab = screen.getByText(/Public Comments/);
+    await user.click(commentsTab);
+
+    const textarea = screen.getByPlaceholderText('Type your message here...');
+    await user.type(textarea, 'This is a test comment');
+
+    const postButton = screen.getByRole('button', { name: 'Post Comment' });
+    await user.click(postButton);
+
+    await waitFor(() => {
+      expect(api.postTicketComment).toHaveBeenCalledWith(101, 'This is a test comment');
+    });
+  });
+
+  it('calls indicateTicketResolved when Problem Appears Resolved is clicked and confirmed', async () => {
+    (api.getTicket as any).mockResolvedValueOnce({ data: mockTicket });
+    (api.indicateTicketResolved as any).mockResolvedValueOnce({ data: { id: 1 } });
+    
+    // Mock window.confirm
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    confirmSpy.mockImplementation(() => true);
+
+    const user = userEvent.setup();
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('Problem Appears Resolved')).toBeInTheDocument();
+    });
+
+    const resolveBtn = screen.getByText('Problem Appears Resolved');
+    await user.click(resolveBtn);
+
+    expect(confirmSpy).toHaveBeenCalled();
+    
+    await waitFor(() => {
+      expect(api.indicateTicketResolved).toHaveBeenCalledWith(101);
+    });
+
+    confirmSpy.mockRestore();
   });
 });

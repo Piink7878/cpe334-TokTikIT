@@ -167,6 +167,13 @@ describe("Comments and Internal Notes API", () => {
     expect(res.body.data.internalNotes).toBeUndefined(); // Zero Information Leakage
   });
 
+  it("should return 403 Forbidden if Requester indicates resolved on another's ticket", async () => {
+    const res = await request(app)
+      .post(`/api/tickets/${req1TicketId}/indicate-resolved`)
+      .set("Cookie", req2Cookie);
+    expect(res.status).toBe(403);
+  });
+
   it("should allow Requester to indicate problem appears resolved without changing status", async () => {
     // Current status is OPEN
     const res = await request(app)
@@ -176,12 +183,68 @@ describe("Comments and Internal Notes API", () => {
     expect(res.status).toBe(201);
     expect(res.body.data.body).toBe("Requester indicated that the problem appears resolved.");
 
-    // Check status remains OPEN
+    // Check status remains strictly OPEN (unchanged)
     const ticketRes = await request(app)
       .get(`/api/tickets/${req1TicketId}`)
       .set("Cookie", req1Cookie);
     
     expect(ticketRes.body.data.status).toBe("OPEN");
+    expect(ticketRes.body.data.status).not.toBe("RESOLVED");
+
+    // Fetch comments to ensure the message was appended and is visible
+    const commentsRes = await request(app)
+      .get(`/api/tickets/${req1TicketId}/comments`)
+      .set("Cookie", req1Cookie);
+    expect(commentsRes.status).toBe(200);
+    const comments = commentsRes.body.data;
+    const resolvedComment = comments.find((c: any) => c.body === "Requester indicated that the problem appears resolved.");
+    expect(resolvedComment).toBeDefined();
+  });
+
+  it("should enforce append-only guarantee for comments and notes (no PUT, PATCH, DELETE)", async () => {
+    // Verify no endpoints exist to modify or delete comments
+    let res = await request(app).put(`/api/tickets/${req1TicketId}/comments/1`).set("Cookie", staffCookie);
+    expect([404, 405]).toContain(res.status);
+
+    res = await request(app).patch(`/api/tickets/${req1TicketId}/comments/1`).set("Cookie", staffCookie);
+    expect([404, 405]).toContain(res.status);
+
+    res = await request(app).delete(`/api/tickets/${req1TicketId}/comments/1`).set("Cookie", staffCookie);
+    expect([404, 405]).toContain(res.status);
+
+    // Verify no endpoints exist to modify or delete internal notes
+    res = await request(app).put(`/api/tickets/${req1TicketId}/internal-notes/1`).set("Cookie", staffCookie);
+    expect([404, 405]).toContain(res.status);
+
+    res = await request(app).delete(`/api/tickets/${req1TicketId}/internal-notes/1`).set("Cookie", staffCookie);
+    expect([404, 405]).toContain(res.status);
+  });
+
+  it("should persist sequential comments in chronological order without overwriting", async () => {
+    // Post multiple sequential comments
+    await request(app).post(`/api/tickets/${req1TicketId}/comments`).set("Cookie", staffCookie).send({ content: "Append Test A" });
+    await request(app).post(`/api/tickets/${req1TicketId}/comments`).set("Cookie", staffCookie).send({ content: "Append Test B" });
+    await request(app).post(`/api/tickets/${req1TicketId}/comments`).set("Cookie", staffCookie).send({ content: "Append Test C" });
+
+    // Fetch and verify all are intact and ordered chronologically
+    const res = await request(app).get(`/api/tickets/${req1TicketId}/comments`).set("Cookie", staffCookie);
+    expect(res.status).toBe(200);
+    
+    const comments = res.body.data;
+    const appendTests = comments.filter((c: any) => c.body.startsWith("Append Test"));
+    
+    expect(appendTests.length).toBe(3);
+    expect(appendTests[0].body).toBe("Append Test A");
+    expect(appendTests[1].body).toBe("Append Test B");
+    expect(appendTests[2].body).toBe("Append Test C");
+
+    // Check timestamps are strictly sequential
+    const timeA = new Date(appendTests[0].createdAt).getTime();
+    const timeB = new Date(appendTests[1].createdAt).getTime();
+    const timeC = new Date(appendTests[2].createdAt).getTime();
+    
+    expect(timeA).toBeLessThanOrEqual(timeB);
+    expect(timeB).toBeLessThanOrEqual(timeC);
   });
 
 });
