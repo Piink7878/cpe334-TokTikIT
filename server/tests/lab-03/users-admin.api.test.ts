@@ -1,5 +1,5 @@
 import request from "supertest";
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { app } from "../../src/app";
 import { getPrisma } from "../../src/prisma";
 
@@ -11,11 +11,20 @@ describe("Admin User Management API Tests (Lab 3)", () => {
   let itStaffSessionCookie: string;
   let adminUserId: string;
 
+  const testEmails = [
+    "admin-test1@example.com", 
+    "admin-req@example.com", 
+    "admin-staff@example.com", 
+    "newuser@example.com", 
+    "dup@example.com",
+    "iso-role@example.com",
+    "updateme@example.com",
+    "iso-deactivate@example.com"
+  ];
+
   beforeAll(async () => {
-    const emails = ["admin-test1@example.com", "admin-req@example.com", "admin-staff@example.com", "newuser@example.com", "dup@example.com"];
-    
     // Clean up
-    await prisma.user.deleteMany({ where: { email: { in: emails } } });
+    await prisma.user.deleteMany({ where: { email: { in: testEmails } } });
 
     const bcrypt = await import("bcryptjs");
     const passwordHash = await bcrypt.hash("Password123!", 10);
@@ -43,8 +52,7 @@ describe("Admin User Management API Tests (Lab 3)", () => {
   });
 
   afterAll(async () => {
-    const emails = ["admin-test1@example.com", "admin-req@example.com", "admin-staff@example.com", "newuser@example.com", "dup@example.com"];
-    await prisma.user.deleteMany({ where: { email: { in: emails } } });
+    await prisma.user.deleteMany({ where: { email: { in: testEmails } } });
   });
 
   it("should return 403 Forbidden when Requester tries to access /api/admin/users", async () => {
@@ -85,31 +93,36 @@ describe("Admin User Management API Tests (Lab 3)", () => {
   });
 
   it("should prevent changing the role of the last active Admin", async () => {
-    // Temporarily deactivate other admins to ensure this is the last one
-    const otherAdmins = await prisma.user.findMany({
-      where: { role: "ADMIN", isActive: true, id: { not: adminUserId } }
+    // Isolated data fixture: Create a fresh admin user specifically for this test
+    const bcrypt = await import("bcryptjs");
+    const passwordHash = await bcrypt.hash("Password123!", 10);
+    const tempAdmin = await prisma.user.create({
+      data: { email: "iso-role@example.com", fullName: "Iso Admin", role: "ADMIN", passwordHash, isActive: true }
     });
-    if (otherAdmins.length > 0) {
-      await prisma.user.updateMany({
-        where: { id: { in: otherAdmins.map(a => a.id) } },
-        data: { isActive: false }
-      });
-    }
 
-    const res = await request(app).put(`/api/admin/users/${adminUserId}`).set("Cookie", adminSessionCookie).send({
+    // Isolate from shared DB state by mocking the transaction to simulate this being the last admin
+    const txSpy = vi.spyOn(prisma, '$transaction').mockImplementation(async (cb: any) => {
+      return cb({
+        user: {
+          findUnique: (args: any) => prisma.user.findUnique(args),
+          update: (args: any) => prisma.user.update(args),
+          count: vi.fn().mockResolvedValue(1)
+        }
+      });
+    });
+
+    const res = await request(app).put(`/api/admin/users/${tempAdmin.id}`).set("Cookie", adminSessionCookie).send({
       role: "IT_STAFF"
     });
+    
     expect(res.status).toBe(400);
     expect(res.body.error.message).toContain("last active Admin");
 
-    // Restore
-    if (otherAdmins.length > 0) {
-      await prisma.user.updateMany({
-        where: { id: { in: otherAdmins.map(a => a.id) } },
-        data: { isActive: true }
-      });
-    }
+    // Clean up
+    txSpy.mockRestore();
+    await prisma.user.delete({ where: { id: tempAdmin.id } });
   });
+
   it("should return 400 when updating user with invalid role", async () => {
     const res = await request(app).put(`/api/admin/users/${adminUserId}`).set("Cookie", adminSessionCookie).send({
       role: "INVALID_ROLE"
@@ -141,7 +154,6 @@ describe("Admin User Management API Tests (Lab 3)", () => {
 
   it("should reset password successfully", async () => {
     // We already have "admin-req@example.com"
-    const prisma = getPrisma();
     const user = await prisma.user.findUnique({ where: { email: "admin-req@example.com" } });
     
     const res = await request(app).post(`/api/admin/users/${user!.id}/reset-password`).set("Cookie", adminSessionCookie).send({
@@ -168,32 +180,35 @@ describe("Admin User Management API Tests (Lab 3)", () => {
   });
 
   it("should prevent deactivating the last active Admin", async () => {
-    // We have test "should prevent changing the role of the last active Admin".
-    // This tests the deactivate branch directly. 
-    // We will bypass the "own account" check by using a mocked req.user in a unit test? We can't in e2e.
-    // Instead we will verify that attempting to deactivate an admin when activeAdmins <= 1 returns 400.
-    // Since we are using supertest, we just test deactivating adminUserId which is the last admin (after we deactivate others).
-    
-    const otherAdmins = await prisma.user.findMany({
-      where: { role: "ADMIN", isActive: true, id: { not: adminUserId } }
+    // Isolated data fixture: Create a fresh admin user specifically for this test
+    const bcrypt = await import("bcryptjs");
+    const passwordHash = await bcrypt.hash("Password123!", 10);
+    const tempAdmin = await prisma.user.create({
+      data: { email: "iso-deactivate@example.com", fullName: "Iso Admin", role: "ADMIN", passwordHash, isActive: true }
     });
-    if (otherAdmins.length > 0) {
-      await prisma.user.updateMany({
-        where: { id: { in: otherAdmins.map(a => a.id) } },
-        data: { isActive: false }
-      });
-    }
 
-    const res = await request(app).put(`/api/admin/users/${adminUserId}`).set("Cookie", adminSessionCookie).send({
+    // To hit the "last active Admin" logic for deactivation (instead of "own account"),
+    // we use adminSessionCookie (adminUserId) to deactivate tempAdmin,
+    // and mock the transaction count to 1 to simulate tempAdmin being the last admin.
+    const txSpy = vi.spyOn(prisma, '$transaction').mockImplementation(async (cb: any) => {
+      return cb({
+        user: {
+          findUnique: (args: any) => prisma.user.findUnique(args),
+          update: (args: any) => prisma.user.update(args),
+          count: vi.fn().mockResolvedValue(1)
+        }
+      });
+    });
+
+    const res = await request(app).put(`/api/admin/users/${tempAdmin.id}`).set("Cookie", adminSessionCookie).send({
       isActive: false
     });
+    
     expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain("last active Admin");
 
-    if (otherAdmins.length > 0) {
-      await prisma.user.updateMany({
-        where: { id: { in: otherAdmins.map(a => a.id) } },
-        data: { isActive: true }
-      });
-    }
+    // Clean up
+    txSpy.mockRestore();
+    await prisma.user.delete({ where: { id: tempAdmin.id } });
   });
 });

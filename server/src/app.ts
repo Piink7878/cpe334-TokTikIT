@@ -1460,56 +1460,59 @@ const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
     const { name, email, role, isActive } = req.body;
     
     const prisma = getPrisma();
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      return res.status(404).json({ error: { code: "NOT_FOUND", message: "User not found" } });
-    }
 
-    if (email && email !== user.email) {
-      const existing = await prisma.user.findUnique({ where: { email } });
-      if (existing) {
-        return res.status(409).json({ error: { code: "CONFLICT", message: "Email already in use" } });
+    const updatedUser = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        throw new Error("NOT_FOUND:User not found");
       }
-    }
 
-    if (isActive === false) {
-      if (user.id === req.user!.id) {
-        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Cannot deactivate your own account" } });
-      }
-      if (user.role === "ADMIN") {
-        const activeAdmins = await prisma.user.count({
-          where: { role: "ADMIN", isActive: true }
-        });
-        if (activeAdmins <= 1) {
-          return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Cannot deactivate the last active Admin" } });
+      if (email && email !== user.email) {
+        const existing = await tx.user.findUnique({ where: { email } });
+        if (existing) {
+          throw new Error("CONFLICT:Email already in use");
         }
       }
-    }
 
-    if (role && role !== "ADMIN" && user.role === "ADMIN" && user.isActive) {
-        const activeAdmins = await prisma.user.count({
-          where: { role: "ADMIN", isActive: true }
-        });
-        if (activeAdmins <= 1) {
-          return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Cannot remove the ADMIN role from the last active Admin" } });
+      if (isActive === false) {
+        if (user.id === req.user!.id) {
+          throw new Error("VALIDATION_ERROR:Cannot deactivate your own account");
         }
-    }
-
-    const updateData: any = {};
-    if (name) updateData.fullName = name;
-    if (email) updateData.email = email;
-    if (role) {
-      const validRoles = ["REQUESTER", "IT_STAFF", "ADMIN"];
-      if (!validRoles.includes(role)) {
-         return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid role" } });
+        if (user.role === "ADMIN") {
+          const activeAdmins = await tx.user.count({
+            where: { role: "ADMIN", isActive: true }
+          });
+          if (activeAdmins <= 1) {
+            throw new Error("VALIDATION_ERROR:Cannot deactivate the last active Admin");
+          }
+        }
       }
-      updateData.role = role;
-    }
-    if (isActive !== undefined) updateData.isActive = isActive;
 
-    const updatedUser = await prisma.user.update({
-      where: { id: userId },
-      data: updateData
+      if (role && role !== "ADMIN" && user.role === "ADMIN" && user.isActive) {
+          const activeAdmins = await tx.user.count({
+            where: { role: "ADMIN", isActive: true }
+          });
+          if (activeAdmins <= 1) {
+            throw new Error("VALIDATION_ERROR:Cannot remove the ADMIN role from the last active Admin");
+          }
+      }
+
+      const updateData: any = {};
+      if (name) updateData.fullName = name;
+      if (email) updateData.email = email;
+      if (role) {
+        const validRoles = ["REQUESTER", "IT_STAFF", "ADMIN"];
+        if (!validRoles.includes(role)) {
+           throw new Error("VALIDATION_ERROR:Invalid role");
+        }
+        updateData.role = role;
+      }
+      if (isActive !== undefined) updateData.isActive = isActive;
+
+      return await tx.user.update({
+        where: { id: userId },
+        data: updateData
+      });
     });
 
     return res.status(200).json({
@@ -1520,7 +1523,16 @@ const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
       isActive: updatedUser.isActive
     });
 
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message.startsWith("NOT_FOUND:")) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: error.message.split(":")[1] } });
+    }
+    if (error.message.startsWith("CONFLICT:")) {
+      return res.status(409).json({ error: { code: "CONFLICT", message: error.message.split(":")[1] } });
+    }
+    if (error.message.startsWith("VALIDATION_ERROR:")) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: error.message.split(":")[1] } });
+    }
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });
   }
