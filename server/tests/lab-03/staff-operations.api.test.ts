@@ -124,6 +124,11 @@ describe("IT Staff Ticket Operations API", () => {
       expect(res.body.ticket.ownerId).toBe(itStaffId);
       expect(res.body.ticket.currentStatus).toBe("OPEN");
     });
+
+    it("should reject Requester with 403 Forbidden", async () => {
+      const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/claim`).set("Cookie", requesterSessionCookie);
+      expect(res.status).toBe(403);
+    });
   });
 
   describe("PATCH /api/staff/tickets/:id/assign", () => {
@@ -142,6 +147,13 @@ describe("IT Staff Ticket Operations API", () => {
         .send({ assigneeId: reqUser!.id });
       expect(res.status).toBe(400);
     });
+
+    it("should reject Requester with 403 Forbidden", async () => {
+      const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/assign`)
+        .set("Cookie", requesterSessionCookie)
+        .send({ assigneeId: itStaffId });
+      expect(res.status).toBe(403);
+    });
   });
 
   describe("PATCH /api/staff/tickets/:id/priority", () => {
@@ -152,15 +164,27 @@ describe("IT Staff Ticket Operations API", () => {
       expect(res.status).toBe(200);
       expect(res.body.ticket.itPriority).toBe("CRITICAL");
     });
+
+    it("should reject Requester with 403 Forbidden", async () => {
+      const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/priority`)
+        .set("Cookie", requesterSessionCookie)
+        .send({ itPriority: "CRITICAL" });
+      expect(res.status).toBe(403);
+    });
   });
 
   describe("PATCH /api/staff/tickets/:id/status", () => {
-    it("should allow valid transition NEW -> OPEN", async () => {
+    it("should allow valid transition NEW -> OPEN and log it", async () => {
       const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/status`)
         .set("Cookie", itStaffSessionCookie)
         .send({ status: "OPEN" });
       expect(res.status).toBe(200);
       expect(res.body.ticket.currentStatus).toBe("OPEN");
+
+      const notes = await prisma.internalNote.findMany({ where: { ticketId: testTicketId } });
+      expect(notes.length).toBe(1);
+      expect(notes[0].body).toBe("Status changed from NEW to OPEN");
+      expect(notes[0].authorId).toBe(itStaffId);
     });
 
     it("should reject invalid transition NEW -> CLOSED", async () => {
@@ -196,6 +220,13 @@ describe("IT Staff Ticket Operations API", () => {
         .set("Cookie", itStaffSessionCookie)
         .send({ status: "OPEN" });
       expect(res.status).toBe(400);
+    });
+
+    it("should reject Requester with 403 Forbidden", async () => {
+      const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/status`)
+        .set("Cookie", requesterSessionCookie)
+        .send({ status: "OPEN" });
+      expect(res.status).toBe(403);
     });
   });
 });

@@ -1135,14 +1135,16 @@ app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnf
       currentStatus: status
     };
 
-    if (status === "REJECTED") {
-      updateData.internalNotes = {
-        create: {
-          body: `Ticket rejected. Reason: ${rejectionReason.trim()}`,
-          authorId: req.user!.id
-        }
-      };
-    }
+    const noteBody = status === "REJECTED" 
+      ? `Status changed from ${currentStatus} to ${status}. Reason: ${rejectionReason.trim()}`
+      : `Status changed from ${currentStatus} to ${status}`;
+
+    updateData.internalNotes = {
+      create: {
+        body: noteBody,
+        authorId: req.user!.id
+      }
+    };
 
     const updatedTicket = await prisma.ticket.update({
       where: { id: ticketId },

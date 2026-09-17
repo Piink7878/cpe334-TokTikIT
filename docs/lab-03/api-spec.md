@@ -216,7 +216,10 @@ To avoid leaking information to unauthorized users:
 *   **Auth Required:** Yes (IT Staff, Admin)
 *   **Request Body:**
     ```json
-    { "status": "IN_PROGRESS" }
+    { 
+      "status": "REJECTED",
+      "rejectionReason": "Not a valid IT issue"
+    }
     ```
 *   **Status Codes:** `200 OK`, `400 Bad Request` (invalid transition), `403 Forbidden`, `404 Not Found`
 
@@ -225,7 +228,7 @@ The following matrix defines the permitted status changes. Requesters cannot tra
 
 | Current Status | Allowed Next Statuses | Permitted Roles | Notes |
 | :--- | :--- | :--- | :--- |
-| **New** | Open, Cancelled | IT Staff, Admin | |
+| **New** | Open, Rejected, Cancelled | IT Staff, Admin | |
 | **Open** | In Progress, Waiting for Requester, Resolved, Cancelled | IT Staff, Admin | |
 | **In Progress** | Waiting for Requester, Resolved, Open, Cancelled | IT Staff, Admin | |
 | **Waiting for Requester** | In Progress, Resolved, Cancelled | IT Staff, Admin | |
@@ -233,6 +236,7 @@ The following matrix defines the permitted status changes. Requesters cannot tra
 | **Closed** | Reopened | IT Staff, Admin | |
 | **Reopened** | In Progress, Waiting for Requester, Resolved, Cancelled | IT Staff, Admin | |
 | **Cancelled** | Reopened | IT Staff, Admin | |
+| **Rejected** | None | IT Staff, Admin | Terminal state. Requires a mandatory `rejectionReason`. |
 
 ---
 
