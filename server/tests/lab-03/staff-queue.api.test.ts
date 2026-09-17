@@ -283,4 +283,23 @@ describe("IT Staff Ticket Queue API", () => {
     expect(res.body.data[0].ticketNumber).toBe(ticket2.ticketNumber);
     expect(res.body.data[1].ticketNumber).toBe(ticket1.ticketNumber);
   });
+
+  describe("GET /api/staff/assignees", () => {
+    it("should deny access to unauthenticated requests", async () => {
+      const res = await request(app).get("/api/staff/assignees");
+      expect(res.status).toBe(401);
+    });
+
+    it("should deny access to a requester with 403 Forbidden", async () => {
+      const res = await request(app).get("/api/staff/assignees").set("Cookie", requesterCookie);
+      expect(res.status).toBe(403);
+    });
+
+    it("should allow IT Staff to retrieve assignees list", async () => {
+      const res = await request(app).get("/api/staff/assignees").set("Cookie", staffCookie);
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.some((u: any) => u.email === staffUser.email)).toBe(true);
+    });
+  });
 });

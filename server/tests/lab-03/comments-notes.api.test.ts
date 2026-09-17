@@ -8,12 +8,13 @@ const prisma = getPrisma();
 describe("Comments and Notes API Tests (Lab 3)", () => {
   let itStaffSessionCookie: string;
   let requesterSessionCookie: string;
+  let adminSessionCookie: string;
   
   let reqId: string;
   let ticketId: number;
 
   beforeAll(async () => {
-    const emails = ["cn-staff@example.com", "cn-req@example.com"];
+    const emails = ["cn-staff@example.com", "cn-req@example.com", "cn-admin@example.com"];
     
     // Clean up
     const users = await prisma.user.findMany({ where: { email: { in: emails } } });
@@ -35,6 +36,10 @@ describe("Comments and Notes API Tests (Lab 3)", () => {
     await prisma.user.create({
       data: { email: "cn-staff@example.com", fullName: "IT Staff", role: "IT_STAFF", passwordHash, isActive: true }
     });
+
+    await prisma.user.create({
+      data: { email: "cn-admin@example.com", fullName: "Admin User", role: "ADMIN", passwordHash, isActive: true }
+    });
     
     const req1 = await prisma.user.create({
       data: { email: "cn-req@example.com", fullName: "Requester", role: "REQUESTER", passwordHash, isActive: true }
@@ -44,6 +49,9 @@ describe("Comments and Notes API Tests (Lab 3)", () => {
     // Login
     const loginStaff = await request(app).post("/api/auth/login").send({ email: "cn-staff@example.com", password: "Password123!" });
     itStaffSessionCookie = loginStaff.headers["set-cookie"][0];
+
+    const loginAdmin = await request(app).post("/api/auth/login").send({ email: "cn-admin@example.com", password: "Password123!" });
+    adminSessionCookie = loginAdmin.headers["set-cookie"][0];
 
     const loginReq = await request(app).post("/api/auth/login").send({ email: "cn-req@example.com", password: "Password123!" });
     requesterSessionCookie = loginReq.headers["set-cookie"][0];
@@ -76,7 +84,7 @@ describe("Comments and Notes API Tests (Lab 3)", () => {
   });
 
   afterAll(async () => {
-    const emails = ["cn-staff@example.com", "cn-req@example.com"];
+    const emails = ["cn-staff@example.com", "cn-req@example.com", "cn-admin@example.com"];
     const users = await prisma.user.findMany({ where: { email: { in: emails } } });
     if (users.length > 0) {
       const userIds = users.map(u => u.id);
@@ -107,6 +115,16 @@ describe("Comments and Notes API Tests (Lab 3)", () => {
       const res = await request(app).post(`/api/tickets/${ticketId}/comments`).set("Cookie", requesterSessionCookie).send({ content: "   " });
       expect(res.status).toBe(400);
     });
+
+    it("should reject unauthenticated request to GET comments with 401 Unauthorized", async () => {
+      const res = await request(app).get(`/api/tickets/${ticketId}/comments`);
+      expect(res.status).toBe(401);
+    });
+
+    it("should reject unauthenticated request to POST comment with 401 Unauthorized", async () => {
+      const res = await request(app).post(`/api/tickets/${ticketId}/comments`).send({ content: "Unauth comment" });
+      expect(res.status).toBe(401);
+    });
   });
 
   describe("Internal Notes", () => {
@@ -124,6 +142,16 @@ describe("Comments and Notes API Tests (Lab 3)", () => {
     it("should reject empty content with 400", async () => {
       const res = await request(app).post(`/api/tickets/${ticketId}/internal-notes`).set("Cookie", itStaffSessionCookie).send({ content: "   " });
       expect(res.status).toBe(400);
+    });
+
+    it("should reject unauthenticated request to GET internal notes with 401 Unauthorized", async () => {
+      const res = await request(app).get(`/api/tickets/${ticketId}/internal-notes`);
+      expect(res.status).toBe(401);
+    });
+
+    it("should reject unauthenticated request to POST internal note with 401 Unauthorized", async () => {
+      const res = await request(app).post(`/api/tickets/${ticketId}/internal-notes`).send({ content: "Unauth note" });
+      expect(res.status).toBe(401);
     });
   });
 
@@ -143,8 +171,18 @@ describe("Comments and Notes API Tests (Lab 3)", () => {
       expect(t!.currentStatus).toBe("NEW"); // Status should not change
     });
 
-    it("should reject IT Staff from indicating problem resolved", async () => {
+    it("should reject unauthenticated request with 401 Unauthorized", async () => {
+      const res = await request(app).post(`/api/tickets/${ticketId}/indicate-resolved`);
+      expect(res.status).toBe(401);
+    });
+
+    it("should reject IT Staff from indicating problem resolved with 403 Forbidden", async () => {
       const res = await request(app).post(`/api/tickets/${ticketId}/indicate-resolved`).set("Cookie", itStaffSessionCookie);
+      expect(res.status).toBe(403);
+    });
+
+    it("should reject Admin from indicating problem resolved with 403 Forbidden", async () => {
+      const res = await request(app).post(`/api/tickets/${ticketId}/indicate-resolved`).set("Cookie", adminSessionCookie);
       expect(res.status).toBe(403);
     });
   });

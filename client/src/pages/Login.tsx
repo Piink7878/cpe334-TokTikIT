@@ -29,7 +29,13 @@ export default function Login() {
       }
 
       login(data.user);
-      navigate("/my-tickets", { replace: true });
+      if (data.user.role === "IT_STAFF") {
+        navigate("/staff-queue", { replace: true });
+      } else if (data.user.role === "ADMIN") {
+        navigate("/user-management", { replace: true });
+      } else {
+        navigate("/my-tickets", { replace: true });
+      }
     } catch (err: any) {
       setErrorMsg(err.message);
     } finally {

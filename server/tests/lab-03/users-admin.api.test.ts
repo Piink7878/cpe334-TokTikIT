@@ -91,6 +91,18 @@ describe("Admin User Management API Tests (Lab 3)", () => {
     expect(res.status).toBe(403);
   });
 
+  it("should return 403 Forbidden when Requester tries to PATCH /api/admin/users/:id", async () => {
+    const res = await request(app).patch(`/api/admin/users/${adminUserId}`).set("Cookie", requesterSessionCookie)
+      .send({ name: "Hacked" });
+    expect(res.status).toBe(403);
+  });
+
+  it("should return 403 Forbidden when IT Staff tries to PATCH /api/admin/users/:id", async () => {
+    const res = await request(app).patch(`/api/admin/users/${adminUserId}`).set("Cookie", itStaffSessionCookie)
+      .send({ name: "Hacked" });
+    expect(res.status).toBe(403);
+  });
+
   it("should return 403 Forbidden when Requester tries to POST /api/admin/users/:id/reset-password", async () => {
     const res = await request(app).post(`/api/admin/users/${adminUserId}/reset-password`).set("Cookie", requesterSessionCookie)
       .send({ newPassword: "NewPass123!" });
@@ -101,6 +113,33 @@ describe("Admin User Management API Tests (Lab 3)", () => {
     const res = await request(app).post(`/api/admin/users/${adminUserId}/reset-password`).set("Cookie", itStaffSessionCookie)
       .send({ newPassword: "NewPass123!" });
     expect(res.status).toBe(403);
+  });
+
+  describe("Unauthenticated Access to Admin APIs (401 Unauthorized)", () => {
+    it("should return 401 for GET /api/admin/users when unauthenticated", async () => {
+      const res = await request(app).get("/api/admin/users");
+      expect(res.status).toBe(401);
+    });
+
+    it("should return 401 for POST /api/admin/users when unauthenticated", async () => {
+      const res = await request(app).post("/api/admin/users").send({ name: "X", email: "x@example.com", role: "REQUESTER", password: "Password123!" });
+      expect(res.status).toBe(401);
+    });
+
+    it("should return 401 for PUT /api/admin/users/:id when unauthenticated", async () => {
+      const res = await request(app).put(`/api/admin/users/${adminUserId}`).send({ name: "Hacked" });
+      expect(res.status).toBe(401);
+    });
+
+    it("should return 401 for PATCH /api/admin/users/:id when unauthenticated", async () => {
+      const res = await request(app).patch(`/api/admin/users/${adminUserId}`).send({ name: "Hacked" });
+      expect(res.status).toBe(401);
+    });
+
+    it("should return 401 for POST /api/admin/users/:id/reset-password when unauthenticated", async () => {
+      const res = await request(app).post(`/api/admin/users/${adminUserId}/reset-password`).send({ newPassword: "NewPass123!" });
+      expect(res.status).toBe(401);
+    });
   });
 
   it("should create a user successfully and prevent duplicate emails", async () => {

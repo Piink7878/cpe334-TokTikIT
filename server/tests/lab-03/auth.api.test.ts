@@ -189,4 +189,23 @@ describe("Authentication API", () => {
       .set("Cookie", activeUserCookie);
     expect(meResponse.status).toBe(401);
   });
+
+  describe("Negative Authentication Tests (Unauthenticated)", () => {
+    it("should return 401 Unauthorized when unauthenticated for GET /api/auth/me", async () => {
+      const res = await request(app).get("/api/auth/me");
+      expect(res.status).toBe(401);
+    });
+
+    it("should return 401 Unauthorized when unauthenticated for POST /api/auth/logout", async () => {
+      const res = await request(app).post("/api/auth/logout");
+      expect(res.status).toBe(401);
+    });
+
+    it("should return 401 Unauthorized when unauthenticated for POST /api/auth/change-password", async () => {
+      const res = await request(app)
+        .post("/api/auth/change-password")
+        .send({ currentPassword: "OldPassword123!", newPassword: "NewPassword123!", confirmPassword: "NewPassword123!" });
+      expect(res.status).toBe(401);
+    });
+  });
 });
