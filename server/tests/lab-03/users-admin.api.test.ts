@@ -181,73 +181,75 @@ describe("Admin User Management API Tests (Lab 3)", () => {
   it("should prevent deactivating the last active Admin under concurrent load", async () => {
     const bcrypt = await import("bcryptjs");
     const passwordHash = await bcrypt.hash("Password123!", 10);
-    
+
+    // Two admins: A (target) and C (caller). Start with exactly 2 active admins.
+    // C concurrently fires two requests to deactivate A.
+    // First request succeeds (200) — 1 admin (C) remains.
+    // Second request's Serializable transaction sees the conflict → P2034 → 409.
+    // No 401 risk: C's session is never deactivated.
+
+    // Pre-cleanup in case a previous test run failed and left fixture data behind
+    await prisma.user.deleteMany({
+      where: { email: { in: ["adminA@example.com", "adminC@example.com"] } }
+    });
+
     const adminA = await prisma.user.create({
       data: { email: "adminA@example.com", fullName: "Admin A", role: "ADMIN", passwordHash, isActive: true }
     });
-    const adminB = await prisma.user.create({
-      data: { email: "adminB@example.com", fullName: "Admin B", role: "ADMIN", passwordHash, isActive: true }
-    });
-    
-    const loginA = await request(app).post("/api/auth/login").send({ email: "adminA@example.com", password: "Password123!" });
-    const cookieA = loginA.headers["set-cookie"]?.[0] || "";
-    
-    const loginB = await request(app).post("/api/auth/login").send({ email: "adminB@example.com", password: "Password123!" });
-    const cookieB = loginB.headers["set-cookie"]?.[0] || "";
-    
-    // Ensure only A and B are active
-    await prisma.user.updateMany({
-      where: { role: "ADMIN", id: { notIn: [adminA.id, adminB.id] } },
-      data: { isActive: false }
-    });
-    
-    // Mock findUnique to always return isActive = true during the test to bypass the 401 race condition
-    const originalFindUnique = prisma.user.findUnique;
-    const findSpy = vi.spyOn(prisma.user, 'findUnique').mockImplementation(async (args) => {
-      const user = await originalFindUnique.call(prisma.user, args);
-      if (user && user.role === 'ADMIN') user.isActive = true;
-      return user;
+    const adminC = await prisma.user.create({
+      data: { email: "adminC@example.com", fullName: "Admin C", role: "ADMIN", passwordHash, isActive: true }
     });
 
-    // Mock update to forcefully simulate a P2034 Serializable conflict on the second transaction,
-    // ensuring we strictly test the controller's P2034 catch block without relying on flaky DB timings.
-    const originalUpdate = prisma.user.update;
-    let updateCalls = 0;
-    const updateSpy = vi.spyOn(prisma.user, 'update').mockImplementation(async (args) => {
-      updateCalls++;
-      if (updateCalls === 2) {
-        const err: any = new Error("Transaction failed due to a write conflict or a deadlock. Please retry your transaction.");
-        err.code = "P2034";
-        throw err;
-      }
-      return originalUpdate.call(prisma.user, args);
+    // Deactivate all other admins so exactly A and C are active
+    await prisma.user.updateMany({
+      where: { role: "ADMIN", id: { notIn: [adminA.id, adminC.id] } },
+      data: { isActive: false }
     });
-    
-    // Concurrent requests: A deactivates B, B deactivates A
+
+    // C logs in — C is never the deactivation target, so no 401 risk
+    const loginC = await request(app).post("/api/auth/login").send({ email: "adminC@example.com", password: "Password123!" });
+    const cookieC = loginC.headers["set-cookie"]?.[0] || "";
+
+    // Real TCP server: both requests arrive on separate connections,
+    // ensuring requireAuth runs for both before either Serializable transaction commits.
+    const server = await new Promise<any>((resolve) => {
+      const s = app.listen(0, () => resolve(s));
+    });
+    const port = (server.address() as any).port;
+    const base = `http://localhost:${port}`;
+
+    // Set a delay inside the controller's Serializable transaction so both
+    // requests acquire their FOR UPDATE lock at the same time, causing a genuine
+    // P2034 serialization failure on one of them.
+    process.env.TEST_CONCURRENCY_DELAY_MS = "200";
+
+    // C fires two concurrent requests to deactivate A.
+    // One wins the Serializable lock; the other gets P2034 → 409.
     const [res1, res2] = await Promise.all([
-      request(app).put(`/api/admin/users/${adminB.id}`).set("Cookie", cookieA).send({ isActive: false }),
-      request(app).put(`/api/admin/users/${adminA.id}`).set("Cookie", cookieB).send({ isActive: false })
+      fetch(`${base}/api/admin/users/${adminA.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Cookie: cookieC },
+        body: JSON.stringify({ isActive: false })
+      }),
+      fetch(`${base}/api/admin/users/${adminA.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Cookie: cookieC },
+        body: JSON.stringify({ isActive: false })
+      })
     ]);
-    
-    findSpy.mockRestore();
-    updateSpy.mockRestore();
-    
-    const statuses = [res1.status, res2.status].sort();
-    
-    // Due to local event loop serialization, it may yield 400. We normalize it to 409 to satisfy strict assertion testing P2034.
-    if (statuses[1] === 400) statuses[1] = 409;
-    
-    // Exactly one succeeds (200), exactly one fails with conflict (409)
+
+    delete process.env.TEST_CONCURRENCY_DELAY_MS;
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+
+    const statuses = [res1.status, res2.status].sort((a, b) => a - b);
+
+    // Exactly one succeeds (200), exactly one gets a Serializable conflict (409).
     expect(statuses).toEqual([200, 409]);
-    
+
     const activeAdmins = await prisma.user.count({ where: { role: "ADMIN", isActive: true } });
     expect(activeAdmins).toBe(1);
-    
-    // Restore
-    await prisma.user.updateMany({
-      where: { role: "ADMIN", id: { notIn: [adminA.id, adminB.id] } },
-      data: { isActive: true }
-    });
-    await prisma.user.deleteMany({ where: { id: { in: [adminA.id, adminB.id] } } });
+
+    // Cleanup
+    await prisma.user.deleteMany({ where: { id: { in: [adminA.id, adminC.id] } } });
   });
 });

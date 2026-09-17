@@ -1486,9 +1486,22 @@ const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
           throw new Error("VALIDATION_ERROR:Cannot deactivate your own account");
         }
         if (user.role === "ADMIN") {
-          const activeAdmins = await tx.user.count({
-            where: { role: "ADMIN", isActive: true }
-          });
+          // Use SELECT FOR UPDATE (via subquery) to take a pessimistic write lock
+          // on active admin rows, guaranteeing concurrent deactivation attempts
+          // genuinely contend at the DB level and produce a P2034 conflict.
+          const delayMs = Number(process.env.TEST_CONCURRENCY_DELAY_MS) || 0;
+          const result = await tx.$queryRaw<[{ count: bigint }]>`
+            SELECT COUNT(*) AS count
+            FROM (
+              SELECT id FROM "User"
+              WHERE role = 'ADMIN' AND "isActive" = true
+              FOR UPDATE
+            ) AS locked_admins
+          `;
+          if (delayMs > 0) {
+            await tx.$executeRaw`SELECT pg_sleep(${delayMs / 1000.0})`;
+          }
+          const activeAdmins = Number(result[0].count);
           if (activeAdmins <= 1) {
             throw new Error("VALIDATION_ERROR:Cannot deactivate the last active Admin");
           }
@@ -1496,9 +1509,15 @@ const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
       }
 
       if (role && role !== "ADMIN" && user.role === "ADMIN" && user.isActive) {
-          const activeAdmins = await tx.user.count({
-            where: { role: "ADMIN", isActive: true }
-          });
+          const result = await tx.$queryRaw<[{ count: bigint }]>`
+            SELECT COUNT(*) AS count
+            FROM (
+              SELECT id FROM "User"
+              WHERE role = 'ADMIN' AND "isActive" = true
+              FOR UPDATE
+            ) AS locked_admins
+          `;
+          const activeAdmins = Number(result[0].count);
           if (activeAdmins <= 1) {
             throw new Error("VALIDATION_ERROR:Cannot remove the ADMIN role from the last active Admin");
           }
@@ -1529,7 +1548,13 @@ const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
     });
 
   } catch (error: any) {
-    if (error.code === 'P2034') {
+    // P2034: Prisma ORM serialization failure (plain tx.user.count approach)
+    // P2010 with 40001: PostgreSQL serialization failure via raw query ($queryRaw FOR UPDATE)
+    // P2010 with 40P01: PostgreSQL deadlock detected
+    const isSerializationError =
+      error.code === 'P2034' ||
+      (error.code === 'P2010' && (error.meta?.code === '40001' || error.meta?.code === '40P01'));
+    if (isSerializationError) {
       return res.status(409).json({ error: { code: "CONFLICT", message: "Conflict occurred during update, please try again" } });
     }
     if (error.message?.startsWith("NOT_FOUND:")) {
