@@ -6,7 +6,9 @@ import {
   claimTicket, 
   assignTicket, 
   updateTicketPriority, 
-  updateTicketStatus 
+  updateTicketStatus,
+  addPublicComment,
+  addInternalNote
 } from "../api";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -48,6 +50,43 @@ export default function StaffTicketDetail() {
   
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
+
+  const [publicCommentText, setPublicCommentText] = useState("");
+  const [internalNoteText, setInternalNoteText] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [submittingNote, setSubmittingNote] = useState(false);
+
+  const handleAddPublicComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!publicCommentText.trim()) return;
+    setSubmittingComment(true);
+    try {
+      await addPublicComment(ticket.id, publicCommentText);
+      setSuccessMsg("Public comment added successfully");
+      setPublicCommentText("");
+      await fetchTicketAndAssignees();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to add public comment");
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const handleAddInternalNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!internalNoteText.trim()) return;
+    setSubmittingNote(true);
+    try {
+      await addInternalNote(ticket.id, internalNoteText);
+      setSuccessMsg("Internal note added successfully");
+      setInternalNoteText("");
+      await fetchTicketAndAssignees();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to add internal note");
+    } finally {
+      setSubmittingNote(false);
+    }
+  };
 
   const fetchTicketAndAssignees = async () => {
     setLoading(true);
@@ -221,7 +260,7 @@ export default function StaffTicketDetail() {
                           <strong><i className="bi bi-chat-text me-1"></i> {item.author.fullName} <span className="badge bg-secondary ms-2">Public Comment</span></strong>
                           <span className="text-muted small">{new Date(item.createdAt).toLocaleString()}</span>
                         </div>
-                        <div style={{ whiteSpace: "pre-wrap" }}>{item.body}</div>
+                        <div style={{ whiteSpace: "pre-wrap" }}>{item.content}</div>
                       </div>
                     ) : (
                       <div key={`note-${item.id}`} className="border rounded p-3 bg-light" style={{ borderColor: "var(--color-primary) !important", borderLeft: "4px solid var(--color-primary)" }}>
@@ -229,12 +268,70 @@ export default function StaffTicketDetail() {
                           <strong className="text-primary"><i className="bi bi-journal-text me-1"></i> {item.author.fullName} <span className="badge bg-primary ms-2">Internal Note</span></strong>
                           <span className="text-muted small">{new Date(item.createdAt).toLocaleString()}</span>
                         </div>
-                        <div style={{ whiteSpace: "pre-wrap" }}>{item.body}</div>
+                        <div style={{ whiteSpace: "pre-wrap" }}>{item.content}</div>
                       </div>
                     )
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="row">
+            <div className="col-12 col-xl-6 mb-4 mb-xl-0">
+              <div className="card shadow-sm h-100 border-0" style={{ borderTop: "4px solid #0B7A46" }}>
+                <div className="card-header bg-white border-0 pt-4">
+                  <h5 className="mb-0" style={{ color: "#0B7A46" }}><i className="bi bi-chat-text me-2"></i>Post Public Comment</h5>
+                  <small className="text-muted">Visible to the Requester</small>
+                </div>
+                <div className="card-body">
+                  <form onSubmit={handleAddPublicComment}>
+                    <div className="mb-3">
+                      <textarea 
+                        className="form-control" 
+                        rows={4} 
+                        placeholder="Write a message to the requester..."
+                        value={publicCommentText}
+                        onChange={e => setPublicCommentText(e.target.value)}
+                        style={{ backgroundColor: "#F8F9FA" }}
+                      ></textarea>
+                    </div>
+                    <div className="text-end">
+                      <button type="submit" className="btn btn-outline-success" disabled={submittingComment || !publicCommentText.trim()}>
+                        {submittingComment ? "Posting..." : "Post Comment"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+
+            <div className="col-12 col-xl-6">
+              <div className="card shadow-sm h-100 border-0" style={{ backgroundColor: "#FFF8E1", borderTop: "4px solid #FFC107" }}>
+                <div className="card-header border-0 pt-4" style={{ backgroundColor: "#FFF8E1" }}>
+                  <h5 className="mb-0 text-dark"><i className="bi bi-journal-text me-2"></i>Add Internal Note</h5>
+                  <small className="text-muted">Private - IT Staff & Admin only</small>
+                </div>
+                <div className="card-body">
+                  <form onSubmit={handleAddInternalNote}>
+                    <div className="mb-3">
+                      <textarea 
+                        className="form-control" 
+                        rows={4} 
+                        placeholder="Write an internal operational note..."
+                        value={internalNoteText}
+                        onChange={e => setInternalNoteText(e.target.value)}
+                        style={{ backgroundColor: "#FFFFFF", borderColor: "#FFE082" }}
+                      ></textarea>
+                    </div>
+                    <div className="text-end">
+                      <button type="submit" className="btn btn-warning" disabled={submittingNote || !internalNoteText.trim()}>
+                        {submittingNote ? "Saving..." : "Save Internal Note"}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
             </div>
           </div>
         </div>

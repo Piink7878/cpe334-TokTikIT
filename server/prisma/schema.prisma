@@ -86,7 +86,7 @@ model PublicComment {
   ticket    Ticket   @relation(fields: [ticketId], references: [id])
   authorId  String
   author    User     @relation(fields: [authorId], references: [id])
-  body      String
+  content   String
   createdAt DateTime @default(now())
 }
 
@@ -96,7 +96,7 @@ model InternalNote {
   ticket    Ticket   @relation(fields: [ticketId], references: [id])
   authorId  String
   author    User     @relation(fields: [authorId], references: [id])
-  body      String
+  content   String
   createdAt DateTime @default(now())
 }
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { getTicket, Ticket } from "../api";
+import { getTicket, Ticket, getPublicComments, addPublicComment, indicateProblemResolved } from "../api";
 import { AttachmentSection } from "../components/AttachmentSection";
 
 export const RequesterTicketDetail: React.FC = () => {
@@ -11,6 +11,12 @@ export const RequesterTicketDetail: React.FC = () => {
   const selectedRequester = user;
 
   const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [comments, setComments] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState("attachments");
+  const [newComment, setNewComment] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,13 +24,50 @@ export const RequesterTicketDetail: React.FC = () => {
     if (!selectedRequester || !id) return;
     setIsLoading(true);
     try {
-      const response = await getTicket(parseInt(id, 10));
-      setTicket(response.data);
+      const ticketIdNum = parseInt(id, 10);
+      const [ticketRes, commentsRes] = await Promise.all([
+        getTicket(ticketIdNum),
+        getPublicComments(ticketIdNum)
+      ]);
+      setTicket(ticketRes.data);
+      setComments(commentsRes.data);
       setError(null);
     } catch (err: any) {
       setError(err.message || "Failed to load ticket details.");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleAddComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim() || !ticket) return;
+    setSubmittingComment(true);
+    try {
+      await addPublicComment(ticket.id, newComment);
+      setSuccessMsg("Comment added successfully.");
+      setNewComment("");
+      const commentsRes = await getPublicComments(ticket.id);
+      setComments(commentsRes.data);
+    } catch (err: any) {
+      setError(err.message || "Failed to add comment.");
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const handleIndicateResolved = async () => {
+    if (!ticket) return;
+    setActionLoading(true);
+    try {
+      await indicateProblemResolved(ticket.id);
+      setSuccessMsg("Notified IT Staff that the problem appears resolved.");
+      const commentsRes = await getPublicComments(ticket.id);
+      setComments(commentsRes.data);
+    } catch (err: any) {
+      setError(err.message || "Failed to notify IT staff.");
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -78,7 +121,9 @@ export const RequesterTicketDetail: React.FC = () => {
 
   return (
     <div className="container py-4" style={{ maxWidth: '1200px' }}>
-      <div className="mb-4 d-flex justify-content-between align-items-center">
+      {successMsg && <div className="alert alert-success alert-dismissible fade show">{successMsg}<button type="button" className="btn-close" onClick={() => setSuccessMsg("")}></button></div>}
+      
+      <div className="mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
           <nav aria-label="breadcrumb">
             <ol className="breadcrumb mb-1">
@@ -88,13 +133,25 @@ export const RequesterTicketDetail: React.FC = () => {
           </nav>
           <h1 className="h3 mb-0" style={{ color: '#1A2E22', fontWeight: 700 }}>Ticket Details</h1>
         </div>
-        <button 
-          className="btn btn-secondary" 
-          onClick={() => navigate('/my-tickets')}
-          style={{ backgroundColor: '#FFFFFF', borderColor: '#0B7A46', color: '#0B7A46' }}
-        >
-          Back to My Tickets
-        </button>
+        <div className="d-flex gap-2">
+          {ticket.status !== 'RESOLVED' && ticket.status !== 'CLOSED' && ticket.status !== 'REJECTED' && ticket.status !== 'CANCELLED' && (
+            <button 
+              className="btn btn-outline-success" 
+              onClick={handleIndicateResolved}
+              disabled={actionLoading}
+              style={{ color: '#0B7A46', borderColor: '#0B7A46' }}
+            >
+              {actionLoading ? "Processing..." : "Problem Appears Resolved"}
+            </button>
+          )}
+          <button 
+            className="btn btn-secondary" 
+            onClick={() => navigate('/my-tickets')}
+            style={{ backgroundColor: '#FFFFFF', borderColor: '#0B7A46', color: '#0B7A46' }}
+          >
+            Back to My Tickets
+          </button>
+        </div>
       </div>
 
       <div className="card shadow-sm border-0 mb-4" style={{ borderRadius: '8px', backgroundColor: '#FFFFFF' }}>
@@ -161,12 +218,20 @@ export const RequesterTicketDetail: React.FC = () => {
           {/* Navigation Tabs (Sub-sections) */}
           <ul className="nav nav-tabs" style={{ borderBottomColor: '#E0E5E2' }}>
             <li className="nav-item">
-              <button className="nav-link disabled" style={{ color: '#8C9B94', backgroundColor: 'transparent', border: 'none' }} disabled>
-                Public Comments (0) <br/><span style={{ fontSize: '10px' }}>(Available in future sprint)</span>
+              <button 
+                className={`nav-link ${activeTab === 'comments' ? 'active' : ''}`} 
+                onClick={() => setActiveTab('comments')}
+                style={activeTab === 'comments' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#8C9B94', backgroundColor: 'transparent', border: 'none' }}
+              >
+                Public Comments ({comments.length})
               </button>
             </li>
             <li className="nav-item">
-              <button className="nav-link active" style={{ color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' }}>
+              <button 
+                className={`nav-link ${activeTab === 'attachments' ? 'active' : ''}`}
+                onClick={() => setActiveTab('attachments')}
+                style={activeTab === 'attachments' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#8C9B94', backgroundColor: 'transparent', border: 'none' }}
+              >
                 Attachments ({ticket.attachments ? ticket.attachments.filter(a => !a.isRemoved).length : 0})
               </button>
             </li>
@@ -183,12 +248,54 @@ export const RequesterTicketDetail: React.FC = () => {
           </ul>
 
           {/* Active Tab Content */}
-          <div className="tab-content pt-2">
-            <AttachmentSection 
-              ticketId={ticket.id} 
-              attachments={ticket.attachments || []} 
-              onAttachmentUpdate={fetchTicket} 
-            />
+          <div className="tab-content pt-4">
+            {activeTab === 'attachments' && (
+              <AttachmentSection 
+                ticketId={ticket.id} 
+                attachments={ticket.attachments || []} 
+                onAttachmentUpdate={fetchTicket} 
+              />
+            )}
+            {activeTab === 'comments' && (
+              <div>
+                {comments.length === 0 ? (
+                  <p className="text-muted text-center py-4">No comments yet.</p>
+                ) : (
+                  <div className="d-flex flex-column gap-3 mb-4">
+                    {comments.map(c => (
+                      <div key={c.id} className="border rounded p-3 bg-light">
+                        <div className="d-flex justify-content-between mb-2">
+                          <strong><i className="bi bi-person-circle me-2"></i>{c.author.fullName}</strong>
+                          <span className="text-muted small">{new Date(c.createdAt).toLocaleString()}</span>
+                        </div>
+                        <div style={{ whiteSpace: "pre-wrap" }}>{c.content}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <div className="card shadow-sm border-0 bg-white mt-4" style={{ borderTop: "4px solid #0B7A46" }}>
+                  <div className="card-body">
+                    <h6 className="mb-3" style={{ color: "#0B7A46" }}>Add a Comment</h6>
+                    <form onSubmit={handleAddComment}>
+                      <textarea 
+                        className="form-control mb-3" 
+                        rows={3}
+                        placeholder="Type your message to IT staff..."
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        style={{ backgroundColor: "#F0F4F2" }}
+                      />
+                      <div className="text-end">
+                        <button type="submit" className="btn btn-success" style={{ backgroundColor: "#0B7A46" }} disabled={!newComment.trim() || submittingComment}>
+                          {submittingComment ? "Posting..." : "Post Comment"}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
         </div>
