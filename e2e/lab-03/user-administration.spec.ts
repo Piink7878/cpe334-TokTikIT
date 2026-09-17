@@ -58,7 +58,7 @@ test.describe('Administrator User Management Flow (Lab 3)', () => {
     await page.click('button[type="submit"]');
 
     // Verify redirected to user-management and app shell shows Admin
-    await expect(page).toHaveURL(/.*\/user-management/);
+    await expect(page).toHaveURL(/\/user-management/);
     await expect(page.locator('.navbar')).toContainText('Admin User');
     await expect(page.locator('.navbar')).toContainText('ADMIN');
 
