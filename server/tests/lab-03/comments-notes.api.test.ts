@@ -128,7 +128,7 @@ describe("Comments and Notes API Tests (Lab 3)", () => {
   });
 
   describe("Indicate Resolved Action", () => {
-    it("should allow Requester to indicate problem resolved and append entries", async () => {
+    it("should allow Requester to indicate problem resolved and append a public comment", async () => {
       const res = await request(app).post(`/api/tickets/${ticketId}/indicate-resolved`).set("Cookie", requesterSessionCookie);
       expect(res.status).toBe(200);
 
@@ -137,8 +137,15 @@ describe("Comments and Notes API Tests (Lab 3)", () => {
       expect(pc[0].content).toContain("resolved");
 
       const inote = await prisma.internalNote.findMany({ where: { ticketId } });
-      expect(inote.length).toBe(1);
-      expect(inote[0].content).toContain("indicated");
+      expect(inote.length).toBe(0); // No internal note should be created by the requester
+
+      const t = await prisma.ticket.findUnique({ where: { id: ticketId } });
+      expect(t!.currentStatus).toBe("NEW"); // Status should not change
+    });
+
+    it("should reject IT Staff from indicating problem resolved", async () => {
+      const res = await request(app).post(`/api/tickets/${ticketId}/indicate-resolved`).set("Cookie", itStaffSessionCookie);
+      expect(res.status).toBe(403);
     });
   });
 });

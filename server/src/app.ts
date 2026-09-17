@@ -1330,7 +1330,7 @@ app.post("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEn
 // ---------------------------------------------------------------------------
 // POST /api/tickets/:id/indicate-resolved - Problem Appears Resolved
 // ---------------------------------------------------------------------------
-app.post("/api/tickets/:id/indicate-resolved", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
+app.post("/api/tickets/:id/indicate-resolved", requireAuth, requirePasswordChangeEnforcement, requireRole(["REQUESTER"]), async (req: Request, res: Response): Promise<any> => {
   try {
     const ticketId = parseInt(req.params.id, 10);
     if (isNaN(ticketId)) {
@@ -1358,14 +1358,6 @@ app.post("/api/tickets/:id/indicate-resolved", requireAuth, requirePasswordChang
       include: { author: { select: { id: true, fullName: true, role: true } } }
     });
     
-    // Add an internal note to notify IT staff
-    await prisma.internalNote.create({
-      data: {
-        ticketId,
-        authorId: req.user!.id,
-        content: "System Action: Requester indicated that the problem appears resolved."
-      }
-    });
 
     return res.status(200).json({ message: "Indicated that the problem is resolved.", data: comment });
   } catch (error) {
