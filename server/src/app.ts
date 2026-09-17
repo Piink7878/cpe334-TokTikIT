@@ -1500,9 +1500,10 @@ const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
     if (email) updateData.email = email;
     if (role) {
       const validRoles = ["REQUESTER", "IT_STAFF", "ADMIN"];
-      if (validRoles.includes(role)) {
-         updateData.role = role;
+      if (!validRoles.includes(role)) {
+         return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid role" } });
       }
+      updateData.role = role;
     }
     if (isActive !== undefined) updateData.isActive = isActive;
 
