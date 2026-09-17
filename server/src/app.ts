@@ -1366,4 +1366,198 @@ app.post("/api/tickets/:id/indicate-resolved", requireAuth, requirePasswordChang
   }
 });
 
+// ---------------------------------------------------------------------------
+// GET /api/admin/users - List users
+// ---------------------------------------------------------------------------
+app.get("/api/admin/users", requireAuth, requirePasswordChangeEnforcement, requireRole(["ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { search, role } = req.query;
+    const where: any = {};
+    if (search && typeof search === "string") {
+      where.OR = [
+        { fullName: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } }
+      ];
+    }
+    if (role && typeof role === "string") {
+      where.role = role;
+    }
+    const prisma = getPrisma();
+    const users = await prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: true,
+        isActive: true,
+        mustChangePassword: true
+      },
+      orderBy: { fullName: "asc" }
+    });
+    return res.status(200).json({ data: users });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/admin/users - Create user
+// ---------------------------------------------------------------------------
+app.post("/api/admin/users", requireAuth, requirePasswordChangeEnforcement, requireRole(["ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { name, email, role, password } = req.body;
+    if (!name || !email || !role || !password) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Name, email, role, and password are required" } });
+    }
+    const validRoles = ["REQUESTER", "IT_STAFF", "ADMIN"];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid role" } });
+    }
+
+    const prisma = getPrisma();
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      return res.status(409).json({ error: { code: "CONFLICT", message: "Email already exists" } });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const user = await prisma.user.create({
+      data: {
+        fullName: name,
+        email,
+        role,
+        passwordHash,
+        mustChangePassword: true,
+        isActive: true
+      }
+    });
+
+    return res.status(201).json({
+      id: user.id,
+      name: user.fullName,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      requiresPasswordChange: user.mustChangePassword
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PUT & PATCH /api/admin/users/:id - Update user
+// ---------------------------------------------------------------------------
+const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = req.params.id;
+    if (!userId) {
+       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "User ID required" }});
+    }
+    const { name, email, role, isActive } = req.body;
+    
+    const prisma = getPrisma();
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "User not found" } });
+    }
+
+    if (email && email !== user.email) {
+      const existing = await prisma.user.findUnique({ where: { email } });
+      if (existing) {
+        return res.status(409).json({ error: { code: "CONFLICT", message: "Email already in use" } });
+      }
+    }
+
+    if (isActive === false) {
+      if (user.id === req.user!.id) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Cannot deactivate your own account" } });
+      }
+      if (user.role === "ADMIN") {
+        const activeAdmins = await prisma.user.count({
+          where: { role: "ADMIN", isActive: true }
+        });
+        if (activeAdmins <= 1) {
+          return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Cannot deactivate the last active Admin" } });
+        }
+      }
+    }
+
+    if (role && role !== "ADMIN" && user.role === "ADMIN" && user.isActive) {
+        const activeAdmins = await prisma.user.count({
+          where: { role: "ADMIN", isActive: true }
+        });
+        if (activeAdmins <= 1) {
+          return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Cannot remove the ADMIN role from the last active Admin" } });
+        }
+    }
+
+    const updateData: any = {};
+    if (name) updateData.fullName = name;
+    if (email) updateData.email = email;
+    if (role) {
+      const validRoles = ["REQUESTER", "IT_STAFF", "ADMIN"];
+      if (validRoles.includes(role)) {
+         updateData.role = role;
+      }
+    }
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: updateData
+    });
+
+    return res.status(200).json({
+      id: updatedUser.id,
+      name: updatedUser.fullName,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      isActive: updatedUser.isActive
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+};
+app.put("/api/admin/users/:id", requireAuth, requirePasswordChangeEnforcement, requireRole(["ADMIN"]), updateUserHandler);
+app.patch("/api/admin/users/:id", requireAuth, requirePasswordChangeEnforcement, requireRole(["ADMIN"]), updateUserHandler);
+
+// ---------------------------------------------------------------------------
+// POST /api/admin/users/:id/reset-password - Reset user password
+// ---------------------------------------------------------------------------
+app.post("/api/admin/users/:id/reset-password", requireAuth, requirePasswordChangeEnforcement, requireRole(["ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = req.params.id;
+    const { newPassword } = req.body;
+    if (!newPassword) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "newPassword is required" } });
+    }
+
+    const prisma = getPrisma();
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "User not found" } });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash,
+        mustChangePassword: true
+      }
+    });
+
+    return res.status(200).json({ message: "Password reset successfully" });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
 export default app;
