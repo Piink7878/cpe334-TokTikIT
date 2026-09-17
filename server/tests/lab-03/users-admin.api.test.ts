@@ -200,56 +200,77 @@ describe("Admin User Management API Tests (Lab 3)", () => {
       data: { email: "adminC@example.com", fullName: "Admin C", role: "ADMIN", passwordHash, isActive: true }
     });
 
+    // Fetch and store original states of all other admins
+    const otherAdmins = await prisma.user.findMany({
+      where: { role: "ADMIN", id: { notIn: [adminA.id, adminC.id] } },
+      select: { id: true, isActive: true }
+    });
+
     // Deactivate all other admins so exactly A and C are active
     await prisma.user.updateMany({
       where: { role: "ADMIN", id: { notIn: [adminA.id, adminC.id] } },
       data: { isActive: false }
     });
 
-    // C logs in — C is never the deactivation target, so no 401 risk
-    const loginC = await request(app).post("/api/auth/login").send({ email: "adminC@example.com", password: "Password123!" });
-    const cookieC = loginC.headers["set-cookie"]?.[0] || "";
+    let server: any;
+    try {
+      // C logs in — C is never the deactivation target, so no 401 risk
+      const loginC = await request(app).post("/api/auth/login").send({ email: "adminC@example.com", password: "Password123!" });
+      const cookieC = loginC.headers["set-cookie"]?.[0] || "";
 
-    // Real TCP server: both requests arrive on separate connections,
-    // ensuring requireAuth runs for both before either Serializable transaction commits.
-    const server = await new Promise<any>((resolve) => {
-      const s = app.listen(0, () => resolve(s));
-    });
-    const port = (server.address() as any).port;
-    const base = `http://localhost:${port}`;
+      // Real TCP server: both requests arrive on separate connections,
+      // ensuring requireAuth runs for both before either Serializable transaction commits.
+      server = await new Promise<any>((resolve) => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const port = (server.address() as any).port;
+      const base = `http://localhost:${port}`;
 
-    // Set a delay inside the controller's Serializable transaction so both
-    // requests acquire their FOR UPDATE lock at the same time, causing a genuine
-    // P2034 serialization failure on one of them.
-    process.env.TEST_CONCURRENCY_DELAY_MS = "200";
+      // Set a delay inside the controller's Serializable transaction so both
+      // requests acquire their FOR UPDATE lock at the same time, causing a genuine
+      // P2034 serialization failure on one of them.
+      process.env.TEST_CONCURRENCY_DELAY_MS = "200";
 
-    // C fires two concurrent requests to deactivate A.
-    // One wins the Serializable lock; the other gets P2034 → 409.
-    const [res1, res2] = await Promise.all([
-      fetch(`${base}/api/admin/users/${adminA.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Cookie: cookieC },
-        body: JSON.stringify({ isActive: false })
-      }),
-      fetch(`${base}/api/admin/users/${adminA.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Cookie: cookieC },
-        body: JSON.stringify({ isActive: false })
-      })
-    ]);
+      // C fires two concurrent requests to deactivate A.
+      // One wins the Serializable lock; the other gets P2034 → 409.
+      const [res1, res2] = await Promise.all([
+        fetch(`${base}/api/admin/users/${adminA.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Cookie: cookieC },
+          body: JSON.stringify({ isActive: false })
+        }),
+        fetch(`${base}/api/admin/users/${adminA.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Cookie: cookieC },
+          body: JSON.stringify({ isActive: false })
+        })
+      ]);
 
-    delete process.env.TEST_CONCURRENCY_DELAY_MS;
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+      const statuses = [res1.status, res2.status].sort((a, b) => a - b);
 
-    const statuses = [res1.status, res2.status].sort((a, b) => a - b);
+      // Exactly one succeeds (200), exactly one gets a Serializable conflict (409).
+      expect(statuses).toEqual([200, 409]);
 
-    // Exactly one succeeds (200), exactly one gets a Serializable conflict (409).
-    expect(statuses).toEqual([200, 409]);
+      const activeAdmins = await prisma.user.count({ where: { role: "ADMIN", isActive: true } });
+      expect(activeAdmins).toBe(1);
+    } finally {
+      if (server) {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+      delete process.env.TEST_CONCURRENCY_DELAY_MS;
 
-    const activeAdmins = await prisma.user.count({ where: { role: "ADMIN", isActive: true } });
-    expect(activeAdmins).toBe(1);
+      // Delete the specific test fixtures
+      await prisma.user.deleteMany({
+        where: { id: { in: [adminA.id, adminC.id] } }
+      });
 
-    // Cleanup
-    await prisma.user.deleteMany({ where: { id: { in: [adminA.id, adminC.id] } } });
+      // Restore the original isActive states of all other Admins
+      for (const admin of otherAdmins) {
+        await prisma.user.update({
+          where: { id: admin.id },
+          data: { isActive: admin.isActive }
+        });
+      }
+    }
   });
 });
