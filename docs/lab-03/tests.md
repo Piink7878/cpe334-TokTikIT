@@ -10,8 +10,8 @@ This document provides a comprehensive test plan for the Lab 3 increment, mappin
 | **API-02** | API | AC-02 | Login with initial password | Login succeeds but restricts access until password changed | `server/tests/lab-03/auth.api.test.ts` | Planned |
 | **API-03** | API | AC-03 | Requester tries to act as another user | Backend ignores supplied `requesterId` and uses session | `server/tests/lab-03/authorization.api.test.ts` | Planned |
 | **API-04** | API | AC-04, AC-15 | Requester requests internal notes | 403 Forbidden; no note content leaked | `server/tests/lab-03/authorization.api.test.ts` | Planned |
-| **API-05** | API | AC-05 | IT Staff requests ticket details | Returns both Public Comments and Internal Notes | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
-| **API-06** | API | AC-06 | IT Staff updates ticket status | Status is updated successfully | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Planned |
+| **API-05** | API | AC-05 | IT Staff requests ticket details | Returns both Public Comments and Internal Notes | `server/tests/lab-03/staff-operations.api.test.ts` | Implemented / Passed |
+| **API-06** | API | AC-06 | IT Staff updates ticket status | Status is updated successfully and transition is logged with an internal note | `server/tests/lab-03/staff-operations.api.test.ts` | Implemented / Passed |
 | **API-07** | API | AC-07, AC-15 | Requester attempts to update `it_priority` | 403 Forbidden; priority unchanged | `server/tests/lab-03/authorization.api.test.ts` | Planned |
 | **API-08** | API | AC-08 | Admin attempts to deactivate own account | 400 Bad Request; prevents deactivation | `server/tests/lab-03/users-admin.api.test.ts` | Planned |
 | **API-09** | API | AC-09 | Admin deactivates/changes role of last admin | 400 Bad Request; action prevented | `server/tests/lab-03/users-admin.api.test.ts` | Planned |

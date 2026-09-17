@@ -94,7 +94,7 @@ Develop a fully functional IT Service Desk ticketing system that supports robust
     *   Add `requires_password_change` (boolean, default false).
 *   **Ticket Model Updates:** Existing Categories, Related Systems, Tickets, and Attachments remain valid after migration.
     *   Add `assignee_id` (foreign key to User, nullable).
-    *   Add `status` (enum: NEW, OPEN, IN_PROGRESS, WAITING_FOR_REQUESTER, RESOLVED, CLOSED, REOPENED, CANCELLED).
+    *   Add `status` (enum: NEW, OPEN, IN_PROGRESS, WAITING_FOR_REQUESTER, RESOLVED, CLOSED, REOPENED, CANCELLED, REJECTED).
     *   Add `it_priority` (enum: LOW, MEDIUM, HIGH, CRITICAL).
 *   **New Models:**
     *   **Comment/Note:** To handle the unified timeline. Fields: `id`, `ticket_id` (FK), `author_id` (FK), `content` (text), `is_internal_note` (boolean, default false), `created_at` (timestamp).
