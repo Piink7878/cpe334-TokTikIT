@@ -389,3 +389,98 @@ export async function updateTicketStatus(ticketId: number, status: string, rejec
   return res.json();
 }
 
+// ---------------------------------------------------------------------------
+// Admin User Management
+// ---------------------------------------------------------------------------
+export interface AdminUserFilters {
+  search?: string;
+  role?: string;
+  isActive?: boolean;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface AdminUser {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getAdminUsers(filters?: AdminUserFilters): Promise<PaginatedResponse<AdminUser>> {
+  const params = new URLSearchParams();
+  if (filters) {
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') {
+        params.append(key, String(value));
+      }
+    });
+  }
+
+  const queryString = params.toString();
+  const url = `${API_URL}/api/admin/users${queryString ? `?${queryString}` : ''}`;
+
+  const res = await fetch(url, {
+    credentials: "include",
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to fetch users");
+  }
+
+  return res.json();
+}
+
+export async function createAdminUser(data: { fullName: string; email: string; role: string }) {
+  const res = await fetch(`${API_URL}/api/admin/users`, {
+    credentials: "include",
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to create user");
+  }
+
+  return res.json();
+}
+
+export async function updateAdminUser(userId: string, data: { fullName?: string; role?: string; isActive?: boolean }) {
+  const res = await fetch(`${API_URL}/api/admin/users/${userId}`, {
+    credentials: "include",
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to update user");
+  }
+
+  return res.json();
+}
+
+export async function resetAdminUserPassword(userId: string) {
+  const res = await fetch(`${API_URL}/api/admin/users/${userId}/reset-password`, {
+    credentials: "include",
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to reset password");
+  }
+
+  return res.json();
+}

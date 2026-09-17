@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import session from "express-session";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { requireAuth, requirePasswordChangeEnforcement, requireRole } from "./middlewares/auth.js";
 // getPrisma() is your lazy database handle. Call it INSIDE a route when you
 // need the DB (Issue 4). It is intentionally unused until then.
@@ -1177,6 +1178,255 @@ app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnf
       message: "Status updated successfully",
       ticket: updatedTicket
     });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/admin/users
+// ---------------------------------------------------------------------------
+app.get("/api/admin/users", requireAuth, requirePasswordChangeEnforcement, requireRole(["ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { search, role, isActive, page = "1", pageSize = "10" } = req.query;
+    
+    let parsedPage = parseInt(page as string, 10);
+    let parsedLimit = parseInt(pageSize as string, 10);
+
+    if (isNaN(parsedPage) || parsedPage < 1) parsedPage = 1;
+    if (isNaN(parsedLimit) || parsedLimit < 1) parsedLimit = 10;
+
+    const where: any = {};
+    if (search && typeof search === "string") {
+      where.OR = [
+        { fullName: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } }
+      ];
+    }
+    if (role && typeof role === "string") {
+      where.role = role;
+    }
+    if (isActive !== undefined) {
+      where.isActive = isActive === "true";
+    }
+
+    const prisma = getPrisma();
+    const skip = (parsedPage - 1) * parsedLimit;
+
+    const [users, totalItems] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          role: true,
+          isActive: true,
+          mustChangePassword: true,
+          createdAt: true,
+          updatedAt: true
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: parsedLimit
+      }),
+      prisma.user.count({ where })
+    ]);
+
+    const totalPages = Math.ceil(totalItems / parsedLimit);
+
+    return res.status(200).json({
+      data: users,
+      pagination: {
+        page: parsedPage,
+        pageSize: parsedLimit,
+        totalItems,
+        totalPages,
+        hasNextPage: parsedPage < totalPages,
+        hasPreviousPage: parsedPage > 1
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// Helper for generating strong passwords
+function generateTempPassword(): string {
+  const upper = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const lower = "abcdefghijklmnopqrstuvwxyz";
+  const num = "0123456789";
+  const spec = "!@#$%^&*()_+~|{}[]:;?><,./-=";
+  const all = upper + lower + num + spec;
+  
+  let password = "";
+  password += upper[crypto.randomInt(0, upper.length)];
+  password += lower[crypto.randomInt(0, lower.length)];
+  password += num[crypto.randomInt(0, num.length)];
+  password += spec[crypto.randomInt(0, spec.length)];
+  
+  for (let i = 0; i < 8; i++) {
+    password += all[crypto.randomInt(0, all.length)];
+  }
+  
+  return password.split('').sort(() => 0.5 - Math.random()).join('');
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/admin/users
+// ---------------------------------------------------------------------------
+app.post("/api/admin/users", requireAuth, requirePasswordChangeEnforcement, requireRole(["ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { fullName, email, role } = req.body;
+    
+    if (!fullName || !email || !role) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Name, email and role are required." } });
+    }
+
+    const validRoles = ["REQUESTER", "IT_STAFF", "ADMIN"];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid role." } });
+    }
+
+    const prisma = getPrisma();
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Email is already in use." } });
+    }
+
+    const tempPassword = generateTempPassword();
+    const passwordHash = await bcrypt.hash(tempPassword, 12);
+
+    const newUser = await prisma.user.create({
+      data: {
+        fullName,
+        email,
+        role,
+        passwordHash,
+        mustChangePassword: true,
+        isActive: true
+      }
+    });
+
+    return res.status(201).json({
+      message: "User created successfully",
+      user: {
+        id: newUser.id,
+        fullName: newUser.fullName,
+        email: newUser.email,
+        role: newUser.role,
+        isActive: newUser.isActive,
+        mustChangePassword: newUser.mustChangePassword
+      },
+      tempPassword
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/admin/users/:id
+// ---------------------------------------------------------------------------
+app.patch("/api/admin/users/:id", requireAuth, requirePasswordChangeEnforcement, requireRole(["ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const targetUserId = req.params.id;
+    const currentAdminId = req.user!.id;
+    const { fullName, role, isActive } = req.body;
+
+    const prisma = getPrisma();
+    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!targetUser) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "User not found" } });
+    }
+
+    // Self-protection rule
+    if (targetUserId === currentAdminId) {
+      if (role && role !== "ADMIN") {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "You cannot demote yourself from the ADMIN role." } });
+      }
+      if (isActive !== undefined && isActive === false) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "You cannot deactivate your own account." } });
+      }
+    }
+
+    // Last admin safeguard
+    if ((role && role !== "ADMIN" && targetUser.role === "ADMIN") || (isActive === false && targetUser.role === "ADMIN" && targetUser.isActive)) {
+      const activeAdminsCount = await prisma.user.count({
+        where: { role: "ADMIN", isActive: true }
+      });
+      if (activeAdminsCount <= 1) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Cannot demote or deactivate the last active administrator." } });
+      }
+    }
+
+    const updateData: any = {};
+    if (fullName) updateData.fullName = fullName;
+    if (role) {
+      const validRoles = ["REQUESTER", "IT_STAFF", "ADMIN"];
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid role." } });
+      }
+      updateData.role = role;
+    }
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    const updatedUser = await prisma.user.update({
+      where: { id: targetUserId },
+      data: updateData
+    });
+
+    return res.status(200).json({
+      message: "User updated successfully",
+      user: {
+        id: updatedUser.id,
+        fullName: updatedUser.fullName,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        isActive: updatedUser.isActive,
+        mustChangePassword: updatedUser.mustChangePassword
+      }
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/admin/users/:id/reset-password
+// ---------------------------------------------------------------------------
+app.post("/api/admin/users/:id/reset-password", requireAuth, requirePasswordChangeEnforcement, requireRole(["ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const targetUserId = req.params.id;
+
+    const prisma = getPrisma();
+    const targetUser = await prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!targetUser) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "User not found" } });
+    }
+
+    const tempPassword = generateTempPassword();
+    const passwordHash = await bcrypt.hash(tempPassword, 12);
+
+    await prisma.user.update({
+      where: { id: targetUserId },
+      data: {
+        passwordHash,
+        mustChangePassword: true
+      }
+    });
+
+    return res.status(200).json({
+      message: "Password reset successfully",
+      tempPassword
+    });
+
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });
