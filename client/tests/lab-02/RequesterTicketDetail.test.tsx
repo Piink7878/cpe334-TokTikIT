@@ -78,7 +78,7 @@ describe('RequesterTicketDetail Component', () => {
     });
 
     const commentsTab = screen.getByText(/Public Comments/);
-    expect(commentsTab).toBeDisabled();
+    expect(commentsTab).not.toBeDisabled();
 
     const serviceActionsTab = screen.getByText(/Service Actions/);
     expect(serviceActionsTab).toBeDisabled();

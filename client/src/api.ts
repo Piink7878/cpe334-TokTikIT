@@ -484,3 +484,83 @@ export async function resetAdminUserPassword(userId: string) {
 
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// Comments and Internal Notes
+// ---------------------------------------------------------------------------
+export async function getTicketComments(ticketId: number) {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
+    credentials: "include",
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to fetch comments");
+  }
+
+  return res.json();
+}
+
+export async function postTicketComment(ticketId: number, content: string) {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
+    credentials: "include",
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content })
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to post comment");
+  }
+
+  return res.json();
+}
+
+export async function indicateTicketResolved(ticketId: number) {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/indicate-resolved`, {
+    credentials: "include",
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to indicate resolved");
+  }
+
+  return res.json();
+}
+
+export async function getInternalNotes(ticketId: number) {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/internal-notes`, {
+    credentials: "include",
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to fetch internal notes");
+  }
+
+  return res.json();
+}
+
+export async function postInternalNote(ticketId: number, content: string) {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/internal-notes`, {
+    credentials: "include",
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content })
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new Error(errorData?.error?.message || "Failed to post internal note");
+  }
+
+  return res.json();
+}

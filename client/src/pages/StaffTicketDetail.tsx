@@ -6,7 +6,9 @@ import {
   claimTicket, 
   assignTicket, 
   updateTicketPriority, 
-  updateTicketStatus 
+  updateTicketStatus,
+  postTicketComment,
+  postInternalNote
 } from "../api";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -48,6 +50,36 @@ export default function StaffTicketDetail() {
   
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [newComment, setNewComment] = useState("");
+  const [newNote, setNewNote] = useState("");
+
+  const handlePostComment = async () => {
+    if (!newComment.trim()) return;
+    try {
+      setErrorMsg("");
+      setSuccessMsg("");
+      await postTicketComment(ticket.id, newComment);
+      setNewComment("");
+      setSuccessMsg("Public comment posted successfully");
+      await fetchTicketAndAssignees();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to post comment");
+    }
+  };
+
+  const handlePostNote = async () => {
+    if (!newNote.trim()) return;
+    try {
+      setErrorMsg("");
+      setSuccessMsg("");
+      await postInternalNote(ticket.id, newNote);
+      setNewNote("");
+      setSuccessMsg("Internal note posted successfully");
+      await fetchTicketAndAssignees();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to post internal note");
+    }
+  };
 
   const fetchTicketAndAssignees = async () => {
     setLoading(true);
@@ -236,6 +268,40 @@ export default function StaffTicketDetail() {
                 </div>
               )}
             </div>
+            
+            <div className="card-footer bg-light pt-3">
+              <ul className="nav nav-tabs mb-3" id="activityTab" role="tablist">
+                <li className="nav-item" role="presentation">
+                  <button className="nav-link active" id="public-tab" data-bs-toggle="tab" data-bs-target="#public-comment" type="button" role="tab" style={{ color: "#000" }}>Public Comment</button>
+                </li>
+                <li className="nav-item" role="presentation">
+                  <button className="nav-link" id="internal-tab" data-bs-toggle="tab" data-bs-target="#internal-note" type="button" role="tab" style={{ color: "var(--color-primary)" }}>Internal Note</button>
+                </li>
+              </ul>
+              <div className="tab-content" id="activityTabContent">
+                <div className="tab-pane fade show active" id="public-comment" role="tabpanel">
+                  <textarea 
+                    className="form-control mb-2" 
+                    rows={3} 
+                    placeholder="Write a public comment visible to the requester..."
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                  ></textarea>
+                  <button className="btn btn-secondary" onClick={handlePostComment} disabled={!newComment.trim()}>Post Comment</button>
+                </div>
+                <div className="tab-pane fade" id="internal-note" role="tabpanel">
+                  <textarea 
+                    className="form-control mb-2 border-primary" 
+                    rows={3} 
+                    placeholder="Write an internal note visible only to IT Staff..."
+                    value={newNote}
+                    onChange={(e) => setNewNote(e.target.value)}
+                  ></textarea>
+                  <button className="btn btn-primary" onClick={handlePostNote} disabled={!newNote.trim()}>Add Internal Note</button>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
 

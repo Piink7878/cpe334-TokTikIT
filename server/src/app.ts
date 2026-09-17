@@ -495,7 +495,11 @@ app.get("/api/tickets/:id", requireAuth, requirePasswordChangeEnforcement, async
         requester: { select: { id: true, fullName: true, email: true } },
         category: { select: { id: true, name: true } },
         relatedSystem: { select: { id: true, name: true } },
-        attachments: true
+        attachments: true,
+        publicComments: {
+          include: { author: { select: { id: true, fullName: true, role: true } } },
+          orderBy: { createdAt: "asc" }
+        }
       }
     });
 
@@ -529,7 +533,8 @@ app.get("/api/tickets/:id", requireAuth, requirePasswordChangeEnforcement, async
         removedAt: att.removedAt,
         removedReason: att.removalReason,
         createdAt: att.createdAt
-      })) : []
+      })) : [],
+      publicComments: ticket.publicComments
     };
 
     return res.status(200).json({ data: formattedTicket });
@@ -1427,6 +1432,190 @@ app.post("/api/admin/users/:id/reset-password", requireAuth, requirePasswordChan
       tempPassword
     });
 
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+// ---------------------------------------------------------------------------
+// GET /api/tickets/:id/comments
+// ---------------------------------------------------------------------------
+app.get("/api/tickets/:id/comments", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    // Role-based access check
+    if (req.user!.role === "REQUESTER" && ticket.requesterId !== req.user!.id) {
+      return res.status(403).json({ error: { code: "FORBIDDEN_ACCESS", message: "You do not have permission to view this ticket's comments." } });
+    }
+
+    const comments = await prisma.publicComment.findMany({
+      where: { ticketId },
+      include: { author: { select: { id: true, fullName: true, role: true } } },
+      orderBy: { createdAt: "asc" }
+    });
+
+    return res.status(200).json({ data: comments });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/tickets/:id/comments
+// ---------------------------------------------------------------------------
+app.post("/api/tickets/:id/comments", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
+    }
+
+    const { content } = req.body;
+    if (!content || typeof content !== "string" || content.trim() === "") {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Comment content cannot be empty" } });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    if (req.user!.role === "REQUESTER" && ticket.requesterId !== req.user!.id) {
+      return res.status(403).json({ error: { code: "FORBIDDEN_ACCESS", message: "You do not have permission to comment on this ticket." } });
+    }
+
+    const comment = await prisma.publicComment.create({
+      data: {
+        ticketId,
+        authorId: req.user!.id,
+        body: content.trim()
+      },
+      include: { author: { select: { id: true, fullName: true, role: true } } }
+    });
+
+    return res.status(201).json({ data: comment });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/tickets/:id/indicate-resolved
+// ---------------------------------------------------------------------------
+app.post("/api/tickets/:id/indicate-resolved", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    if (req.user!.role === "REQUESTER" && ticket.requesterId !== req.user!.id) {
+      return res.status(403).json({ error: { code: "FORBIDDEN_ACCESS", message: "You do not have permission to modify this ticket." } });
+    }
+
+    const activeStatuses = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER"];
+    if (!activeStatuses.includes(ticket.currentStatus)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Ticket is not in an active state to indicate resolution." } });
+    }
+
+    const comment = await prisma.publicComment.create({
+      data: {
+        ticketId,
+        authorId: req.user!.id,
+        body: "Requester indicated that the problem appears resolved."
+      },
+      include: { author: { select: { id: true, fullName: true, role: true } } }
+    });
+
+    return res.status(201).json({ 
+      message: "Indicated resolved successfully.", 
+      data: comment 
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/tickets/:id/internal-notes
+// ---------------------------------------------------------------------------
+app.get("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    const notes = await prisma.internalNote.findMany({
+      where: { ticketId },
+      include: { author: { select: { id: true, fullName: true, role: true } } },
+      orderBy: { createdAt: "asc" }
+    });
+
+    return res.status(200).json({ data: notes });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/tickets/:id/internal-notes
+// ---------------------------------------------------------------------------
+app.post("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
+    }
+
+    const { content } = req.body;
+    if (!content || typeof content !== "string" || content.trim() === "") {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Note content cannot be empty" } });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    const note = await prisma.internalNote.create({
+      data: {
+        ticketId,
+        authorId: req.user!.id,
+        body: content.trim()
+      },
+      include: { author: { select: { id: true, fullName: true, role: true } } }
+    });
+
+    return res.status(201).json({ data: note });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });
