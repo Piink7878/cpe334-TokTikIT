@@ -8,6 +8,9 @@ test.describe('Administrator User Management Flow (Lab 3)', () => {
   let initialUserName: string;
   let updatedUserName: string;
 
+  // Single constant for the reset password — used in both Admin reset and user login
+  const resetPassword = 'NewResetPassword123!';
+
   test.beforeAll(async () => {
     // Ensure admin user exists and is active without mandatory password change
     await prisma.user.upsert({
@@ -124,13 +127,111 @@ test.describe('Administrator User Management Flow (Lab 3)', () => {
     await page.click('button:has-text("Set New Initial Password")');
     await expect(page.locator('h5:has-text("Reset Password")')).toBeVisible();
 
-    // Fill reset password form
+    // Fill reset password form using the single resetPassword constant
     const resetModal = page.locator('.modal.show');
-    await resetModal.locator('input[type="password"]').fill('NewResetPassword123!');
+    await resetModal.locator('input[type="password"]').fill(resetPassword);
     await resetModal.locator('button[type="submit"]:has-text("Reset Password")').click();
 
     // Verify reset success
     await expect(page.locator('.alert-success')).toContainText('Password reset successfully');
     await page.waitForLoadState('networkidle');
+  });
+
+  test('Self-deactivation protection: Admin cannot deactivate own account via UI', async ({ page }) => {
+    // 1. Remain in (or re-establish) the Admin session
+    await page.goto('/login');
+    await page.waitForSelector('input[type="email"]');
+    await page.fill('input[type="email"]', 'admin@toktikit.local');
+    await page.fill('input[type="password"]', 'Password123!');
+    await page.click('button[type="submit"]');
+    await expect(page).toHaveURL(/\/user-management/);
+
+    // 2. Clear any active search so the Admin's own row is visible
+    const searchInput = page.locator('input[placeholder="Search by name or email..."]');
+    await searchInput.fill('');
+    await expect(page.locator('tbody tr', { hasText: 'admin@toktikit.local' })).toBeVisible();
+
+    // 3. Locate the Admin's own row using the "(You)" badge indicator
+    const adminRow = page.locator('tbody tr', { hasText: 'Admin User' }).filter({ hasText: 'You' });
+    await expect(adminRow).toBeVisible();
+
+    // 4. Click Edit on the Admin's own row
+    await adminRow.locator('button:has-text("Edit")').click();
+
+    // 5. Verify the Edit User modal is visible
+    await expect(page.locator('h5:has-text("Edit User")')).toBeVisible();
+
+    // 6. Uncheck the #isActiveSwitch to attempt self-deactivation
+    const isActiveSwitch = page.locator('#isActiveSwitch');
+    await expect(isActiveSwitch).toBeChecked(); // currently active
+    await isActiveSwitch.uncheck();
+
+    // 7. Verify warning text is shown: "You cannot deactivate your own account."
+    await expect(page.locator('text=You cannot deactivate your own account.')).toBeVisible();
+
+    // 8. Click Save Changes to send the request to the server
+    await page.locator('button[type="submit"]:has-text("Save Changes")').click();
+
+    // 9. Verify the server-side error is shown in .alert-danger
+    await expect(page.locator('.alert-danger')).toContainText('Cannot deactivate your own account');
+
+    // 10. Verify the Edit User modal is still open (backend rejected the request)
+    await expect(page.locator('h5:has-text("Edit User")')).toBeVisible();
+
+    // 11. Close the modal using the modal header's close button
+    await page.locator('.modal.show button.btn-close').click();
+
+    // 12. Verify the Admin row is still Active in the user list
+    await searchInput.fill('admin@toktikit.local');
+    const updatedAdminRow = page.locator('tbody tr', { hasText: 'admin@toktikit.local' });
+    await expect(updatedAdminRow).toContainText('Active');
+
+    // 13. Verify Admin can still use the application and remains on /user-management
+    await expect(page).toHaveURL(/\/user-management/);
+  });
+
+  test('Mandatory password change: Reset user must change password before accessing app', async ({ page }) => {
+    // This test depends on the first test having reset testUserEmail's password to resetPassword.
+    // testUserEmail is an IT_STAFF user (role was changed in step 4 of the first test).
+
+    // 1. Log in as the test user using resetPassword
+    await page.goto('/login');
+    await page.waitForSelector('input[type="email"]');
+    await page.fill('input[type="email"]', testUserEmail);
+    await page.fill('input[type="password"]', resetPassword);
+    await page.click('button[type="submit"]');
+
+    // 2. Assert redirect to /change-password (mustChangePassword is set after Admin password reset)
+    await expect(page).toHaveURL(/\/change-password/);
+
+    // 3. Attempt to navigate to /user-management and assert blocked, redirected back to /change-password
+    await page.goto('/user-management');
+    await expect(page).toHaveURL(/\/change-password/);
+
+    // 4. Fill the change-password form with a new valid password
+    const finalPassword = 'FinalPassword456!';
+    await page.fill('#currentPassword', resetPassword);
+    await page.fill('#newPassword', finalPassword);
+    await page.fill('#confirmPassword', finalPassword);
+
+    // 5. Submit the form
+    await page.click('button[type="submit"]');
+
+    // 6. Assert the user reaches the landing page after password change.
+    // ChangePassword.tsx navigates to /my-tickets after success.
+    // IT_STAFF is not redirected away from /my-tickets by ProtectedRoute.
+    await expect(page).toHaveURL(/\/my-tickets/);
+
+    // 7. Log out the test user
+    await page.click('button:has-text("Logout")');
+    await expect(page).toHaveURL(/\/login/);
+
+    // 8. Log back in as Admin
+    await page.fill('input[type="email"]', 'admin@toktikit.local');
+    await page.fill('input[type="password"]', 'Password123!');
+    await page.click('button[type="submit"]');
+
+    // 9. Verify Admin can still access /user-management
+    await expect(page).toHaveURL(/\/user-management/);
   });
 });
