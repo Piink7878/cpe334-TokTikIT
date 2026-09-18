@@ -30,13 +30,14 @@ This document provides a comprehensive test plan for the Lab 3 increment, mappin
 | **E2E-01** | E2E | AC-01, AC-13 | End-to-end login flow | Unauth redirected to login; success enters app | `e2e/lab-03/authentication.spec.ts` | Pass |
 | **E2E-02** | E2E | AC-06, AC-11 | Staff ticket lifecycle | Staff finds a ticket in Staff Queue, opens Ticket Detail, claims the ticket, verifies ownership, updates IT Priority and Status, adds Public Comment and Internal Note, verifies persistence after reload, then logs in as Requester to verify Public Comment visibility and Internal Note invisibility. | `e2e/lab-03/staff-ticket-flow.spec.ts` | Pass |
 | **E2E-03** | E2E | AC-08, AC-10, AC-02 | Admin user management flow and mandatory password change | Admin logs in, searches/filters the user list, creates a new user, edits the user's name and role (to IT_STAFF), resets the user's password, verifies self-deactivation protection (UI warning shown and server returns 400 when Admin tries to deactivate own account), then logs out; the reset user logs in, is redirected to /change-password, is blocked from navigating away before completing the change, fills and submits the change-password form, lands on /my-tickets, and logs out; Admin logs back in to confirm continued access to /user-management. | `e2e/lab-03/user-administration.spec.ts` | Pass |
-| **MIG-01** | API | Migration | Legacy data regression check against current DB state (seeded tickets TKT-1001–TKT-1004 and Ticket→Attachment FK schema compatibility) | Legacy seeded tickets TKT-1001–TKT-1004 remain present, requester relationships remain intact (`requesterId` NOT NULL and resolves to seeded User email), and Ticket→Attachment FK join on TKT-1001 executes without error. | `server/tests/lab-03/migration-regression.api.test.ts` | Pass with coverage gap |
+| **MIG-01** | API | Migration | Legacy data regression check against current DB state (seeded tickets TKT-1001–TKT-1004 and Ticket→Attachment FK schema compatibility) | Legacy tickets TKT-1001–TKT-1004 remain present, their requester relationships remain intact (`requesterId` is NOT NULL and resolves to seeded User email), and Ticket-to-Attachment relation/FK compatibility can be queried on TKT-1001. | `server/tests/lab-03/migration-regression.api.test.ts` | Pass with coverage gap |
 | **UI-06** | Component | Responsive | Ticket Queue responsiveness | Renders as data table on desktop, cards on mobile | `client/tests/lab-03/Responsive.test.tsx` | Pass |
 
 ## Notes & Limitations
 
 ### 1. MIG-01 Migration Verification Scope & Limitations
-- **Verification Method**: MIG-01 is a regression check against the current database state. It confirms that legacy seeded records and foreign key relationships remain intact.
+- **Explicit Limitation**: This is a regression check against the current database state, not a fresh migration execution or before/after preservation test. No seeded legacy Attachment record exists in the repository, so Attachment data preservation cannot be directly asserted.
+- **Verification Method**: MIG-01 confirms that legacy seeded records (`TKT-1001`–`TKT-1004`) and their requester relationships remain intact, and that Ticket→Attachment foreign key relation/compatibility can be queried on `TKT-1001`.
 - **Execution Limitation**: The test does **not** execute a fresh migration or compare before-and-after migration state.
 - **Attachment Coverage Gap**: `seed.ts` and all migration SQL files contain no seeded legacy `Attachment` records, so no legacy attachment row exists in the database to assert against. The test verifies schema and foreign-key join compatibility on `TKT-1001`, but does not claim evidence of legacy attachment data preservation.
 
@@ -50,3 +51,6 @@ This document provides a comprehensive test plan for the Lab 3 increment, mappin
 - Staff E2E (`e2e/lab-03/staff-ticket-flow.spec.ts`) dynamically creates a fresh ticket per run to test lifecycle mutations.
 - However, the flow relies on stable seeded user accounts (`req2@toktikit.local`, `staff2@toktikit.local`) and seeded reference entities (`categories[0]`, `relatedSystems[0]`) existing in the environment.
 
+### 4. Legacy Lab 2 E2E Suite Outside Lab 3 Scope
+- The legacy Lab 2 E2E tests (`e2e/lab-02/`) are outside the Lab 3 verification scope.
+- They still depend on the pre-Lab-3 Requester selector UI, which was intentionally removed in Lab 3 per the specification (FR-01, Section 8.2).
