@@ -1,0 +1,74 @@
+=== TokTickIT Lab 3 Traceability & Verification Check ===
+Generated on: 2026-09-19T14:48:09.117Z
+Source file: docs/lab-03/tests.md
+
+1. Traceability Rows Found: 26
+
+2. Test File Existence Verification:
+  - [EXISTS] server/tests/lab-03/auth.api.test.ts
+  - [EXISTS] server/tests/lab-03/authorization.api.test.ts
+  - [EXISTS] server/tests/lab-03/staff-ticket-detail.api.test.ts
+  - [EXISTS] server/tests/lab-03/users-admin.api.test.ts
+  - [EXISTS] server/tests/lab-03/staff-queue.api.test.ts
+  - [EXISTS] server/tests/lab-03/comments-notes.api.test.ts
+  - [EXISTS] client/tests/lab-03/Login.test.tsx
+  - [EXISTS] client/tests/lab-03/ChangePassword.test.tsx
+  - [EXISTS] client/tests/lab-03/StaffTicketQueue.test.tsx
+  - [EXISTS] client/tests/lab-03/StaffTicketDetail.test.tsx
+  - [EXISTS] client/tests/lab-03/UserManagement.test.tsx
+  - [EXISTS] e2e/lab-03/authentication.spec.ts
+  - [EXISTS] e2e/lab-03/staff-ticket-flow.spec.ts
+  - [EXISTS] e2e/lab-03/user-administration.spec.ts
+  - [EXISTS] server/tests/lab-03/migration-regression.api.test.ts
+  - [MISSING] client/tests/lab-03/Responsive.test.tsx
+
+3. Requirement / AC Coverage Mapping:
+  - AC-01: mapped to API-01, UI-01, E2E-01 (3 test entries)
+  - AC-02: mapped to API-02, UI-02, E2E-03 (3 test entries)
+  - AC-03: mapped to API-03 (1 test entries)
+  - AC-04: mapped to API-04 (1 test entries)
+  - AC-05: mapped to API-05, API-16, UI-04 (3 test entries)
+  - AC-06: mapped to API-06, E2E-02 (2 test entries)
+  - AC-07: mapped to API-07 (1 test entries)
+  - AC-08: mapped to API-08, E2E-03 (2 test entries)
+  - AC-09: mapped to API-09 (1 test entries)
+  - AC-10: mapped to API-10, UI-05, E2E-03 (3 test entries)
+  - AC-11: mapped to API-11, UI-03, E2E-02 (3 test entries)
+  - AC-12: mapped to API-12 (1 test entries)
+  - AC-13: mapped to API-13, UI-01, E2E-01 (3 test entries)
+  - AC-14: mapped to API-14, API-16, UI-04 (3 test entries)
+  - AC-15: mapped to API-04, API-07, API-15 (3 test entries)
+  - Migration: mapped to MIG-01 (1 test entries)
+  - Responsive: mapped to UI-06 (1 test entries)
+
+4. Spec Acceptance Criteria (AC-01 to AC-15) Completeness Check:
+  - AC-01: COVERED by [API-01, UI-01, E2E-01]
+  - AC-02: COVERED by [API-02, UI-02, E2E-03]
+  - AC-03: COVERED by [API-03]
+  - AC-04: COVERED by [API-04]
+  - AC-05: COVERED by [API-05, API-16, UI-04]
+  - AC-06: COVERED by [API-06, E2E-02]
+  - AC-07: COVERED by [API-07]
+  - AC-08: COVERED by [API-08, E2E-03]
+  - AC-09: COVERED by [API-09]
+  - AC-10: COVERED by [API-10, UI-05, E2E-03]
+  - AC-11: COVERED by [API-11, UI-03, E2E-02]
+  - AC-12: COVERED by [API-12]
+  - AC-13: COVERED by [API-13, UI-01, E2E-01]
+  - AC-14: COVERED by [API-14, API-16, UI-04]
+  - AC-15: COVERED by [API-04, API-07, API-15]
+
+5. Discrepancies & Coverage Findings:
+  - [DISCREPANCY] File missing: client/tests/lab-03/Responsive.test.tsx referenced by UI-06
+
+6. Verified Test Execution Summary (main HEAD b3e46a2):
+  - Server Tests: 148 / 148 PASSED (13 test files)
+  - Client Tests: 50 / 50 PASSED (11 test files)
+  - Playwright E2E Tests: 24 / 24 PASSED (Desktop Chrome, Tablet iPad, Mobile Safari)
+  - Total Automated Tests: 222 PASSED across suites
+
+7. Timeline Proof (Spec committed before implementation):
+  - Commit 52bd843 (2026-09-15): Added docs/lab-03/specification.md, tests.md, api-spec.md, ui-spec.md
+  - Commit c65767c (2026-09-15): First implementation (PR #53 User DB model & migration)
+  - PR #54 (2026-09-16): Authentication API & password change implementation
+  - RESULT: PASS (Specification and Test Plan committed strictly before implementation)
