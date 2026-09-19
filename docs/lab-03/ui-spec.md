@@ -29,12 +29,14 @@ All screens must handle the following states gracefully without breaking the lay
 **Login Screen:**
 *   **Structure:** Centered card on a subtle Zen Green gradient background.
 *   **Components:** Email input, Password input, 'Login' primary button.
+*   **Navigation on Success (Normal Login):** Role-based redirection routes `REQUESTER` to `/my-tickets`, `IT_STAFF` to `/staff-queue`, and `ADMIN` to `/user-management`.
 *   **States:** Displays inline validation for empty fields. On failure (401), displays a generic "Invalid credentials or inactive account" alert at the top of the card.
 *   **Responsive:** Fixed width card on desktop/tablet (e.g., 400px). 100% width with padding on mobile.
 
 **Mandatory First-Login Password Change Screen:**
 *   **Structure:** Interstitial centered card appearing immediately after a successful login with an initial password.
 *   **Components:** Read-only explanatory text ("You must change your initial password..."), 'New Password' input, 'Confirm Password' input, 'Update & Continue' button.
+*   **Navigation on Success:** After completing the mandatory password change form, the user navigates directly to `/my-tickets` to enter the application (distinguished from normal login, which routes IT Staff to `/staff-queue`).
 *   **States:** Form validation ensures passwords match. User cannot click away or navigate; the only exit is completing the form or logging out.
 
 ### 3.2 Authenticated App Shell

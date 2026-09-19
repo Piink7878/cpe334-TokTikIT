@@ -29,7 +29,7 @@ This document provides a comprehensive test plan for the Lab 3 increment, mappin
 | **UI-05** | Component | AC-10 | Admin User Management modal | Renders user list and create/edit modal | `client/tests/lab-03/UserManagement.test.tsx` | Pass |
 | **E2E-01** | E2E | AC-01, AC-13 | End-to-end login flow | Unauth redirected to login; success enters app | `e2e/lab-03/authentication.spec.ts` | Pass |
 | **E2E-02** | E2E | AC-06, AC-11 | Staff ticket lifecycle | Staff finds a ticket in Staff Queue, opens Ticket Detail, claims the ticket, verifies ownership, updates IT Priority and Status, adds Public Comment and Internal Note, verifies persistence after reload, then logs in as Requester to verify Public Comment visibility and Internal Note invisibility. | `e2e/lab-03/staff-ticket-flow.spec.ts` | Pass |
-| **E2E-03** | E2E | AC-08, AC-10, AC-02 | Admin user management flow and mandatory password change | Admin logs in, searches/filters the user list, creates a new user, edits the user's name and role (to IT_STAFF), resets the user's password, verifies self-deactivation protection (UI warning shown and server returns 400 when Admin tries to deactivate own account), then logs out; the reset user logs in, is redirected to /change-password, is blocked from navigating away before completing the change, fills and submits the change-password form, lands on /my-tickets, and logs out; Admin logs back in to confirm continued access to /user-management. | `e2e/lab-03/user-administration.spec.ts` | Pass |
+| **E2E-03** | E2E | AC-08, AC-10, AC-02 | Admin user management flow and isolated mandatory password change | Comprises 3 independent test cases: (1) Admin creates, edits, and resets a user; (2) Admin self-deactivation protection (UI warning shown and server returns 400); (3) Dedicated test user created with mustChangePassword flag logs in, is redirected to /change-password, is blocked from navigating away, completes password change, lands on /my-tickets (distinguished from normal IT Staff login -> /staff-queue), logs out, and Admin verifies continued access. Fully independent execution with schema-aware FK-safe cleanup. | `e2e/lab-03/user-administration.spec.ts` | Pass |
 | **MIG-01** | API | Migration | Legacy data regression check against current DB state (seeded tickets TKT-1001–TKT-1004 and Ticket→Attachment FK schema compatibility) | Legacy tickets TKT-1001–TKT-1004 remain present, their requester relationships remain intact (`requesterId` is NOT NULL and resolves to seeded User email), and Ticket-to-Attachment relation/FK compatibility can be queried on TKT-1001. | `server/tests/lab-03/migration-regression.api.test.ts` | Pass with coverage gap |
 | **UI-06** | Component | Responsive | Ticket Queue responsiveness | Renders as data table on desktop, cards on mobile | `client/tests/lab-03/Responsive.test.tsx` | Pass |
 
@@ -54,3 +54,22 @@ This document provides a comprehensive test plan for the Lab 3 increment, mappin
 ### 4. Legacy Lab 2 E2E Suite Outside Lab 3 Scope
 - The legacy Lab 2 E2E tests (`e2e/lab-02/`) are outside the Lab 3 verification scope.
 - They still depend on the pre-Lab-3 Requester selector UI, which was intentionally removed in Lab 3 per the specification (FR-01, Section 8.2).
+
+### 5. Post-Login Navigation vs. Post-Password-Change Navigation
+- **Normal Login Role Redirection:** When an active user without the `mustChangePassword` flag authenticates, the client routes the user based on their assigned role (`REQUESTER` -> `/my-tickets`, `IT_STAFF` -> `/staff-queue`, `ADMIN` -> `/user-management`).
+- **Mandatory Password Change Interstitial:** When any user with `mustChangePassword: true` logs in, they are redirected to `/change-password` and blocked from visiting normal application routes.
+- **Post-Password-Change Navigation:** Upon successfully submitting the change password form, the application navigates directly to `/my-tickets` as the default landing view. Subsequent normal logins by that user will follow their standard role-based redirect (e.g., IT Staff to `/staff-queue`).
+
+## Local Test Execution Evidence (HEAD Run)
+
+> **Environment Note:** All test suites are executed locally in the developer environment. No GitHub Actions CI workflow is configured in this repository. All reported test results and counts reflect actual local executions against the latest repository HEAD.
+
+- **Client Vitest Suite (`npm --prefix client test`):**
+  - Test Files: 11 passed (11)
+  - Tests: 50 passed (50)
+- **Server Vitest Suite (`npm --prefix server test`):**
+  - Test Files: 13 passed (13)
+  - Tests: 148 passed (148)
+- **Playwright Lab 3 E2E Suite (`npx playwright test e2e/lab-03`):**
+  - Total Tests: 24 passed (24) across Desktop Chrome, Tablet iPad, and Mobile Safari
+  - E2E-03 Independent Run: 3 passed (1 per project) in isolation without prior test execution dependencies

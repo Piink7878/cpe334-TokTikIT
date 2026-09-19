@@ -5,11 +5,35 @@ const prisma = new PrismaClient();
 
 test.describe('Administrator User Management Flow (Lab 3)', () => {
   let testUserEmail: string;
+  let dedicatedUserEmail: string;
   let initialUserName: string;
   let updatedUserName: string;
 
   // Single constant for the reset password — used in both Admin reset and user login
   const resetPassword = 'NewResetPassword123!';
+
+  // Schema-aware FK-safe cleanup helper: removes dependent relations before deleting user
+  async function cleanupUserByEmail(email: string) {
+    if (!email) return;
+    try {
+      const user = await prisma.user.findUnique({ where: { email } });
+      if (!user) return;
+      await prisma.internalNote.deleteMany({ where: { authorId: user.id } });
+      await prisma.publicComment.deleteMany({ where: { authorId: user.id } });
+      await prisma.ticket.updateMany({ where: { ownerId: user.id }, data: { ownerId: null } });
+      const requestedTickets = await prisma.ticket.findMany({ where: { requesterId: user.id }, select: { id: true } });
+      if (requestedTickets.length > 0) {
+        const ticketIds = requestedTickets.map(t => t.id);
+        await prisma.attachment.deleteMany({ where: { ticketId: { in: ticketIds } } });
+        await prisma.internalNote.deleteMany({ where: { ticketId: { in: ticketIds } } });
+        await prisma.publicComment.deleteMany({ where: { ticketId: { in: ticketIds } } });
+        await prisma.ticket.deleteMany({ where: { id: { in: ticketIds } } });
+      }
+      await prisma.user.deleteMany({ where: { id: user.id } });
+    } catch (err) {
+      console.error(`Error cleaning up user ${email}:`, err);
+    }
+  }
 
   test.beforeAll(async () => {
     // Ensure admin user exists and is active without mandatory password change
@@ -31,9 +55,10 @@ test.describe('Administrator User Management Flow (Lab 3)', () => {
     // Guaranteed teardown even on mid-test failure
     try {
       if (testUserEmail) {
-        await prisma.user.deleteMany({
-          where: { email: testUserEmail }
-        });
+        await cleanupUserByEmail(testUserEmail);
+      }
+      if (dedicatedUserEmail) {
+        await cleanupUserByEmail(dedicatedUserEmail);
       }
       // Restore admin account state
       await prisma.user.updateMany({
@@ -191,47 +216,66 @@ test.describe('Administrator User Management Flow (Lab 3)', () => {
   });
 
   test('Mandatory password change: Reset user must change password before accessing app', async ({ page }) => {
-    // This test depends on the first test having reset testUserEmail's password to resetPassword.
-    // testUserEmail is an IT_STAFF user (role was changed in step 4 of the first test).
+    // Dedicated test user created independently for this test (does not rely on previous tests)
+    const timestamp = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    dedicatedUserEmail = `e2e-pwd-change-${timestamp}@toktikit.local`;
+    const initialTempPassword = 'Password123!';
+    // Static precomputed bcrypt hash for 'Password123!' (established repository pattern, matching line 47)
+    const initialTempPasswordHash = '$2b$10$eV6Mi0kswjPdFZvh5JenAekbL9JgATAQJMly.RGHAwnYij1/hAfMq';
 
-    // 1. Log in as the test user using resetPassword
-    await page.goto('/login');
-    await page.waitForSelector('input[type="email"]');
-    await page.fill('input[type="email"]', testUserEmail);
-    await page.fill('input[type="password"]', resetPassword);
-    await page.click('button[type="submit"]');
+    await prisma.user.create({
+      data: {
+        email: dedicatedUserEmail,
+        fullName: `Reset IT Staff User ${timestamp}`,
+        role: 'IT_STAFF',
+        isActive: true,
+        mustChangePassword: true,
+        passwordHash: initialTempPasswordHash,
+      },
+    });
 
-    // 2. Assert redirect to /change-password (mustChangePassword is set after Admin password reset)
-    await expect(page).toHaveURL(/\/change-password/);
+    try {
+      // 1. Log in as the test user using initialTempPassword
+      await page.goto('/login');
+      await page.waitForSelector('input[type="email"]');
+      await page.fill('input[type="email"]', dedicatedUserEmail);
+      await page.fill('input[type="password"]', initialTempPassword);
+      await page.click('button[type="submit"]');
 
-    // 3. Attempt to navigate to /user-management and assert blocked, redirected back to /change-password
-    await page.goto('/user-management');
-    await expect(page).toHaveURL(/\/change-password/);
+      // 2. Assert redirect to /change-password (mustChangePassword is set)
+      await expect(page).toHaveURL(/\/change-password/);
 
-    // 4. Fill the change-password form with a new valid password
-    const finalPassword = 'FinalPassword456!';
-    await page.fill('#currentPassword', resetPassword);
-    await page.fill('#newPassword', finalPassword);
-    await page.fill('#confirmPassword', finalPassword);
+      // 3. Attempt to navigate to /user-management and assert blocked, redirected back to /change-password
+      await page.goto('/user-management');
+      await expect(page).toHaveURL(/\/change-password/);
 
-    // 5. Submit the form
-    await page.click('button[type="submit"]');
+      // 4. Fill the change-password form with a new valid password
+      const finalPassword = 'FinalPassword456!';
+      await page.fill('#currentPassword', initialTempPassword);
+      await page.fill('#newPassword', finalPassword);
+      await page.fill('#confirmPassword', finalPassword);
 
-    // 6. Assert the user reaches the landing page after password change.
-    // ChangePassword.tsx navigates to /my-tickets after success.
-    // IT_STAFF is not redirected away from /my-tickets by ProtectedRoute.
-    await expect(page).toHaveURL(/\/my-tickets/);
+      // 5. Submit the form
+      await page.click('button[type="submit"]');
 
-    // 7. Log out the test user
-    await page.click('button:has-text("Logout")');
-    await expect(page).toHaveURL(/\/login/);
+      // 6. Assert the user reaches the landing page after password change.
+      // ChangePassword.tsx navigates to /my-tickets after success.
+      // IT_STAFF is not redirected away from /my-tickets by ProtectedRoute.
+      await expect(page).toHaveURL(/\/my-tickets/);
 
-    // 8. Log back in as Admin
-    await page.fill('input[type="email"]', 'admin@toktikit.local');
-    await page.fill('input[type="password"]', 'Password123!');
-    await page.click('button[type="submit"]');
+      // 7. Log out the test user
+      await page.click('button:has-text("Logout")');
+      await expect(page).toHaveURL(/\/login/);
 
-    // 9. Verify Admin can still access /user-management
-    await expect(page).toHaveURL(/\/user-management/);
+      // 8. Log back in as Admin
+      await page.fill('input[type="email"]', 'admin@toktikit.local');
+      await page.fill('input[type="password"]', 'Password123!');
+      await page.click('button[type="submit"]');
+
+      // 9. Verify Admin can still access /user-management
+      await expect(page).toHaveURL(/\/user-management/);
+    } finally {
+      await cleanupUserByEmail(dedicatedUserEmail);
+    }
   });
 });
