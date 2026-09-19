@@ -39,6 +39,15 @@ All screens must handle the following states gracefully without breaking the lay
 *   **Navigation on Success:** After completing the mandatory password change form, the user navigates directly to `/my-tickets` to enter the application (distinguished from normal login, which routes IT Staff to `/staff-queue`).
 *   **States:** Form validation ensures passwords match. User cannot click away or navigate; the only exit is completing the form or logging out.
 
+### Authentication Navigation
+
+- Normal login uses role-based redirects:
+  - Requester → `/my-tickets`
+  - IT Staff → `/staff-queue`
+  - Administrator → `/user-management`
+- When a user is required to complete the mandatory first-login password change, successful completion redirects to `/my-tickets`.
+- This post-password-change redirect is intentionally separate from the normal IT Staff login redirect.
+
 ### 3.2 Authenticated App Shell
 *   **Structure:** Top navigation bar (or side drawer on mobile).
 *   **Components:** 

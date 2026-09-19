@@ -67,9 +67,13 @@ This document provides a comprehensive test plan for the Lab 3 increment, mappin
 - **Client Vitest Suite (`npm --prefix client test`):**
   - Test Files: 11 passed (11)
   - Tests: 50 passed (50)
-- **Server Vitest Suite (`npm --prefix server test`):**
-  - Test Files: 13 passed (13)
-  - Tests: 148 passed (148)
+- **Server Vitest Suites:**
+  - **Full Server Suite (`npm --prefix server test`):**
+    - Test Files: 13 passed (13) (includes Lab 1, Lab 2, and Lab 3 test files)
+    - Tests: 148 passed (148)
+  - **Lab 3 Specific API Suite (`npm --prefix server run test:lab-03`):**
+    - Test Files: 7 passed (7) (Lab 3 API test files only)
+    - Tests: 108 passed (108)
 - **Playwright Lab 3 E2E Suite (`npx playwright test e2e/lab-03`):**
   - Total Tests: 24 passed (24) across Desktop Chrome, Tablet iPad, and Mobile Safari
   - E2E-03 Independent Run: 3 passed (1 per project) in isolation without prior test execution dependencies

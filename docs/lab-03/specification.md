@@ -88,6 +88,15 @@ Develop a fully functional IT Service Desk ticketing system that supports robust
 *   **User Management (Admin):** Data table of users with 'Add User' button. Edit modal for changing roles or toggling active status.
 *   **Responsive Rules:** Keep all required screens usable on desktop, tablet, and mobile (see `ui-spec.md` for full layout details).
 
+### Authentication Navigation
+
+- Normal login uses role-based redirects:
+  - Requester → `/my-tickets`
+  - IT Staff → `/staff-queue`
+  - Administrator → `/user-management`
+- When a user is required to complete the mandatory first-login password change, successful completion redirects to `/my-tickets`.
+- This post-password-change redirect is intentionally separate from the normal IT Staff login redirect.
+
 ## 7. Data Changes
 *   **User Model Evolution:** The basic User model from Lab 2 is expanded. The Lab 2 Development Requester records must be migrated into the real User model without losing existing Ticket or Attachment ownership.
     *   Add `password_hash` (string) for secure credential storage.
