@@ -99,31 +99,44 @@ Develop a fully functional IT Service Desk ticketing system that supports robust
 
 ## 7. Data Changes
 *   **User Model Evolution:** The basic User model from Lab 2 is expanded. The Lab 2 Development Requester records must be migrated into the real User model without losing existing Ticket or Attachment ownership.
-    *   Add `password_hash` (string) for secure credential storage.
-    *   Add `role` (enum/string: REQUESTER, IT_STAFF, ADMIN).
-    *   Add `is_active` (boolean, default true).
-    *   Add `requires_password_change` (boolean, default false).
+    *   Add `passwordHash` (string) for secure credential storage.
+    *   Add `role` (enum: `REQUESTER`, `IT_STAFF`, `ADMIN`).
+    *   Add `isActive` (boolean, default true).
+    *   Add `mustChangePassword` (boolean, default false).
 *   **Ticket Model Updates:** Existing Categories, Related Systems, Tickets, and Attachments remain valid after migration.
-    *   Add `assignee_id` (foreign key to User, nullable).
-    *   Add `status` (enum: NEW, OPEN, IN_PROGRESS, WAITING_FOR_REQUESTER, RESOLVED, CLOSED, REOPENED, CANCELLED, REJECTED).
-    *   Add `it_priority` (enum: LOW, MEDIUM, HIGH, CRITICAL).
+    *   Add `ownerId` (foreign key to User, nullable; relation `TicketOwner`).
+    *   Add `currentStatus` (enum: `NEW`, `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CLOSED`, `REOPENED`, `CANCELLED`, `REJECTED`).
+    *   Add `itPriority` (enum: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
+    *   Add `requestedPriority` (enum: `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
 *   **New Models:**
-    *   **Comment/Note:** To handle the unified timeline. Fields: `id`, `ticket_id` (FK), `author_id` (FK), `content` (text), `is_internal_note` (boolean, default false), `created_at` (timestamp).
+    *   **PublicComment:** Public shared communication on a ticket. Fields: `id` (autoincrement Int), `ticketId` (FK Ticket), `authorId` (FK User), `content` (text), `createdAt` (timestamp).
+    *   **InternalNote:** Role-restricted internal operational notes. Fields: `id` (autoincrement Int), `ticketId` (FK Ticket), `authorId` (FK User), `content` (text), `createdAt` (timestamp).
 *   **Idempotent Seed Plan:** The database seeder must be safely runnable multiple times without duplicating core data. It should always ensure a default Admin account (`admin@example.com`) exists and has the correct password/role if it's missing or altered.
 
 ## 8. API Contract Summary
-*   `POST /api/auth/login`: Authenticates user, returns session token/cookie.
-*   `POST /api/auth/logout`: Invalidates session.
-*   `PUT /api/users/me/password`: Updates password for the current user.
-*   `GET /api/tickets`: Returns tickets. IT Staff Ticket Queue retrieval must support search, filters, sorting, and pagination. Requesters see only their own.
-*   `POST /api/tickets`: Creates a new ticket.
-*   `GET /api/tickets/:id`: Returns ticket details (subject to RBAC).
-*   `PATCH /api/tickets/:id`: Updates ticket (Status, Assignee, Priority) - IT/Admin only.
-*   `POST /api/tickets/:id/comments`: Adds a public comment or internal note (`is_internal_note` flag restricted to IT/Admin).
+*   `POST /api/auth/login`: Authenticates user, establishes session cookie, and returns user identity and role.
+*   `POST /api/auth/logout`: Invalidates session and clears cookie.
+*   `GET /api/auth/me`: Retrieves current authenticated user session data.
+*   `POST /api/auth/change-password`: Changes password for current user (`currentPassword`, `newPassword`, `confirmPassword`). Sets `mustChangePassword` to `false`.
+*   `GET /api/tickets`: Returns tickets owned by the authenticated Requester with search, filters, sorting, and pagination.
+*   `POST /api/tickets`: Creates a new ticket authored by the authenticated Requester.
+*   `GET /api/tickets/:id`: Returns ticket details and public comments for Requester (ownership checked).
+*   `GET /api/staff/tickets`: Retrieves the global IT Staff Ticket Queue with search, filters (`categoryId`, `status`, `itPriority`, `requestedPriority`, `ownerId`), sorting, and pagination (IT/Admin only).
+*   `GET /api/staff/tickets/:id`: Retrieves ticket details for IT Staff/Admin, including public comments and internal notes.
+*   `GET /api/staff/assignees`: Retrieves list of active IT Staff and Admin users for ticket assignment.
+*   `PATCH /api/staff/tickets/:id/claim`: Sets authenticated IT Staff/Admin member as the ticket owner.
+*   `PATCH /api/staff/tickets/:id/assign`: Assigns ticket owner (`assigneeId`) to an active IT Staff or Admin user.
+*   `PATCH /api/staff/tickets/:id/priority`: Updates ticket IT Priority (`itPriority`) - IT/Admin only.
+*   `PATCH /api/staff/tickets/:id/status`: Updates ticket status according to permitted state transitions - IT/Admin only.
+*   `GET /api/tickets/:id/comments`: Retrieves public comments for a ticket.
+*   `POST /api/tickets/:id/comments`: Appends a public comment to the ticket (Requester owner, IT Staff, Admin).
+*   `GET /api/tickets/:id/internal-notes`: Retrieves internal notes (IT Staff/Admin only; Requesters denied with 403).
+*   `POST /api/tickets/:id/internal-notes`: Appends an internal note (IT Staff/Admin only; Requesters denied with 403).
+*   `POST /api/tickets/:id/indicate-resolved`: Requester action indicating problem appears resolved (appends public comment without altering ticket status).
 *   `GET /api/admin/users`: Returns all users with search by name or email and an optional role filter (Admin only).
-*   `POST /api/admin/users`: Creates a new user and issues an initial password using the approved local-lab behavior (Admin only).
-*   `PUT /api/admin/users/:id`: Updates user name, email, role, or active status (Admin only).
-*   `POST /api/admin/users/:id/reset-password`: Resets a user's password and sets the mustChangePassword flag (Admin only).
+*   `POST /api/admin/users`: Creates a new user with initial password and sets `mustChangePassword: true` (Admin only).
+*   `PUT & PATCH /api/admin/users/:id`: Updates user name, email, role, or active status with safety guards (Admin only).
+*   `POST /api/admin/users/:id/reset-password`: Resets a user's password and sets `mustChangePassword: true` (Admin only).
 
 ## 9. Acceptance Criteria
 *   **AC-01:** Given an active user with valid credentials, when the user logs in, then the backend establishes authenticated access and returns the permitted user identity and role.
@@ -132,14 +145,14 @@ Develop a fully functional IT Service Desk ticketing system that supports robust
 *   **AC-04:** Given a Requester account, when an Internal Note endpoint is requested, then the operation is rejected without exposing note content.
 *   **AC-05:** Given IT Staff, When they view a ticket detail, Then they can see both Public Comments and Private Internal Notes clearly differentiated.
 *   **AC-06:** Given IT Staff, When they submit a form to change a ticket's status, Then the system updates the status and logs the action.
-*   **AC-07:** Given a Requester, When they attempt to modify the `it_priority` field via a direct API call, Then the server rejects the request with a 403 Forbidden error.
+*   **AC-07:** Given a Requester, When they attempt to modify the `itPriority` field via a direct API call, Then the server rejects the request with a 403 Forbidden error.
 *   **AC-08:** Given an Admin, When they attempt to deactivate their own account, Then the system prevents the action and displays an error.
 *   **AC-09:** Given a system with only one active Admin, When an attempt is made to change that Admin's role or deactivate them, Then the system prevents the action to avoid locking out administrators.
 *   **AC-10:** Given an Admin, When they create a new user, Then the new user is saved with a hashed password, not plaintext.
 *   **AC-11:** Given IT Staff, When they view the global queue, Then they can see tickets submitted by all Requesters.
-*   **AC-12:** Given a Requester, When they view the global queue endpoint, Then the server only returns tickets authored by that Requester.
+*   **AC-12:** Given a Requester, When they request tickets from the tickets endpoint (`/api/tickets`), Then the server only returns tickets authored by that Requester (and direct requests to the staff queue endpoint `/api/staff/tickets` are rejected with 403 Forbidden).
 *   **AC-13:** Given an unauthenticated visitor, When they attempt to access any route other than login, Then they are redirected to the login page.
-*   **AC-14:** Given IT Staff, When they create an internal note, Then the note is saved with the `is_internal_note` flag set to true.
+*   **AC-14:** Given IT Staff, When they create an internal note, Then the note is saved in the `InternalNote` model and visible only to IT Staff and Administrator.
 *   **AC-15:** Given any user, When they inspect the HTML, hiding UI elements for actions they aren't authorized to perform does not allow them to perform the action if they bypass the UI (Server-side validation enforces this).
 
 ## 10. Product Definition of Done
@@ -153,7 +166,7 @@ Develop a fully functional IT Service Desk ticketing system that supports robust
 *   Passwords are never stored or transmitted in plain text (except during initial form submission over HTTPS).
 
 ## 11. Assumptions and Decisions
-*   **Decision:** We will use a unified `comments` table with a boolean flag `is_internal_note` rather than separate tables for comments and notes, simplifying the timeline rendering query.
+*   **Decision:** We use separate `PublicComment` and `InternalNote` tables/models in Prisma and separate endpoints (`/api/tickets/:id/comments` and `/api/tickets/:id/internal-notes`) rather than a single table, ensuring strict zero data leakage at both the database and API layer.
 *   **Decision:** Authentication will rely on standard secure HTTP-only cookies for session management to reduce XSS risk compared to local storage JWTs.
 *   **Assumption:** The current deployment environment uses HTTPS, ensuring secure transmission of login credentials.
 *   **Decision:** Security enforcement is strictly server-side. **Hiding UI controls is recognized solely as a UX feature and NOT a security control.**
