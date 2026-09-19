@@ -1,0 +1,31 @@
+﻿
+> toktickit-server@1.0.0 test
+> vitest run
+
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90mD:/modcom/CPE334_SE/lab01/cpe334-TokTikIT/server[39m
+
+ [32mโ“[39m tests/lab-03/migration-regression.api.test.ts [2m([22m[2m6 tests[22m[2m)[22m[90m 231[2mms[22m[39m
+ [32mโ“[39m tests/lab-01/health.test.ts [2m([22m[2m1 test[22m[2m)[22m[90m 49[2mms[22m[39m
+ [32mโ“[39m tests/lab-01/categories.test.ts [2m([22m[2m1 test[22m[2m)[22m[90m 262[2mms[22m[39m
+ [32mโ“[39m tests/lab-02/ticket-detail.api.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 575[2mms[22m[39m
+ [32mโ“[39m tests/lab-03/staff-queue.api.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 1241[2mms[22m[39m
+ [32mโ“[39m tests/lab-03/comments-notes.api.test.ts [2m([22m[2m12 tests[22m[2m)[22m[33m 1365[2mms[22m[39m
+ [32mโ“[39m tests/lab-02/attachments.api.test.ts [2m([22m[2m17 tests[22m[2m)[22m[33m 1020[2mms[22m[39m
+ [32mโ“[39m tests/lab-03/staff-ticket-detail.api.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 1576[2mms[22m[39m
+ [32mโ“[39m tests/lab-03/authorization.api.test.ts [2m([22m[2m16 tests[22m[2m)[22m[33m 1621[2mms[22m[39m
+ [32mโ“[39m tests/lab-03/auth.api.test.ts [2m([22m[2m11 tests[22m[2m)[22m[33m 1653[2mms[22m[39m
+   [33m[2mโ“[22m[39m Authentication API[2m > [22mshould allow password change with correct current password and unblock endpoints [33m759[2mms[22m[39m
+ [32mโ“[39m tests/lab-02/my-tickets.api.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 1256[2mms[22m[39m
+ [32mโ“[39m tests/lab-02/create-ticket.api.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 1310[2mms[22m[39m
+ [32mโ“[39m tests/lab-03/users-admin.api.test.ts [2m([22m[2m23 tests[22m[2m)[22m[33m 3536[2mms[22m[39m
+   [33m[2mโ“[22m[39m Admin User Management API Tests (Lab 3)[2m > [22mshould create a user successfully and prevent duplicate emails [33m446[2mms[22m[39m
+   [33m[2mโ“[22m[39m Admin User Management API Tests (Lab 3)[2m > [22mshould update a user successfully [33m386[2mms[22m[39m
+   [33m[2mโ“[22m[39m Admin User Management API Tests (Lab 3)[2m > [22mshould reset password successfully [33m378[2mms[22m[39m
+   [33m[2mโ“[22m[39m Admin User Management API Tests (Lab 3)[2m > [22mshould prevent deactivating the last active Admin under concurrent load [33m1040[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m13 passed[39m[22m[90m (13)[39m
+[2m      Tests [22m [1m[32m148 passed[39m[22m[90m (148)[39m
+[2m   Start at [22m 21:09:41
+[2m   Duration [22m 13.98s[2m (transform 1.63s, setup 0ms, collect 16.45s, tests 15.69s, environment 6ms, prepare 3.42s)[22m
+

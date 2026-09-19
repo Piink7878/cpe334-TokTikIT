@@ -1,0 +1,160 @@
+﻿*   b3e46a2 (HEAD -> main, origin/main, origin/HEAD) Merge pull request #63 from Piink7878/lab3-staging
+|\  
+| *   db62a6b (origin/lab3-staging) Merge pull request #62 from Piink7878/feat/10-release-prep
+| |\  
+| | * dcbe3a4 (origin/feat/10-release-prep, feat/10-release-prep) docs(lab-03): sync specifications, api-spec, tests, and update README with screenshot artifacts
+| |/  
+| *   ac5f39e (lab3-staging) Merge pull request #61 from Piink7878/feat/9-e2e-and-security
+| |\  
+| | * 66e77b4 (origin/feat/9-e2e-and-security, feat/9-e2e-and-security) docs(lab-03): clarify auth navigation flows and distinguish full server vs lab-3 test scopes
+| | * 5bd7984 test(lab-03): isolate E2E-03 password change test with FK-safe cleanup and sync docs
+| | * 6e2ccf8 docs(lab-03): refine MIG-01 expected result and clarify test boundaries
+| | * a3b8eb9 docs(lab-03): isolate MIG-01 expected result and document test limitations
+| | * 0a9df1f docs(lab-03): update MIG-01 status and coverage gap disclosure in test matrix
+| | * e03e6f1 test(lab-03): extend E2E-03, add MIG-01 regression, fix docs traceability
+| | * 0d51f02 fix: finalize E2E review fixes - clean regexes, revert testDir, untrack cache
+| | * 0574d7a test: refine e2e persistence, fix regex, test requester note visibility, and sync docs
+| | * 2abe48c test: add and pass all e2e tests for auth, staff, and admin flows across all devices
+| |/  
+| *   48da51d Merge pull request #60 from Piink7878/feat/8-admin-user-management
+| |\  
+| | * 87eee01 (origin/feat/8-admin-user-management, feat/8-admin-user-management) docs: sync api paths in specification and test: add missing 403 coverage for admin endpoints
+| | * b98f030 test: safely restore admin state and move teardown to finally block
+| | * ececf08 test: replace mock with real db concurrent test and assert strict 200/409 for last admin
+| | * bed9115 test: enforce strict 200/409 assertion and restore prisma spy mock
+| | * c3f589c fix: correct concurrent test, handle transaction conflict as 409, clean up logs
+| | * e456999 fix: enforce serializable isolation level for last admin check and add concurrent test
+| | * c7b5737 fix: resolve last admin race condition, update api spec, refactor tests
+| | * 0c8e461 test: add missing admin tests and fix edit role validation
+| | * d776556 feat: implement admin user management and safety rules
+| |/  
+| *   f39fb1d Merge pull request #59 from Piink7878/feat/7-ticket-comments-and-notes
+| |\  
+| | * 79fdf1f (origin/feat/7-ticket-comments-and-notes, feat/7-ticket-comments-and-notes) fix: restrict indicate-resolved to requester and use public comment only
+| | * 9f195e7 feat: implement public comments, internal notes and requester resolved action
+| |/  
+| *   5e760cb Merge pull request #57 from Piink7878/feat/6-staff-ticket-operations
+| |\  
+| | * 4fb25a6 (origin/feat/6-staff-ticket-operations, feat/6-staff-ticket-operations) fix(staff): audit logs for auto transitions, unified timeline, ui interaction tests, and synced tests.md (#6)
+| | * 86251e4 test(staff): add audit log assertions for REJECTED and standard transitions, sync test plan (#6)
+| | * 3eb3ec8 fix(staff): enforce requester 403 tests on all mutations, add status transition audit logging, and sync spec docs (#6)
+| | * b2ad24e feat(staff): implement ticket operations, status transitions, and staff detail view (#6)
+| |/  
+| *   9067920 Merge pull request #56 from Piink7878/feat/5-staff-ticket-queue
+| |\  
+| | * b5d0ece (origin/feat/5-staff-ticket-queue, feat/5-staff-ticket-queue) fix(staff): align enum business sort order and add client sort interaction test (#5)
+| | * a4e6092 fix(staff): sync backend sort fields and separate empty from no-results states (#5)
+| | * c53d979 fix(staff): add detail route, ui sort controls, skeleton loader, and expanded tests (#5)
+| | * b0fde49 feat(staff): implement ticket queue api, responsive ui, and full test suite (#5)
+| |/  
+| *   ffcd2f8 Merge pull request #55 from Piink7878/feat/4-requester-identity-regression
+| |\  
+| | * 4875fc7 (origin/feat/4-requester-identity-regression, feat/4-requester-identity-regression) refactor(server): remove legacy /api/requesters endpoint and test (#4)
+| | * 6df67e2 feat(requester): enforce session identity on tickets and fix lab 2 regression suite (#4)
+| |/  
+| *   631b2b6 Merge pull request #54 from Piink7878/feat/3-auth-foundation
+| |\  
+| | * 09f9566 (origin/feat/3-auth-foundation, feat/3-auth-foundation) fix(auth): add placeholders for staff/admin routes and enforce hybrid session expiration (#3)
+| | * 57025cc fix(server): remove duplicate middleware import in app.ts (#3)
+| | * ca19188 feat(auth): address review feedback on routing, session security, and test suite (#3)
+| | * 94e0407 feat(auth): implement auth apis, password change enforcement, and auth test suite (#3)
+| |/  
+| *   1ceb327 Merge pull request #53 from Piink7878/feat/2-db-user-and-seed
+| |\  
+| | * c65767c (origin/feat/2-db-user-and-seed, feat/2-db-user-and-seed) feat(db): add user model, lab3 relations, migration, and idempotent seed (#2)
+| |/  
+| * 6e92b94 Merge pull request #52 from Piink7878/feat/1-spec-and-test-plan
+|/| 
+| * f72c606 (origin/feat/1-spec-and-test-plan, feat/1-spec-and-test-plan) docs: address peer review feedback on status matrix, auth security, and test plan (#1)
+| * 52bd843 docs: define Sprint 3 engineering contract, specifications, and test plan (#1)
+|/  
+*   cc92239 (doc/lab3) Merge pull request #34 from Piink7878/lab2-staging
+|\  
+| * b1c9253 (origin/lab2-staging, lab2-staging) doc update tests.md
+* | 0b5267d Merge pull request #33 from Piink7878/lab2-staging
+|\| 
+| * 7fe2edc docs update readme
+* | e7eadfd Merge pull request #32 from Piink7878/lab2-staging
+|\| 
+| * 7b1efa2 docs lab02
+* | d14f389 Merge pull request #31 from Piink7878/lab2-staging
+|\| 
+| * 4ba8c6a release
+| *   eb35060 Merge pull request #30 from Piink7878/feature/7-e2e-testing-responsive
+| |\  
+| | * 070c699 (origin/feature/7-e2e-testing-responsive, feature/7-e2e-testing-responsive) chore: remove test reports and generated PDFs from git tracking and update .gitignore
+| | * ca3a4ad test: add attachment lifecycle flow and responsive visual assertions to E2E
+| | * ad1f171 test: add playwright E2E tests and automated responsive screenshots
+| |/  
+| *   5658352 Merge pull request #29 from Piink7878/feature/6-ticket-detail-attachments
+| |\  
+| | * e720516 (origin/feature/6-ticket-detail-attachments, feature/6-ticket-detail-attachments) fix: add requester existence check and expand attachment boundary/failure tests
+| | * 402bd01 feat: implement read-only ticket details and attachment lifecycle with soft removal
+| |/  
+| *   f896b04 Merge pull request #28 from Piink7878/feature/5-my-tickets
+| |\  
+| | * 8829e15 (origin/feature/5-my-tickets, feature/5-my-tickets) test: expand coverage for search, filter, sort, and pagination behaviors in API and UI
+| | * cbfdaf6 feat: implement my tickets list with search, filter, sort, pagination, and ownership check
+| |/  
+| *   34e9692 Merge pull request #27 from Piink7878/feature/4-ticket-creation
+| |\  
+| | * c91e0bc (origin/feature/4-ticket-creation, feature/4-ticket-creation) fix: add @unique constraint to ticketNumber in Prisma schema and generate migration
+| | * 48b53be fix: resolve ticket number concurrency, add unique constraint migration, and enhance API test coverage
+| | * f9778b8 feat: implement ticket creation API, UI form, validation, and attachments
+| |/  
+| *   ecc5b74 Merge pull request #26 from Piink7878/feature/3-requester-context
+| |\  
+| | * 7b8920e (origin/feature/3-requester-context, feature/3-requester-context) fix: add localStorage persistence to RequesterContext
+| | * f63cd52 feat: implement development requester selection screen and global context
+| |/  
+| *   2dd1d21 Merge pull request #25 from Piink7878/feat/2-db-models-seed
+| |\  
+| | * e2c345b (origin/feat/2-db-models-seed, feat/2-db-models-seed) fix: refactor seed.ts to single try-catch flow and remove duplicates
+| | * 9a52e99 fix: refactor seed execution flow and prevent early disconnect
+| | * f31102d feat: implement database schema and idempotent seed data for Lab 2
+| |/  
+| * 2d4f9c3 Merge pull request #24 from Piink7878/feat/1-spec-test-plan
+|/| 
+| * 364a15f (origin/feat/1-spec-test-plan, feat/1-spec-test-plan) docs: address follow-up PR feedback for API specs
+| * d80cc50 docs: refine Lab 2 specifications and test plans per PR feedback
+| * bef0979 docs: establish sprint 2 engineering contract, ui-spec, api-spec, and tests plan
+|/  
+* 0a1fe7e Add and update lab-01 documentation
+*   3e6f5c7 Merge pull request #14 from Piink7878/lab1-staging
+|\  
+| *   30fa8e6 (origin/lab1-staging) Merge pull request #13 from Piink7878/update-docs
+| |\  
+| | * aa0f861 (update-docs) update docs
+| |/  
+| *   69a1dfb (lab1-staging) Merge pull request #12 from Piink7878/feature/4-category-list
+| |\  
+| | | * 17492af (refs/stash) On feature/4-category-list: xxx
+| | |/| 
+| | | * 5db85af index on feature/4-category-list: 601876e fix: add connection error handling and empty categories state
+| | |/  
+| | * 601876e (feature/4-category-list) fix: add connection error handling and empty categories state
+| | * 1404a1a feat: display category list, integrate vertical slice, and add automated tests
+| |/  
+| *   3dff0b2 Merge pull request #11 from Piink7878/feature/3-category-seed
+| |\  
+| | * 789d399 (feature/3-category-seed) fix: add error handling and disconnect to seed script
+| * | 66291ad Merge pull request #10 from Piink7878/feature/3-category-seed
+| |\| 
+| | * 1920f34 feat: add Category model, migration, and idempotent seed script
+| * |   37b4ec6 Merge pull request #9 from Piink7878/feature/2-health-check
+| |\ \  
+| | |/  
+| |/|   
+| | * f672d0c (feature/2-health-check) fix: resolve import and clean up compiled js artifacts
+| | * 4dad8e6 feat: implement /api/health endpoint and Supertest verification
+| |/  
+| *   6072264 Merge pull request #6 from Piink7878/feature/1-project-foundation
+| |\  
+| | * b4672e1 (feature/1-project-foundation) docs: update ai_use and reviewer
+| * | 2c363bf Merge pull request #5 from Piink7878/feature/1-project-foundation
+|/| | 
+| |/  
+| * 6274425 docs: update README.md
+| * a2764cd feat: setup project foundation with Express, Prisma, and React
+|/  
+* 06767ef Initial commit

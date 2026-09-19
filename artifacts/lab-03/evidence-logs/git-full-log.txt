@@ -1,0 +1,102 @@
+﻿b3e46a220ff604b78dbbc3c0b683a94fed26f4b6 2026-09-19T19:24:24+07:00 Kamonnatt23 Merge pull request #63 from Piink7878/lab3-staging
+db62a6b33deebe652300c4642c72efc0f3076d3e 2026-09-19T18:49:06+07:00 Kamonnatt23 Merge pull request #62 from Piink7878/feat/10-release-prep
+dcbe3a48c83dda8f69a9025163d551a9ceaad70b 2026-09-19T18:42:59+07:00 Piink7878 docs(lab-03): sync specifications, api-spec, tests, and update README with screenshot artifacts
+ac5f39eb5bfb9471c74bbc13d46cb80e7dc78af2 2026-09-19T16:11:52+07:00 Kamonnatt23 Merge pull request #61 from Piink7878/feat/9-e2e-and-security
+66e77b479682863c20c09f87bb575350b071c695 2026-09-19T15:20:54+07:00 Piink7878 docs(lab-03): clarify auth navigation flows and distinguish full server vs lab-3 test scopes
+5bd798456e83c844967a9cd9e84eade516aefb15 2026-09-19T14:03:35+07:00 Piink7878 test(lab-03): isolate E2E-03 password change test with FK-safe cleanup and sync docs
+6e2ccf8bf84d56c570742c874cd495deb8197c1a 2026-09-19T01:27:33+07:00 Piink7878 docs(lab-03): refine MIG-01 expected result and clarify test boundaries
+a3b8eb98ef12b7f1d36561c15f1cdbe93c272a08 2026-09-19T01:02:16+07:00 Piink7878 docs(lab-03): isolate MIG-01 expected result and document test limitations
+0a9df1f00c5e5dfcdec084cf160a83f2c3edc35e 2026-09-18T19:29:34+07:00 Piink7878 docs(lab-03): update MIG-01 status and coverage gap disclosure in test matrix
+e03e6f1702895b5b9cc1c7bf8fb4692edb542674 2026-09-18T18:53:36+07:00 Piink7878 test(lab-03): extend E2E-03, add MIG-01 regression, fix docs traceability
+0d51f0238a5f67675ea0372464c3d61ebfb64a0d 2026-09-18T01:59:09+07:00 Piink7878 fix: finalize E2E review fixes - clean regexes, revert testDir, untrack cache
+0574d7af5dd87da5ac452e40d2e3ec1ff9a1ec9c 2026-09-18T01:37:01+07:00 Piink7878 test: refine e2e persistence, fix regex, test requester note visibility, and sync docs
+2abe48c6fcbd7f490c0b49b1cda510279b196b4f 2026-09-18T01:07:57+07:00 Piink7878 test: add and pass all e2e tests for auth, staff, and admin flows across all devices
+48da51d4f31ef99c842f0bf4df24a5032d80fd0d 2026-09-18T00:27:42+07:00 Kamonnatt23 Merge pull request #60 from Piink7878/feat/8-admin-user-management
+87eee01e5b50b1d6ed856fc06ff138bd5b99ba33 2026-09-18T00:18:26+07:00 Piink7878 docs: sync api paths in specification and test: add missing 403 coverage for admin endpoints
+b98f0308ea17b266cedcbf5dfd8c89f6749d9c10 2026-09-18T00:10:35+07:00 Piink7878 test: safely restore admin state and move teardown to finally block
+ececf086cf7e4b6e8e7a7d061d5ffb2e05599f17 2026-09-18T00:01:33+07:00 Piink7878 test: replace mock with real db concurrent test and assert strict 200/409 for last admin
+bed911527cc07561efe10df6531dded893bcb4c9 2026-09-17T23:42:04+07:00 Piink7878 test: enforce strict 200/409 assertion and restore prisma spy mock
+c3f589cc44071650cf3e463ad1bc8a9c0f72ae93 2026-09-17T23:18:21+07:00 Piink7878 fix: correct concurrent test, handle transaction conflict as 409, clean up logs
+e4569993315eafec5f504f58dcc7b64a51010d82 2026-09-17T23:00:15+07:00 Piink7878 fix: enforce serializable isolation level for last admin check and add concurrent test
+c7b573712050e42fc76d06086396940533670c24 2026-09-17T22:19:46+07:00 Piink7878 fix: resolve last admin race condition, update api spec, refactor tests
+0c8e46136e7e7fe5ee8b3f911473d19c2c5c6dd7 2026-09-17T22:10:00+07:00 Piink7878 test: add missing admin tests and fix edit role validation
+d776556985786130e0868120f0387c7d358abf44 2026-09-17T22:00:04+07:00 Piink7878 feat: implement admin user management and safety rules
+f39fb1dac94c93b2d4dd4dc75c8e456a45bc2ed3 2026-09-17T21:45:50+07:00 Kamonnatt23 Merge pull request #59 from Piink7878/feat/7-ticket-comments-and-notes
+79fdf1f4a376f715b6bc7248ddb5c43a36146a28 2026-09-17T21:36:47+07:00 Piink7878 fix: restrict indicate-resolved to requester and use public comment only
+9f195e7ca7e280ba1c634a2468fcc4f75f122eb5 2026-09-17T21:16:33+07:00 Piink7878 feat: implement public comments, internal notes and requester resolved action
+5e760cbc2f24854cd968abbd9274fc5a3f04842e 2026-09-17T18:35:58+07:00 Kamonnatt23 Merge pull request #57 from Piink7878/feat/6-staff-ticket-operations
+4fb25a63655e5a9ad5a2b92f1c1dd978a696ffd0 2026-09-17T18:32:37+07:00 Piink7878 fix(staff): audit logs for auto transitions, unified timeline, ui interaction tests, and synced tests.md (#6)
+86251e42b5e94a84c2e302eaee14907e9fc8d239 2026-09-17T18:17:29+07:00 Piink7878 test(staff): add audit log assertions for REJECTED and standard transitions, sync test plan (#6)
+3eb3ec882a9b16da4eae277fd36b3990309ad2bc 2026-09-17T18:09:32+07:00 Piink7878 fix(staff): enforce requester 403 tests on all mutations, add status transition audit logging, and sync spec docs (#6)
+b2ad24e4e45fac4930bc780ca974166943f44ae7 2026-09-16T19:39:02+07:00 Piink7878 feat(staff): implement ticket operations, status transitions, and staff detail view (#6)
+9067920859871a3ef451812231baba21ac6a6c02 2026-09-16T19:08:49+07:00 Kamonnatt23 Merge pull request #56 from Piink7878/feat/5-staff-ticket-queue
+b5d0ecea9362bda5f50f33593f884447a53b28a5 2026-09-16T19:05:35+07:00 Piink7878 fix(staff): align enum business sort order and add client sort interaction test (#5)
+a4e6092bc2c35f35643dd867463167604d0c73d3 2026-09-16T18:56:55+07:00 Piink7878 fix(staff): sync backend sort fields and separate empty from no-results states (#5)
+c53d979f744a753b021a032ec46649915383aa9f 2026-09-16T18:37:04+07:00 Piink7878 fix(staff): add detail route, ui sort controls, skeleton loader, and expanded tests (#5)
+b0fde49c5a35e439a9b2e94ed62d61e8a4d50986 2026-09-16T18:22:41+07:00 Piink7878 feat(staff): implement ticket queue api, responsive ui, and full test suite (#5)
+ffcd2f8924bc804f12ae36bc3172ab0902af7c3f 2026-09-16T17:52:46+07:00 Kamonnatt23 Merge pull request #55 from Piink7878/feat/4-requester-identity-regression
+4875fc7e86a475c0a4741da51481c4d9c151bf79 2026-09-16T17:44:24+07:00 Piink7878 refactor(server): remove legacy /api/requesters endpoint and test (#4)
+6df67e29003f909d6c47f3cd414602d71fad6adb 2026-09-16T17:31:38+07:00 Piink7878 feat(requester): enforce session identity on tickets and fix lab 2 regression suite (#4)
+631b2b68200d978cd9d7f62e2f6b4ca98a8293ba 2026-09-15T19:49:30+07:00 Kamonnatt23 Merge pull request #54 from Piink7878/feat/3-auth-foundation
+09f956662f5c0254ef3a0c0584a4592754710c84 2026-09-15T19:44:49+07:00 Piink7878 fix(auth): add placeholders for staff/admin routes and enforce hybrid session expiration (#3)
+57025ccdfde51375d9dc4dcf766a0665614c9245 2026-09-15T19:34:08+07:00 Piink7878 fix(server): remove duplicate middleware import in app.ts (#3)
+ca19188b1dfb688c01cc5ef663f9fd190a5fe9b3 2026-09-15T19:24:30+07:00 Piink7878 feat(auth): address review feedback on routing, session security, and test suite (#3)
+94e0407e908d825dc62c559ca969f5013e53af40 2026-09-15T18:55:18+07:00 Piink7878 feat(auth): implement auth apis, password change enforcement, and auth test suite (#3)
+1ceb32768b79e4ce8173c3dccd4974ff1f88bf26 2026-09-15T17:52:56+07:00 Kamonnatt23 Merge pull request #53 from Piink7878/feat/2-db-user-and-seed
+c65767c725c1a2e1c20eedfbffc6a20f5262b8bd 2026-09-15T17:24:46+07:00 Piink7878 feat(db): add user model, lab3 relations, migration, and idempotent seed (#2)
+6e92b941979ec3c29bba3232c7db34d509d60097 2026-09-15T15:54:08+07:00 Kamonnatt23 Merge pull request #52 from Piink7878/feat/1-spec-and-test-plan
+f72c606930b4c0fa0d17aa659134de9fec8ff726 2026-09-15T15:49:16+07:00 Piink7878 docs: address peer review feedback on status matrix, auth security, and test plan (#1)
+52bd8434c1df8f00c65c9b9cb0c31589d8c72d43 2026-09-15T15:07:04+07:00 Piink7878 docs: define Sprint 3 engineering contract, specifications, and test plan (#1)
+cc922395f96e1d63b9ca62ee7f512f8dd2902748 2026-09-04T20:16:42+07:00 Kamonnatt23 Merge pull request #34 from Piink7878/lab2-staging
+b1c92536f4063d583b803b070b6c0dc681fc136c 2026-09-04T20:15:35+07:00 Piink7878 doc update tests.md
+0b5267d64930492871ada728c1d4ba7134d7e607 2026-09-04T17:58:43+07:00 Kamonnatt23 Merge pull request #33 from Piink7878/lab2-staging
+7fe2edcb01c87b5ce013a1f69907fbed5b84cac5 2026-09-04T17:56:20+07:00 Piink7878 docs update readme
+e7eadfd4593bef51429fda2771707cc2fff1fece 2026-09-04T17:50:20+07:00 Kamonnatt23 Merge pull request #32 from Piink7878/lab2-staging
+7b1efa2a70accac97e6174c5cdec5283dead8e4a 2026-09-04T17:46:28+07:00 Piink7878 docs lab02
+d14f389d2d46dd82fd94d070e35f6fd5b1f90f92 2026-09-04T17:14:46+07:00 Kamonnatt23 Merge pull request #31 from Piink7878/lab2-staging
+4ba8c6a7d033a243fe60a3eed04afd5bc6730f70 2026-09-04T17:06:32+07:00 Piink7878 release
+eb35060a63a4d86c79bcf9f2afb85924c1beee30 2026-09-04T01:46:00+07:00 Kamonnatt23 Merge pull request #30 from Piink7878/feature/7-e2e-testing-responsive
+070c69951bf7cf2173a7c6d7439a8236c8ade0c5 2026-09-04T01:39:56+07:00 Piink7878 chore: remove test reports and generated PDFs from git tracking and update .gitignore
+ca3a4ade03daf73615450911b14db9aba483c03b 2026-09-04T01:23:38+07:00 Piink7878 test: add attachment lifecycle flow and responsive visual assertions to E2E
+ad1f1710b9d281c33ddc7c7201805becdf8a4e14 2026-09-04T01:11:48+07:00 Piink7878 test: add playwright E2E tests and automated responsive screenshots
+56583522453b79baf850b742b97a296bde7f2488 2026-09-04T00:22:47+07:00 Kamonnatt23 Merge pull request #29 from Piink7878/feature/6-ticket-detail-attachments
+e720516f39e4d0f4410650e5bc38ef75ea5218dc 2026-09-04T00:18:57+07:00 Piink7878 fix: add requester existence check and expand attachment boundary/failure tests
+402bd01c6a778bb2a280b42665ae70a2139ccef9 2026-09-04T00:06:53+07:00 Piink7878 feat: implement read-only ticket details and attachment lifecycle with soft removal
+f896b04c617c7e89b0a335fd7434e1fe6f32e364 2026-09-03T23:36:41+07:00 Kamonnatt23 Merge pull request #28 from Piink7878/feature/5-my-tickets
+8829e15d18dc0ff2fa329119e74e85fbbd0872a3 2026-09-03T23:32:24+07:00 Piink7878 test: expand coverage for search, filter, sort, and pagination behaviors in API and UI
+cbfdaf6870b2f13349376db3fe0e964391b3a785 2026-09-03T23:08:11+07:00 Piink7878 feat: implement my tickets list with search, filter, sort, pagination, and ownership check
+34e969276dffa32f9481aacb4c8fb3d2a4d09e5a 2026-09-03T21:19:45+07:00 Kamonnatt23 Merge pull request #27 from Piink7878/feature/4-ticket-creation
+c91e0bc3ad32d842cc26215597ee6aa0a0853a36 2026-09-03T21:12:52+07:00 Piink7878 fix: add @unique constraint to ticketNumber in Prisma schema and generate migration
+48b53bea7a68ca63d7a9594762ece6adc15121a7 2026-09-03T20:49:47+07:00 Piink7878 fix: resolve ticket number concurrency, add unique constraint migration, and enhance API test coverage
+f9778b8e110a900b8916e69e44a05e02c7d9dae9 2026-09-03T20:31:31+07:00 Piink7878 feat: implement ticket creation API, UI form, validation, and attachments
+ecc5b74fd6508dec720c884ce1c89f490b51ba4d 2026-09-03T19:37:05+07:00 Kamonnatt23 Merge pull request #26 from Piink7878/feature/3-requester-context
+7b8920e7ade354b1eed17a4d1ff84e36d114f68f 2026-09-03T19:22:40+07:00 Piink7878 fix: add localStorage persistence to RequesterContext
+f63cd527044bca5205d1f56e031d85c9d3801b25 2026-09-03T19:07:52+07:00 Piink7878 feat: implement development requester selection screen and global context
+2dd1d2169698438c0bf6ad99f750092ecd29cab3 2026-09-03T18:43:37+07:00 Kamonnatt23 Merge pull request #25 from Piink7878/feat/2-db-models-seed
+e2c345b6c0510d831fe8a01e7c501f537d7f972b 2026-09-03T18:38:48+07:00 Piink7878 fix: refactor seed.ts to single try-catch flow and remove duplicates
+9a52e99e40e40625181b0e0c9cdd8c90ba53cb10 2026-09-03T18:10:08+07:00 Piink7878 fix: refactor seed execution flow and prevent early disconnect
+f31102d2c4bc252df1c9cb86f37c1d0d38644cc2 2026-09-03T15:32:08+07:00 Piink7878 feat: implement database schema and idempotent seed data for Lab 2
+2d4f9c38bc2134ca365b3ce6917bbf6e692882b3 2026-09-02T19:55:19+07:00 Kamonnatt23 Merge pull request #24 from Piink7878/feat/1-spec-test-plan
+364a15f4ca5f1c8c392b5959de4eb5e090cdee10 2026-09-02T19:51:52+07:00 Piink7878 docs: address follow-up PR feedback for API specs
+d80cc507931bf013eae4f51b5ee51928e87660db 2026-09-02T19:38:55+07:00 Piink7878 docs: refine Lab 2 specifications and test plans per PR feedback
+bef0979a1065d9ba560ae867f5383be3f5b3f07d 2026-09-02T19:20:50+07:00 Piink7878 docs: establish sprint 2 engineering contract, ui-spec, api-spec, and tests plan
+0a1fe7e91e9b1ce028e2f8f8baf353f25aae0cee 2026-09-02T18:19:10+07:00 Piink7878 Add and update lab-01 documentation
+3e6f5c76697a7c72f3ac0806b5a1047b7f023c19 2026-08-16T12:34:29+07:00 Kamonnatt23 Merge pull request #14 from Piink7878/lab1-staging
+30fa8e640a696b49201cf7ed291cdd030948c56c 2026-08-16T09:50:06+07:00 Kamonnatt23 Merge pull request #13 from Piink7878/update-docs
+aa0f8616f20f63a79b455ba2e93668aa94a898df 2026-08-16T00:12:46+07:00 Piink7878 update docs
+69a1dfbf30002cf2256a8d75d5f9a02c1216c797 2026-08-15T18:40:20+07:00 Kamonnatt23 Merge pull request #12 from Piink7878/feature/4-category-list
+601876e2c02b592f962e9e9421648b0766594631 2026-08-15T18:39:06+07:00 Piink7878 fix: add connection error handling and empty categories state
+1404a1a247a2c3153d807ab0c9ba303f7d07a6eb 2026-08-15T18:02:28+07:00 Piink7878 feat: display category list, integrate vertical slice, and add automated tests
+3dff0b2a2e85ad1f0067723c9fb576f11e09c948 2026-08-15T17:40:30+07:00 Kamonnatt23 Merge pull request #11 from Piink7878/feature/3-category-seed
+789d399b7178e7f362e39f38a50dc4a08da82126 2026-08-15T17:30:00+07:00 Piink7878 fix: add error handling and disconnect to seed script
+66291adfd6441ba7df863ac20990b699681ed316 2026-08-15T17:23:07+07:00 Kamonnatt23 Merge pull request #10 from Piink7878/feature/3-category-seed
+37b4ec63287997665cc4e5bb77106979575a8466 2026-08-15T16:21:53+07:00 Kamonnatt23 Merge pull request #9 from Piink7878/feature/2-health-check
+f672d0ca177c784b6c8b15c6b31240a94a55bdc4 2026-08-15T16:06:03+07:00 Piink7878 fix: resolve import and clean up compiled js artifacts
+1920f34ad76b025f21206d98ca5689da28a0d9f9 2026-08-15T15:44:01+07:00 Piink7878 feat: add Category model, migration, and idempotent seed script
+4dad8e61f876ec76bec2b3db8582319aed3384ba 2026-08-15T15:05:38+07:00 Piink7878 feat: implement /api/health endpoint and Supertest verification
+607226456a5a21bc8f14ccd6546f64a3807b208d 2026-08-14T17:34:40+07:00 Kamonnatt23 Merge pull request #6 from Piink7878/feature/1-project-foundation
+b4672e16dbe5bc09b5fbbf283b319c30ddebaa2f 2026-08-14T17:12:53+07:00 Piink7878 docs: update ai_use and reviewer
+2c363bf225c08fdc920fc9a81d0aff865c184383 2026-08-13T20:06:52+07:00 Kamonnatt23 Merge pull request #5 from Piink7878/feature/1-project-foundation
+6274425125a931c0958da88942c799ff84d3133a 2026-08-13T20:03:43+07:00 Piink7878 docs: update README.md
+a2764cdf76aaa73a5c56c043fad90143458f478a 2026-08-13T18:56:38+07:00 Piink7878 feat: setup project foundation with Express, Prisma, and React
+06767efa0f6cc0077d4355fa6e2e73e53fb8524a 2026-08-10T17:56:52+07:00 Piink7878 Initial commit
