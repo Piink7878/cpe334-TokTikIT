@@ -2,10 +2,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AttachmentSection } from '../../src/components/AttachmentSection';
 import * as api from '../../src/api';
-import * as auth from '../../src/contexts/RequesterContext';
+import * as auth from '../../src/contexts/AuthContext';
 
 vi.mock('../../src/api');
-vi.mock('../../src/contexts/RequesterContext');
+vi.mock('../../src/contexts/AuthContext');
 
 describe('AttachmentSection Component', () => {
   const mockRequester = { id: 1, name: 'John Doe', email: 'john@example.com' };
@@ -36,7 +36,7 @@ describe('AttachmentSection Component', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    (auth.useRequester as any).mockReturnValue({ selectedRequester: mockRequester });
+    (auth.useAuth as any).mockReturnValue({ user: mockRequester });
   });
 
   const renderComponent = (attachments: any[] = []) => {
@@ -95,7 +95,7 @@ describe('AttachmentSection Component', () => {
     fireEvent.change(fileInput, { target: { files: [file] } });
 
     await waitFor(() => {
-      expect(api.uploadAttachment).toHaveBeenCalledWith(101, file, mockRequester.id);
+      expect(api.uploadAttachment).toHaveBeenCalledWith(101, file);
       expect(mockUpdateCallback).toHaveBeenCalled();
     });
   });
@@ -149,7 +149,7 @@ describe('AttachmentSection Component', () => {
     fireEvent.click(screen.getByTestId('confirm-remove-btn'));
 
     await waitFor(() => {
-      expect(api.removeAttachment).toHaveBeenCalledWith(1, 'Wrong file uploaded', mockRequester.id);
+      expect(api.removeAttachment).toHaveBeenCalledWith(1, 'Wrong file uploaded');
       expect(mockUpdateCallback).toHaveBeenCalled();
     });
   });

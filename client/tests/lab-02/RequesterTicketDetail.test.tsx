@@ -3,10 +3,13 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RequesterTicketDetail } from '../../src/pages/RequesterTicketDetail';
 import * as api from '../../src/api';
-import * as auth from '../../src/contexts/RequesterContext';
+import * as auth from '../../src/contexts/AuthContext';
 
-vi.mock('../../src/api');
-vi.mock('../../src/contexts/RequesterContext');
+vi.mock('../../src/api', () => ({
+  getTicket: vi.fn(),
+  getPublicComments: vi.fn(),
+}));
+vi.mock('../../src/contexts/AuthContext');
 
 describe('RequesterTicketDetail Component', () => {
   const mockRequester = { id: 1, name: 'John Doe', email: 'john@example.com' };
@@ -29,7 +32,7 @@ describe('RequesterTicketDetail Component', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    (auth.useRequester as any).mockReturnValue({ selectedRequester: mockRequester });
+    (auth.useAuth as any).mockReturnValue({ user: mockRequester });
   });
 
   const renderComponent = (ticketId = '101') => {
@@ -49,12 +52,13 @@ describe('RequesterTicketDetail Component', () => {
     expect(screen.getByRole('status')).toBeInTheDocument();
     
     await waitFor(() => {
-      expect(api.getTicket).toHaveBeenCalledWith(101, mockRequester.id);
+      expect(api.getTicket).toHaveBeenCalledWith(101);
     });
   });
 
   it('renders read-only fields correctly', async () => {
     (api.getTicket as any).mockResolvedValueOnce({ data: mockTicket });
+    (api.getPublicComments as any).mockResolvedValue({ data: [] });
     renderComponent();
 
     await waitFor(() => {
@@ -71,14 +75,12 @@ describe('RequesterTicketDetail Component', () => {
 
   it('shows disabled tabs for out of scope features', async () => {
     (api.getTicket as any).mockResolvedValueOnce({ data: mockTicket });
+    (api.getPublicComments as any).mockResolvedValue({ data: [] });
     renderComponent();
 
     await waitFor(() => {
       expect(screen.getByText(/Public Comments/)).toBeInTheDocument();
     });
-
-    const commentsTab = screen.getByText(/Public Comments/);
-    expect(commentsTab).toBeDisabled();
 
     const serviceActionsTab = screen.getByText(/Service Actions/);
     expect(serviceActionsTab).toBeDisabled();

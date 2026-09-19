@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import { Attachment, uploadAttachment, removeAttachment, downloadAttachment } from "../api";
-import { useRequester } from "../contexts/RequesterContext";
+import { useAuth } from "../contexts/AuthContext";
 
 interface AttachmentSectionProps {
   ticketId: number;
@@ -12,7 +12,8 @@ const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 
 export const AttachmentSection: React.FC<AttachmentSectionProps> = ({ ticketId, attachments, onAttachmentUpdate }) => {
-  const { selectedRequester } = useRequester();
+  const { user } = useAuth();
+  const selectedRequester = user;
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   
@@ -53,7 +54,7 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({ ticketId, 
     setIsUploading(true);
 
     try {
-      await uploadAttachment(ticketId, file, selectedRequester.id);
+      await uploadAttachment(ticketId, file);
       onAttachmentUpdate();
     } catch (err: any) {
       setUploadError(err.message || "Failed to upload file");
@@ -74,7 +75,7 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({ ticketId, 
   const handleDownload = async (att: Attachment) => {
     if (!selectedRequester) return;
     try {
-      await downloadAttachment(att.id, att.originalFilename, selectedRequester.id);
+      await downloadAttachment(att.id, att.originalFilename);
     } catch (err: any) {
       alert(err.message || "Failed to download attachment");
     }
@@ -91,7 +92,7 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({ ticketId, 
     setIsRemoving(true);
 
     try {
-      await removeAttachment(attachmentToRemove, removalReason, selectedRequester.id);
+      await removeAttachment(attachmentToRemove, removalReason);
       onAttachmentUpdate();
       setAttachmentToRemove(null);
       setRemovalReason("");

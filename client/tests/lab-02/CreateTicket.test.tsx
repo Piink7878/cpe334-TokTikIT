@@ -5,11 +5,11 @@ import { BrowserRouter } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import CreateTicket from '../../src/pages/CreateTicket';
 
-vi.mock('../../src/contexts/RequesterContext', () => ({
-  useRequester: vi.fn(() => ({
-    selectedRequester: {
+vi.mock('../../src/contexts/AuthContext', () => ({
+  useAuth: vi.fn(() => ({
+    user: {
       id: 1,
-      name: 'Test User',
+      fullName: 'Test User',
       email: 'test@example.com',
       department: 'IT',
       isActive: true

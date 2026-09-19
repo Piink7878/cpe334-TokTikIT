@@ -1,13 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.js";
+import { loginAsRequester, createMockUser } from "./test-utils.js";
 
 const mockTicketFindMany = vi.fn();
 const mockTicketCount = vi.fn();
+const mockUserFindUnique = vi.fn();
 
 vi.mock("../../src/prisma.js", () => {
   return {
     getPrisma: vi.fn(() => ({
+      user: { findUnique: mockUserFindUnique },
       ticket: {
         findMany: mockTicketFindMany,
         count: mockTicketCount
@@ -17,7 +20,9 @@ vi.mock("../../src/prisma.js", () => {
 });
 
 describe("GET /api/tickets", () => {
-  beforeEach(() => {
+  let agent: ReturnType<typeof request.agent>;
+
+  beforeEach(async () => {
     vi.clearAllMocks();
     
     mockTicketFindMany.mockResolvedValue([
@@ -36,12 +41,21 @@ describe("GET /api/tickets", () => {
     ]);
     
     mockTicketCount.mockResolvedValue(1);
+
+    mockUserFindUnique.mockImplementation(async (args) => {
+      if (args.where.email === "requester1@test.com") return createMockUser(1);
+      if (args.where.email === "requester42@test.com") return createMockUser(42);
+      if (args.where.id == 1) return createMockUser(1);
+      if (args.where.id == 42) return createMockUser(42);
+      return null;
+    });
+
+    agent = request.agent(app);
+    await loginAsRequester(agent, 1);
   });
 
   it("should return a paginated list of tickets for the requester", async () => {
-    const response = await request(app)
-      .get("/api/tickets")
-      .set("X-Requester-Id", "1");
+    const response = await agent.get("/api/tickets");
     
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty("data");
@@ -67,33 +81,22 @@ describe("GET /api/tickets", () => {
     });
   });
 
-  it("should return 400 if X-Requester-Id is missing", async () => {
+  it("should return 401 if unauthenticated", async () => {
     const response = await request(app).get("/api/tickets");
-    expect(response.status).toBe(400);
-    expect(response.body.error.message).toBe("Missing X-Requester-Id header");
-  });
-
-  it("should return 400 if X-Requester-Id is invalid", async () => {
-    const response = await request(app)
-      .get("/api/tickets")
-      .set("X-Requester-Id", "invalid");
-    expect(response.status).toBe(400);
-    expect(response.body.error.message).toBe("Invalid X-Requester-Id header");
+    expect(response.status).toBe(401);
   });
 
   it("should return 400 if pagination parameters are invalid", async () => {
-    const response = await request(app)
+    const response = await agent
       .get("/api/tickets")
-      .set("X-Requester-Id", "1")
       .query({ page: -1 });
     expect(response.status).toBe(400);
     expect(response.body.error.message).toBe("Invalid pagination parameters");
   });
 
   it("should apply search filter correctly", async () => {
-    await request(app)
+    await agent
       .get("/api/tickets")
-      .set("X-Requester-Id", "1")
       .query({ search: "battery" });
     
     expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -107,25 +110,22 @@ describe("GET /api/tickets", () => {
   });
 
   it("should apply status, category, and priority filters individually", async () => {
-    await request(app)
+    await agent
       .get("/api/tickets")
-      .set("X-Requester-Id", "1")
       .query({ status: "OPEN" });
     expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ currentStatus: "OPEN" })
     }));
 
-    await request(app)
+    await agent
       .get("/api/tickets")
-      .set("X-Requester-Id", "1")
       .query({ categoryId: "2" });
     expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ categoryId: 2 })
     }));
 
-    await request(app)
+    await agent
       .get("/api/tickets")
-      .set("X-Requester-Id", "1")
       .query({ requestedPriority: "HIGH" });
     expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ requestedPriority: "HIGH" })
@@ -133,17 +133,15 @@ describe("GET /api/tickets", () => {
   });
 
   it("should apply sorting in both asc and desc orders", async () => {
-    await request(app)
+    await agent
       .get("/api/tickets")
-      .set("X-Requester-Id", "1")
       .query({ sortBy: "ticketNumber", sortOrder: "asc" });
     expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
       orderBy: { ticketNumber: "asc" }
     }));
 
-    await request(app)
+    await agent
       .get("/api/tickets")
-      .set("X-Requester-Id", "1")
       .query({ sortBy: "createdAt", sortOrder: "desc" });
     expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
       orderBy: { createdAt: "desc" }
@@ -154,9 +152,8 @@ describe("GET /api/tickets", () => {
     mockTicketCount.mockResolvedValue(25); // 25 total items
     
     // Page 2, PageSize 10
-    const response = await request(app)
+    const response = await agent
       .get("/api/tickets")
-      .set("X-Requester-Id", "1")
       .query({ page: "2", pageSize: "10" });
     
     expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
@@ -175,9 +172,10 @@ describe("GET /api/tickets", () => {
   });
 
   it("should enforce strict cross-requester ownership boundaries", async () => {
-    await request(app)
-      .get("/api/tickets")
-      .set("X-Requester-Id", "42");
+    const otherAgent = request.agent(app);
+    await loginAsRequester(otherAgent, 42);
+
+    await otherAgent.get("/api/tickets");
     
     expect(mockTicketFindMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { requesterId: 42 }

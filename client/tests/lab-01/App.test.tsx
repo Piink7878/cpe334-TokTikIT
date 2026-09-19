@@ -8,16 +8,16 @@ const { mockUseRequester } = vi.hoisted(() => ({
   mockUseRequester: vi.fn()
 }));
 
-vi.mock('../../src/contexts/RequesterContext.js', () => ({
-  useRequester: () => mockUseRequester(),
-  RequesterProvider: ({ children }: any) => children
+vi.mock('../../src/contexts/AuthContext', () => ({
+  useAuth: () => mockUseRequester(),
+  AuthProvider: ({ children }: any) => children
 }));
 
 describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseRequester.mockReturnValue({
-      selectedRequester: { id: 1, name: 'Test User' }
+      user: { id: 1, fullName: 'Test User' }
     });
     // Set initial route to /health so we test the HealthCheck component
     window.history.pushState({}, 'Test page', '/health');
@@ -30,10 +30,10 @@ describe("App", () => {
 
   it("UI-02: shows Online and the seeded categories on success", async () => {
     const mockCategories = [
-      { id: 1, name: "Account and Access" },
-      { id: 2, name: "Hardware" },
-      { id: 3, name: "Software" },
-      { id: 4, name: "Network" },
+      { id: 1, name: "Account and Access", description: "", isActive: true },
+      { id: 2, name: "Hardware", description: "", isActive: true },
+      { id: 3, name: "Software", description: "", isActive: true },
+      { id: 4, name: "Network", description: "", isActive: true },
     ];
     vi.spyOn(api, "checkSystem").mockResolvedValue({
       online: true,

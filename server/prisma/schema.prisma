@@ -10,15 +10,27 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ตัวอย่างโมเดลสำหรับ Lab 2
-model DevelopmentRequester {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String   @unique
-  isActive  Boolean  @default(true) // สำหรับแยกระหว่าง Active และ Inactive Requester
-  tickets   Ticket[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+enum Role {
+  REQUESTER
+  IT_STAFF
+  ADMIN
+}
+
+model User {
+  id                 String          @id @default(uuid())
+  email              String          @unique
+  passwordHash       String
+  fullName           String
+  role               Role
+  isActive           Boolean         @default(true)
+  mustChangePassword Boolean         @default(false)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  ticketsRequested   Ticket[]        @relation("TicketRequester")
+  ticketsOwned       Ticket[]        @relation("TicketOwner")
+  publicComments     PublicComment[]
+  internalNotes      InternalNote[]
 }
 
 model Category {
@@ -40,22 +52,52 @@ model RelatedSystem {
 }
 
 model Ticket {
-  id                Int                  @id @default(autoincrement())
-  ticketNumber      String               @unique // added unique constraint
-  requesterId       Int
-  requester         DevelopmentRequester @relation(fields: [requesterId], references: [id])
+  id                Int             @id @default(autoincrement())
+  ticketNumber      String          @unique
+
+  requesterId       String
+  requester         User            @relation("TicketRequester", fields: [requesterId], references: [id])
+
+  ownerId           String?
+  owner             User?           @relation("TicketOwner", fields: [ownerId], references: [id])
+
   categoryId        Int
-  category          Category             @relation(fields: [categoryId], references: [id])
+  category          Category        @relation(fields: [categoryId], references: [id])
   relatedSystemId   Int
-  relatedSystem     RelatedSystem        @relation(fields: [relatedSystemId], references: [id])
-  requestedPriority Priority             @default(MEDIUM)
-  itPriority        Priority             @default(MEDIUM)
-  currentStatus     Status               @default(NEW) // สถานะเริ่มต้นต้องเป็น New
+  relatedSystem     RelatedSystem   @relation(fields: [relatedSystemId], references: [id])
+
+  requestedPriority Priority        @default(MEDIUM)
+  itPriority        Priority        @default(MEDIUM)
+  currentStatus     Status          @default(NEW)
   summary           String
   description       String
+
   attachments       Attachment[]
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  publicComments    PublicComment[]
+  internalNotes     InternalNote[]
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+}
+
+model PublicComment {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  ticket    Ticket   @relation(fields: [ticketId], references: [id])
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model InternalNote {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  ticket    Ticket   @relation(fields: [ticketId], references: [id])
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
 }
 
 model Attachment {
@@ -66,7 +108,7 @@ model Attachment {
   storedName    String
   mimeType      String
   sizeBytes     Int
-  isRemoved     Boolean   @default(false) // กฎ Soft-removal
+  isRemoved     Boolean   @default(false)
   removedAt     DateTime?
   removalReason String?
   createdAt     DateTime  @default(now())
@@ -84,8 +126,10 @@ enum Status {
   NEW
   OPEN
   IN_PROGRESS
-  PENDING
+  WAITING_FOR_REQUESTER
   RESOLVED
   CLOSED
+  REOPENED
   CANCELLED
+  REJECTED
 }
