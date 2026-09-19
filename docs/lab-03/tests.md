@@ -12,14 +12,14 @@ This document provides a comprehensive test plan for the Lab 3 increment, mappin
 | **API-04** | API | AC-04, AC-15 | Requester requests internal notes | 403 Forbidden; no note content leaked | `server/tests/lab-03/authorization.api.test.ts` | Pass |
 | **API-05** | API | AC-05 | IT Staff requests ticket details | Returns both Public Comments and Internal Notes | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Pass |
 | **API-06** | API | AC-06 | IT Staff updates ticket status | Status is updated successfully and transition is logged with an internal note | `server/tests/lab-03/staff-ticket-detail.api.test.ts` | Pass |
-| **API-07** | API | AC-07, AC-15 | Requester attempts to update `it_priority` | 403 Forbidden; priority unchanged | `server/tests/lab-03/authorization.api.test.ts` | Pass |
+| **API-07** | API | AC-07, AC-15 | Requester attempts to update `itPriority` | 403 Forbidden; priority unchanged | `server/tests/lab-03/authorization.api.test.ts` | Pass |
 | **API-08** | API | AC-08 | Admin attempts to deactivate own account | 400 Bad Request; prevents deactivation | `server/tests/lab-03/users-admin.api.test.ts` | Pass |
 | **API-09** | API | AC-09 | Admin deactivates/changes role of last admin | 400 Bad Request; action prevented | `server/tests/lab-03/users-admin.api.test.ts` | Pass |
 | **API-10** | API | AC-10 | Admin creates a new user | User created; password is hashed in DB | `server/tests/lab-03/users-admin.api.test.ts` | Pass |
 | **API-11** | API | AC-11 | IT Staff views global queue | Returns tickets across all Requesters | `server/tests/lab-03/staff-queue.api.test.ts` | Pass |
 | **API-12** | API | AC-12 | Requester views ticket queue | Only returns their own tickets | `server/tests/lab-03/authorization.api.test.ts` | Pass |
 | **API-13** | API | AC-13 | Unauthenticated access to protected API | 401 Unauthorized returned | `server/tests/lab-03/authorization.api.test.ts` | Pass |
-| **API-14** | API | AC-14 | IT Staff creates internal note | Note saved with `is_internal_note = true` | `server/tests/lab-03/comments-notes.api.test.ts` | Pass |
+| **API-14** | API | AC-14 | IT Staff creates internal note | Note saved in `InternalNote` model/table | `server/tests/lab-03/comments-notes.api.test.ts` | Pass |
 | **API-15** | API | AC-15 | Requester attempting Admin operations | 403 Forbidden when requesting `/api/admin/users` | `server/tests/lab-03/authorization.api.test.ts` | Pass |
 | **API-16** | API | AC-05, AC-14 | Fetch Public Comments | Returns correctly filtered comment list | `server/tests/lab-03/comments-notes.api.test.ts` | Pass |
 | **UI-01** | Component | AC-01, AC-13 | Login screen rendering and submission | Renders form; calls auth API; handles errors | `client/tests/lab-03/Login.test.tsx` | Pass |
