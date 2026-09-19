@@ -5,7 +5,7 @@ import { getPrisma } from "../../src/prisma";
 
 const prisma = getPrisma();
 
-describe("IT Staff Ticket Operations API", () => {
+describe("IT Staff Ticket Detail API (Lab 3)", () => {
   let itStaffSessionCookie: string;
   let adminSessionCookie: string;
   let requesterSessionCookie: string;
@@ -14,7 +14,7 @@ describe("IT Staff Ticket Operations API", () => {
   let testTicketId: number;
 
   beforeAll(async () => {
-    const emails = ["staff-ops@example.com", "admin-ops@example.com", "req-ops@example.com"];
+    const emails = ["staff-detail@example.com", "admin-detail@example.com", "req-detail@example.com"];
     
     // Clean up from previous failed runs just in case
     const users = await prisma.user.findMany({ where: { email: { in: emails } } });
@@ -34,27 +34,27 @@ describe("IT Staff Ticket Operations API", () => {
     const passwordHash = await bcrypt.hash("Password123!", 10);
 
     const itStaff = await prisma.user.create({
-      data: { email: "staff-ops@example.com", fullName: "IT Staff", role: "IT_STAFF", passwordHash, isActive: true }
+      data: { email: "staff-detail@example.com", fullName: "IT Staff", role: "IT_STAFF", passwordHash, isActive: true }
     });
     itStaffId = itStaff.id;
 
     const admin = await prisma.user.create({
-      data: { email: "admin-ops@example.com", fullName: "Admin", role: "ADMIN", passwordHash, isActive: true }
+      data: { email: "admin-detail@example.com", fullName: "Admin", role: "ADMIN", passwordHash, isActive: true }
     });
     adminId = admin.id;
 
     const requester = await prisma.user.create({
-      data: { email: "req-ops@example.com", fullName: "Requester", role: "REQUESTER", passwordHash, isActive: true }
+      data: { email: "req-detail@example.com", fullName: "Requester", role: "REQUESTER", passwordHash, isActive: true }
     });
 
     // Login to get cookies
-    const loginStaff = await request(app).post("/api/auth/login").send({ email: "staff-ops@example.com", password: "Password123!" });
+    const loginStaff = await request(app).post("/api/auth/login").send({ email: "staff-detail@example.com", password: "Password123!" });
     itStaffSessionCookie = loginStaff.headers["set-cookie"][0];
 
-    const loginAdmin = await request(app).post("/api/auth/login").send({ email: "admin-ops@example.com", password: "Password123!" });
+    const loginAdmin = await request(app).post("/api/auth/login").send({ email: "admin-detail@example.com", password: "Password123!" });
     adminSessionCookie = loginAdmin.headers["set-cookie"][0];
 
-    const loginReq = await request(app).post("/api/auth/login").send({ email: "req-ops@example.com", password: "Password123!" });
+    const loginReq = await request(app).post("/api/auth/login").send({ email: "req-detail@example.com", password: "Password123!" });
     requesterSessionCookie = loginReq.headers["set-cookie"][0];
   });
 
@@ -64,17 +64,16 @@ describe("IT Staff Ticket Operations API", () => {
       await prisma.publicComment.deleteMany({ where: { ticketId: testTicketId } });
       await prisma.attachment.deleteMany({ where: { ticketId: testTicketId } });
       await prisma.ticket.deleteMany({ where: { id: testTicketId } });
-      // Do not delete seeded category/system
     }
     
     const cat = await prisma.category.findFirst();
     const sys = await prisma.relatedSystem.findFirst();
 
-    const requester = await prisma.user.findUnique({ where: { email: "req-ops@example.com" } });
+    const requester = await prisma.user.findUnique({ where: { email: "req-detail@example.com" } });
     
     const ticket = await prisma.ticket.create({
       data: {
-        ticketNumber: "INC-OPS-" + Date.now(),
+        ticketNumber: "INC-DTL-" + Date.now(),
         summary: "Test Ticket",
         description: "Test Desc",
         categoryId: cat!.id,
@@ -89,7 +88,7 @@ describe("IT Staff Ticket Operations API", () => {
   });
 
   afterAll(async () => {
-    const emails = ["staff-ops@example.com", "admin-ops@example.com", "req-ops@example.com"];
+    const emails = ["staff-detail@example.com", "admin-detail@example.com", "req-detail@example.com"];
     const users = await prisma.user.findMany({ where: { email: { in: emails } } });
     if (users.length > 0) {
       const userIds = users.map(u => u.id);
@@ -111,6 +110,11 @@ describe("IT Staff Ticket Operations API", () => {
       expect(res.body.id).toBe(testTicketId);
     });
 
+    it("should reject unauthenticated request with 401 Unauthorized", async () => {
+      const res = await request(app).get(`/api/staff/tickets/${testTicketId}`);
+      expect(res.status).toBe(401);
+    });
+
     it("should reject Requester with 403 Forbidden", async () => {
       const res = await request(app).get(`/api/staff/tickets/${testTicketId}`).set("Cookie", requesterSessionCookie);
       expect(res.status).toBe(403);
@@ -128,6 +132,11 @@ describe("IT Staff Ticket Operations API", () => {
       expect(notes.length).toBe(1);
       expect(notes[0].content).toBe("Status changed from NEW to OPEN");
       expect(notes[0].authorId).toBe(itStaffId);
+    });
+
+    it("should reject unauthenticated request with 401 Unauthorized", async () => {
+      const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/claim`);
+      expect(res.status).toBe(401);
     });
 
     it("should reject Requester with 403 Forbidden", async () => {
@@ -152,11 +161,17 @@ describe("IT Staff Ticket Operations API", () => {
     });
 
     it("should reject invalid assignee", async () => {
-      const reqUser = await prisma.user.findUnique({ where: { email: "req-ops@example.com" } });
+      const reqUser = await prisma.user.findUnique({ where: { email: "req-detail@example.com" } });
       const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/assign`)
         .set("Cookie", itStaffSessionCookie)
         .send({ assigneeId: reqUser!.id });
       expect(res.status).toBe(400);
+    });
+
+    it("should reject unauthenticated request with 401 Unauthorized", async () => {
+      const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/assign`)
+        .send({ assigneeId: itStaffId });
+      expect(res.status).toBe(401);
     });
 
     it("should reject Requester with 403 Forbidden", async () => {
@@ -174,6 +189,12 @@ describe("IT Staff Ticket Operations API", () => {
         .send({ itPriority: "CRITICAL" });
       expect(res.status).toBe(200);
       expect(res.body.ticket.itPriority).toBe("CRITICAL");
+    });
+
+    it("should reject unauthenticated request with 401 Unauthorized", async () => {
+      const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/priority`)
+        .send({ itPriority: "CRITICAL" });
+      expect(res.status).toBe(401);
     });
 
     it("should reject Requester with 403 Forbidden", async () => {
@@ -227,7 +248,6 @@ describe("IT Staff Ticket Operations API", () => {
     });
 
     it("should allow valid transition OPEN -> RESOLVED and log it with actor ID and timestamp", async () => {
-      // First, set it to OPEN so we can transition to RESOLVED
       await prisma.ticket.update({ where: { id: testTicketId }, data: { currentStatus: "OPEN" } });
       
       const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/status`)
@@ -240,7 +260,7 @@ describe("IT Staff Ticket Operations API", () => {
       expect(notes.length).toBe(1);
       expect(notes[0].content).toBe("Status changed from OPEN to RESOLVED");
       expect(notes[0].authorId).toBe(itStaffId);
-      expect(notes[0].createdAt).toBeDefined(); // Timestamp assertion
+      expect(notes[0].createdAt).toBeDefined();
     });
     
     it("should enforce terminal states cannot transition", async () => {
@@ -249,6 +269,12 @@ describe("IT Staff Ticket Operations API", () => {
         .set("Cookie", itStaffSessionCookie)
         .send({ status: "OPEN" });
       expect(res.status).toBe(400);
+    });
+
+    it("should reject unauthenticated request with 401 Unauthorized", async () => {
+      const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/status`)
+        .send({ status: "OPEN" });
+      expect(res.status).toBe(401);
     });
 
     it("should reject Requester with 403 Forbidden", async () => {

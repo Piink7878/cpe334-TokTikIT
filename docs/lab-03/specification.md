@@ -60,6 +60,8 @@ Develop a fully functional IT Service Desk ticketing system that supports robust
 ## 5. Business Rules
 *   **BR-01:** Only an active user with valid credentials may authenticate.
 *   **BR-02:** A user marked as requiring a password change cannot enter the normal application until a new valid password is saved.
+    *   *Normal Login Redirection:* When an active user logs in without a mandatory password change requirement, role-based redirection routes `REQUESTER` to `/my-tickets`, `IT_STAFF` to `/staff-queue`, and `ADMIN` to `/user-management`.
+    *   *Post-Mandatory Password Change Navigation:* When any user (regardless of role) completes the mandatory password change on the Change Password interstitial, the client navigates directly to `/my-tickets` to enter the application. Subsequent normal logins follow the standard role-based redirect (`/staff-queue` for IT Staff).
 *   **BR-03:** The authenticated user identity, not a requesterId supplied by the client, determines ownership of Requester operations.
 *   **BR-04:** Public Comments are visible to the Requester, IT Staff, and Administrator. Internal Notes are visible only to IT Staff and Administrator.
 *   **BR-05:** A Requester may indicate that the problem appears resolved, but cannot formally set the Ticket to Resolved or Closed.
@@ -77,14 +79,23 @@ Develop a fully functional IT Service Desk ticketing system that supports robust
 *   **BR-17 (Admin Safety - Last Admin):** The system must prevent the deactivation or role-change of the last active Admin user.
 
 ## 6. UI Specification Summary
-*   **Login Page:** Form with Email, Password, and Login button. Error handling for invalid credentials or inactive accounts.
-*   **Change Password Screen:** Interstitial screen forcing a new password entry if required.
+*   **Login Page:** Form with Email, Password, and Login button. Error handling for invalid credentials or inactive accounts. Normal login routes `REQUESTER` to `/my-tickets`, `IT_STAFF` to `/staff-queue`, and `ADMIN` to `/user-management`.
+*   **Change Password Screen:** Interstitial screen forcing a new password entry if required. Upon successful password change, navigates directly to `/my-tickets` to enter the application.
 *   **Dashboard/Navigation:** Dynamic navigation bar reflecting the user's role (e.g., 'Users' tab only visible to Admins).
 *   **Requester View:** A simple list of "My Tickets" and a "Create Ticket" form. Ticket detail view shows description and a timeline of public comments.
 *   **IT Queue:** A comprehensive data table for IT Staff showing all tickets with columns for ID, Title, Status, Priority, Requester, and Assignee. Includes search, filtering controls, sorting, and pagination.
 *   **Ticket Detail (IT View):** Split view or tabbed interface allowing IT Staff to read the description, change status/priority, reassign, and a unified timeline showing both Public Comments and distinctively styled Private Internal Notes.
 *   **User Management (Admin):** Data table of users with 'Add User' button. Edit modal for changing roles or toggling active status.
 *   **Responsive Rules:** Keep all required screens usable on desktop, tablet, and mobile (see `ui-spec.md` for full layout details).
+
+### Authentication Navigation
+
+- Normal login uses role-based redirects:
+  - Requester → `/my-tickets`
+  - IT Staff → `/staff-queue`
+  - Administrator → `/user-management`
+- When a user is required to complete the mandatory first-login password change, successful completion redirects to `/my-tickets`.
+- This post-password-change redirect is intentionally separate from the normal IT Staff login redirect.
 
 ## 7. Data Changes
 *   **User Model Evolution:** The basic User model from Lab 2 is expanded. The Lab 2 Development Requester records must be migrated into the real User model without losing existing Ticket or Attachment ownership.
@@ -116,7 +127,7 @@ Develop a fully functional IT Service Desk ticketing system that supports robust
 
 ## 9. Acceptance Criteria
 *   **AC-01:** Given an active user with valid credentials, when the user logs in, then the backend establishes authenticated access and returns the permitted user identity and role.
-*   **AC-02:** Given a user who must change the initial password, when login succeeds, then normal application screens remain unavailable until a valid new password is saved.
+*   **AC-02:** Given a user who must change the initial password, when login succeeds, then normal application screens remain unavailable until a valid new password is saved. Upon successful submission of the new password, the user navigates directly to `/my-tickets` to enter the application (subsequent normal logins follow role-based redirection, e.g., IT Staff to `/staff-queue`).
 *   **AC-03:** Given an authenticated Requester, when the client supplies another requesterId, then the backend still applies the authenticated identity and does not return another Requester's data.
 *   **AC-04:** Given a Requester account, when an Internal Note endpoint is requested, then the operation is rejected without exposing note content.
 *   **AC-05:** Given IT Staff, When they view a ticket detail, Then they can see both Public Comments and Private Internal Notes clearly differentiated.

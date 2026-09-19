@@ -56,7 +56,7 @@ async function main() {
       { email: 'staff4_inactive@toktikit.local', fullName: 'IT Staff Inactive', role: Role.IT_STAFF, isActive: false, mustChangePassword: false },
 
       // Administrator (1 Active)
-      { email: 'admin@toktikit.local', fullName: 'Admin User', role: Role.ADMIN, isActive: true, mustChangePassword: true },
+      { email: 'admin@toktikit.local', fullName: 'Admin User', role: Role.ADMIN, isActive: true, mustChangePassword: false },
     ];
 
     for (const u of usersToSeed) {
@@ -66,6 +66,7 @@ async function main() {
           fullName: u.fullName,
           role: u.role,
           isActive: u.isActive,
+          mustChangePassword: u.mustChangePassword,
           // We intentionally do not update the passwordHash to avoid resetting passwords for existing accounts on every seed
         },
         create: {

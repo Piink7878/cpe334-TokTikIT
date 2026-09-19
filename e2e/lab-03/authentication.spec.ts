@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Authentication Flows', () => {
   test('unauthenticated users are redirected to login', async ({ page }) => {
     await page.goto('/my-tickets');
-    await expect(page).toHaveURL(/.*\/login/);
+    await expect(page).toHaveURL(/\/login/);
   });
 
   test('valid login redirects to my-tickets', async ({ page }) => {
@@ -14,7 +14,7 @@ test.describe('Authentication Flows', () => {
     await page.fill('input[type="password"]', 'Password123!');
     await page.click('button[type="submit"]');
 
-    await expect(page).toHaveURL(/.*\/my-tickets/);
+    await expect(page).toHaveURL(/\/my-tickets/);
     
     // Check App Shell for user name
     await expect(page.locator('.navbar')).toContainText('Requester Two');
@@ -40,10 +40,10 @@ test.describe('Authentication Flows', () => {
     await page.click('button[type="submit"]');
 
     // Should redirect to change password
-    await expect(page).toHaveURL(/.*\/change-password/);
+    await expect(page).toHaveURL(/\/change-password/);
     
     // Try to navigate away
     await page.goto('/my-tickets');
-    await expect(page).toHaveURL(/.*\/change-password/);
+    await expect(page).toHaveURL(/\/change-password/);
   });
 });
