@@ -47,6 +47,11 @@ body {
   cursor: not-allowed;
 }
 
+/* Zen Green Backgrounds */
+.bg-primary {
+  background-color: var(--color-primary) !important;
+}
+
 /* Input Styles */
 .form-select,
 .form-control {

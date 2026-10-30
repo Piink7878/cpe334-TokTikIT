@@ -29,7 +29,9 @@ export default function Login() {
       }
 
       login(data.user);
-      if (data.user.role === "IT_STAFF") {
+      if (data.user.mustChangePassword) {
+        navigate("/change-password", { replace: true });
+      } else if (data.user.role === "IT_STAFF") {
         navigate("/staff-queue", { replace: true });
       } else if (data.user.role === "ADMIN") {
         navigate("/user-management", { replace: true });
@@ -84,10 +86,13 @@ export default function Login() {
             
             <button
               type="submit"
-              className="btn btn-primary w-100 fw-bold py-2"
+              className="btn btn-primary w-100 fw-bold py-2 d-flex align-items-center justify-content-center gap-2"
               disabled={loading}
             >
-              {loading ? "Signing in..." : "Sign In"}
+              {loading && (
+                <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              )}
+              <span>{loading ? "Signing in..." : "Sign In"}</span>
             </button>
           </form>
         </div>

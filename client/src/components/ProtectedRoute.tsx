@@ -20,7 +20,7 @@ export default function ProtectedRoute() {
   }
 
   if (user.mustChangePassword && location.pathname !== '/change-password') {
-    return <Navigate to="/change-password" replace />;
+    return <Navigate to="/change-password" replace state={{ blockedUrl: location.pathname }} />;
   }
   
   if (!user.mustChangePassword && location.pathname === '/change-password') {

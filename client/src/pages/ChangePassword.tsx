@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function ChangePassword() {
@@ -9,7 +9,9 @@ export default function ChangePassword() {
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, updateUser } = useAuth();
+  const blockedUrl = (location.state as any)?.blockedUrl;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,6 +55,15 @@ export default function ChangePassword() {
           <p className="text-center text-muted mb-4">
             You must change your password before continuing.
           </p>
+          
+          {blockedUrl && (
+            <div className="alert alert-warning mb-3 d-flex align-items-center" role="alert">
+              <i className="bi bi-shield-lock-fill me-2 fs-5 text-warning"></i>
+              <div>
+                Access to <strong>{blockedUrl}</strong> is blocked. You must change your temporary password before accessing the application.
+              </div>
+            </div>
+          )}
           
           {errorMsg && (
             <div className="alert alert-danger" role="alert">
