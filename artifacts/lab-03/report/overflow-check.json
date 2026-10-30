@@ -1,0 +1,164 @@
+[
+  {
+    "page": "login",
+    "viewport": "desktop",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "staff-queue",
+    "viewport": "desktop",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "staff-detail",
+    "viewport": "desktop",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "user-management",
+    "viewport": "desktop",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "my-tickets",
+    "viewport": "desktop",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "create-ticket",
+    "viewport": "desktop",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "login",
+    "viewport": "tablet",
+    "width": 820,
+    "scrollWidth": 820,
+    "clientWidth": 820,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "staff-queue",
+    "viewport": "tablet",
+    "width": 820,
+    "scrollWidth": 820,
+    "clientWidth": 820,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "staff-detail",
+    "viewport": "tablet",
+    "width": 820,
+    "scrollWidth": 820,
+    "clientWidth": 820,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "user-management",
+    "viewport": "tablet",
+    "width": 820,
+    "scrollWidth": 820,
+    "clientWidth": 820,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "my-tickets",
+    "viewport": "tablet",
+    "width": 820,
+    "scrollWidth": 820,
+    "clientWidth": 820,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "create-ticket",
+    "viewport": "tablet",
+    "width": 820,
+    "scrollWidth": 820,
+    "clientWidth": 820,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "login",
+    "viewport": "mobile",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "staff-queue",
+    "viewport": "mobile",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "staff-detail",
+    "viewport": "mobile",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "user-management",
+    "viewport": "mobile",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "my-tickets",
+    "viewport": "mobile",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  },
+  {
+    "page": "create-ticket",
+    "viewport": "mobile",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "hasHorizontalOverflow": false,
+    "status": "PASS"
+  }
+]
