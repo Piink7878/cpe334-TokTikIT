@@ -67,7 +67,7 @@ This document details the REST API specification for Sprint 4 (Lab 4). It define
 * **Validation Rules:**
   * `description` (`string`, required): Non-empty string. *[Proposed constraint: 5–3,000 chars]*.
   * `result` (`string`, required): Non-empty string. *[Proposed constraint: 2–1,000 chars]*.
-  * `followUpRequired` (`boolean`, required): Must be a boolean value.
+  * `followUpRequired` (`boolean`, optional on create, default `false`): When supplied, must be a boolean value (see `specification.md` BR-04).
   * `followUpNote` (`string`, conditional): **Mandatory non-empty string when `followUpRequired === true`**; optional / `null` when `false`. *[Proposed constraint: max 1,000 chars]*.
   * `attachmentNotes` (`string`, optional): Free-text notes documenting external evidence, equipment IDs, or log references. *[Proposed constraint: max 1,000 chars]*.
   * `actionDateTime` (`string`, optional ISO 8601 in the request): The persisted field is non-null; if omitted, the server sets it to the current server time. *[Proposed constraint: cannot exceed server time by > 5 minutes]*.

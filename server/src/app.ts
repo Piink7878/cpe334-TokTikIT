@@ -1337,6 +1337,10 @@ app.post("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEn
 // Returns a human-readable message for the first invalid field, or null when valid.
 const ACTION_DATE_FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
 
+function isJsonObject(body: unknown): boolean {
+  return body !== null && typeof body === "object" && !Array.isArray(body);
+}
+
 function validateActionTakenInput(body: any, mode: "create" | "update"): string | null {
   const { description, result, followUpRequired, followUpNote, attachmentNotes, actionDateTime, assignedToId } = body;
   const create = mode === "create";
@@ -1359,7 +1363,8 @@ function validateActionTakenInput(body: any, mode: "create" | "update"): string 
     }
   }
 
-  if ((create || followUpRequired !== undefined) && typeof followUpRequired !== "boolean") {
+  // Optional on create (defaults to false per BR-04); when supplied it must be a boolean.
+  if (followUpRequired !== undefined && typeof followUpRequired !== "boolean") {
     return "followUpRequired must be a boolean";
   }
 
@@ -1398,6 +1403,10 @@ app.post("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnf
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
 
+    if (!isJsonObject(req.body)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Request body must be a JSON object" } });
+    }
+
     const prisma = getPrisma();
     const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
     if (!ticket) {
@@ -1407,7 +1416,7 @@ app.post("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnf
     const {
       description,
       result,
-      followUpRequired,
+      followUpRequired = false,
       followUpNote,
       attachmentNotes,
       actionDateTime,
@@ -1591,6 +1600,10 @@ app.patch("/api/actions-taken/:actionId", requireAuth, requirePasswordChangeEnfo
     const actionId = parseInt(req.params.actionId, 10);
     if (isNaN(actionId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid action ID" } });
+    }
+
+    if (!isJsonObject(req.body)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Request body must be a JSON object" } });
     }
 
     const {
