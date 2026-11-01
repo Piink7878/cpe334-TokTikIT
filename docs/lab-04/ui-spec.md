@@ -465,7 +465,7 @@ Triggered by clicking `[Edit]` on an existing record.
 - On **error** (HTTP 409 `STALE_UPDATE`): Modal-level alert: "This action was updated by another user. Please reload the page to see the latest version before editing." Form data is preserved so the user does not lose their draft.
 - Error states for 500/network: same as create modal.
 
-> **Absolute Deletion Prohibition:** **No Delete button** is rendered anywhere in the UI. Actions Taken records can be **edited** by `IT_STAFF` and `ADMIN` (via the Edit modal above), but they **cannot be deleted** through the API or the UI. They are strictly append-only audit records. (`BR-05`, `specification.md §2.2`)
+> **Absolute Deletion Prohibition:** **No Delete button** is rendered anywhere in the UI. Actions Taken records can be **edited** by `IT_STAFF` and `ADMIN` (via the Edit modal above), but they **cannot be deleted** through the API or the UI. Each edit updates the current record and appends an immutable entry to its **Revision History** (`ActionTakenRevision`). The Revision History is strictly append-only: previous revisions are always retained and can never be modified or deleted. (`BR-05` in `specification.md`; `api-spec.md §2.2`)
 
 #### 3.2.6 Empty State (No Actions Taken — Staff View)
 
