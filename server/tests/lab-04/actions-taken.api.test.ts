@@ -263,6 +263,71 @@ describe("Actions Taken API Tests (Lab 4 Part 6)", () => {
       expect(res.status).toBe(201);
     });
 
+    it("should default followUpRequired to false when omitted on create (BR-04)", async () => {
+      const res = await request(app)
+        .post(`/api/tickets/${testTicket.id}/actions-taken`)
+        .set("Cookie", staffCookie1)
+        .send({ description: "No follow-up flag supplied", result: "Recorded without flag" });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.followUpRequired).toBe(false);
+      const stored = await prisma.actionTaken.findUnique({ where: { id: res.body.data.id } });
+      expect(stored!.followUpRequired).toBe(false);
+    });
+
+    it.each([
+      ["a string", "yes"],
+      ["null", null],
+    ])("should reject followUpRequired supplied as %s with 400 VALIDATION_ERROR", async (_label, value) => {
+      const res = await postInvalid({ followUpRequired: value });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("should treat an omitted followUpRequired and an explicit false as the same idempotent request", async () => {
+      const key = `idem-default-${Date.now()}`;
+      const base = { description: "Default flag idempotency", result: "Recorded" };
+      const first = await request(app)
+        .post(`/api/tickets/${testTicket.id}/actions-taken`)
+        .set("Cookie", staffCookie1)
+        .set("Idempotency-Key", key)
+        .send(base);
+      expect(first.status).toBe(201);
+
+      const replay = await request(app)
+        .post(`/api/tickets/${testTicket.id}/actions-taken`)
+        .set("Cookie", staffCookie1)
+        .set("Idempotency-Key", key)
+        .send({ ...base, followUpRequired: false });
+      expect(replay.status).toBe(201);
+      expect(replay.body.data.id).toBe(first.body.data.id);
+    });
+
+    it.each([
+      ["an array", "[]"],
+      ["a number", "5"],
+      ["a string", '"text"'],
+      ["null", "null"],
+    ])("should respond 400 (never 500) when the POST body is %s", async (_label, raw) => {
+      const res = await request(app)
+        .post(`/api/tickets/${testTicket.id}/actions-taken`)
+        .set("Cookie", staffCookie1)
+        .set("Content-Type", "application/json")
+        .send(raw);
+      // Scalars and null are rejected by express.json() (strict) before the route; arrays reach the route guard.
+      expect(res.status).toBe(400);
+    });
+
+    it("should return the JSON VALIDATION_ERROR contract when the POST body is a JSON array", async () => {
+      const res = await request(app)
+        .post(`/api/tickets/${testTicket.id}/actions-taken`)
+        .set("Cookie", staffCookie1)
+        .set("Content-Type", "application/json")
+        .send("[]");
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    });
+
     it("should require followUpNote when followUpRequired is true", async () => {
       const res = await request(app)
         .post(`/api/tickets/${testTicket.id}/actions-taken`)
@@ -504,6 +569,28 @@ describe("Actions Taken API Tests (Lab 4 Part 6)", () => {
       expect(res.status).toBe(400);
       expect(res.body.error.code).toBe("VALIDATION_ERROR");
       expect(await prisma.actionTakenRevision.count({ where: { actionTakenId: actionRecord.id } })).toBe(0);
+    });
+
+    it.each([
+      ["an array", "[]"],
+      ["null", "null"],
+    ])("should respond 400 (never 500) when the PATCH body is %s", async (_label, raw) => {
+      const res = await request(app)
+        .patch(`/api/actions-taken/${actionRecord.id}`)
+        .set("Cookie", staffCookie1)
+        .set("Content-Type", "application/json")
+        .send(raw);
+      expect(res.status).toBe(400);
+    });
+
+    it("should return the JSON VALIDATION_ERROR contract when the PATCH body is a JSON array", async () => {
+      const res = await request(app)
+        .patch(`/api/actions-taken/${actionRecord.id}`)
+        .set("Cookie", staffCookie1)
+        .set("Content-Type", "application/json")
+        .send("[]");
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("VALIDATION_ERROR");
     });
 
     it("should successfully update ActionTaken and atomically append ActionTakenRevision", async () => {
