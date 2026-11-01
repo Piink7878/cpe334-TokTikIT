@@ -232,6 +232,37 @@ describe("Actions Taken API Tests (Lab 4 Part 6)", () => {
       expect(res2.body.error.code).toBe("VALIDATION_ERROR");
     });
 
+    const validBody = { description: "Valid description", result: "Valid result", followUpRequired: false };
+    const postInvalid = (override: Record<string, unknown>) =>
+      request(app)
+        .post(`/api/tickets/${testTicket.id}/actions-taken`)
+        .set("Cookie", staffCookie1)
+        .send({ ...validBody, ...override });
+
+    it.each([
+      ["malformed actionDateTime", { actionDateTime: "not-a-date" }],
+      ["non-string actionDateTime", { actionDateTime: 12345 }],
+      ["actionDateTime more than 5 minutes in the future", { actionDateTime: new Date(Date.now() + 60 * 60 * 1000).toISOString() }],
+      ["non-string attachmentNotes", { attachmentNotes: 123 }],
+      ["non-string followUpNote", { followUpNote: { text: "x" } }],
+      ["non-string assignedToId", { assignedToId: 42 }],
+      ["description shorter than 5 characters", { description: "abcd" }],
+      ["description longer than 3000 characters", { description: "a".repeat(3001) }],
+      ["result shorter than 2 characters", { result: "a" }],
+      ["result longer than 1000 characters", { result: "a".repeat(1001) }],
+      ["attachmentNotes longer than 1000 characters", { attachmentNotes: "a".repeat(1001) }],
+      ["followUpNote longer than 1000 characters", { followUpRequired: true, followUpNote: "a".repeat(1001) }],
+    ])("should reject %s with 400 VALIDATION_ERROR (not 500)", async (_label, override) => {
+      const res = await postInvalid(override);
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("should accept a client-supplied actionDateTime within the 5 minute future tolerance", async () => {
+      const res = await postInvalid({ actionDateTime: new Date(Date.now() + 60 * 1000).toISOString() });
+      expect(res.status).toBe(201);
+    });
+
     it("should require followUpNote when followUpRequired is true", async () => {
       const res = await request(app)
         .post(`/api/tickets/${testTicket.id}/actions-taken`)
@@ -358,6 +389,34 @@ describe("Actions Taken API Tests (Lab 4 Part 6)", () => {
       expect(res.body.error.code).toBe("IDEMPOTENCY_KEY_CONFLICT");
     });
 
+    it("should return 409 IDEMPOTENCY_KEY_CONFLICT when only actionDateTime differs for the same key", async () => {
+      const key = `idem-date-${Date.now()}`;
+      const base = { description: "Date-sensitive idempotent action", result: "Recorded", followUpRequired: false };
+      const first = await request(app)
+        .post(`/api/tickets/${testTicket.id}/actions-taken`)
+        .set("Cookie", staffCookie1)
+        .set("Idempotency-Key", key)
+        .send({ ...base, actionDateTime: "2026-01-01T10:00:00.000Z" });
+      expect(first.status).toBe(201);
+
+      const changedDate = await request(app)
+        .post(`/api/tickets/${testTicket.id}/actions-taken`)
+        .set("Cookie", staffCookie1)
+        .set("Idempotency-Key", key)
+        .send({ ...base, actionDateTime: "2026-01-01T11:00:00.000Z" });
+      expect(changedDate.status).toBe(409);
+      expect(changedDate.body.error.code).toBe("IDEMPOTENCY_KEY_CONFLICT");
+
+      // Same instant written in another ISO form is the same request and replays safely.
+      const sameInstant = await request(app)
+        .post(`/api/tickets/${testTicket.id}/actions-taken`)
+        .set("Cookie", staffCookie1)
+        .set("Idempotency-Key", key)
+        .send({ ...base, actionDateTime: "2026-01-01T10:00:00Z" });
+      expect(sameInstant.status).toBe(201);
+      expect(sameInstant.body.data.id).toBe(first.body.data.id);
+    });
+
     it("should allow identical key from different user independently", async () => {
       const res = await request(app)
         .post(`/api/tickets/${testTicket.id}/actions-taken`)
@@ -422,6 +481,29 @@ describe("Actions Taken API Tests (Lab 4 Part 6)", () => {
 
       expect(res.status).toBe(400);
       expect(res.body.error.code).toBe("MISSING_EXPECTED_UPDATED_AT");
+    });
+
+    it.each([
+      ["malformed actionDateTime", { actionDateTime: "not-a-date" }],
+      ["null actionDateTime", { actionDateTime: null }],
+      ["non-string actionDateTime", { actionDateTime: 12345 }],
+      ["actionDateTime more than 5 minutes in the future", { actionDateTime: new Date(Date.now() + 60 * 60 * 1000).toISOString() }],
+      ["non-string attachmentNotes", { attachmentNotes: 123 }],
+      ["non-string followUpNote", { followUpNote: { text: "x" } }],
+      ["non-string assignedToId", { assignedToId: 42 }],
+      ["description shorter than 5 characters", { description: "abcd" }],
+      ["description longer than 3000 characters", { description: "a".repeat(3001) }],
+      ["result longer than 1000 characters", { result: "a".repeat(1001) }],
+      ["attachmentNotes longer than 1000 characters", { attachmentNotes: "a".repeat(1001) }],
+    ])("should reject PATCH with %s as 400 VALIDATION_ERROR and create no revision", async (_label, override) => {
+      const res = await request(app)
+        .patch(`/api/actions-taken/${actionRecord.id}`)
+        .set("Cookie", staffCookie1)
+        .send({ expectedUpdatedAt: actionRecord.updatedAt.toISOString(), ...override });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("VALIDATION_ERROR");
+      expect(await prisma.actionTakenRevision.count({ where: { actionTakenId: actionRecord.id } })).toBe(0);
     });
 
     it("should successfully update ActionTaken and atomically append ActionTakenRevision", async () => {
