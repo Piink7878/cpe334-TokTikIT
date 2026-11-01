@@ -204,6 +204,89 @@ async function main() {
       }
     }
 
+    // 6. Seed Actions Taken (Lab 4)
+    // TKT-1001: 2 Actions (1 with follow-up required, 1 revision)
+    // TKT-1004: 1 Action (Resolved ticket satisfies Resolution Gate)
+    // TKT-1002: 0 Actions (New unassigned ticket)
+    if (tkt1) {
+      const actionCount = await prisma.actionTaken.count({ where: { ticketId: tkt1.id } });
+      if (actionCount === 0) {
+        const action1 = await prisma.actionTaken.create({
+          data: {
+            ticketId: tkt1.id,
+            performedById: staff1.id,
+            assignedToId: staff2.id,
+            actionDateTime: new Date(),
+            description: 'Investigated server error 500 in auth log.',
+            result: 'Identified bottleneck in connection pooling. Increased max connections.',
+            followUpRequired: true,
+            followUpNote: 'Monitor database connection pool during peak hours.',
+            attachmentNotes: 'Refer to server metric dashboard snapshot.',
+          },
+        });
+
+        // Seed 1 revision on action1
+        await prisma.actionTakenRevision.create({
+          data: {
+            actionTakenId: action1.id,
+            revisionNumber: 1,
+            editedById: staff1.id,
+            editedAt: new Date(),
+            originalData: {
+              description: 'Investigated server error 500.',
+              result: 'Identified bottleneck.',
+              followUpRequired: false,
+              followUpNote: null,
+              assignedToId: null,
+            },
+            updatedData: {
+              description: 'Investigated server error 500 in auth log.',
+              result: 'Identified bottleneck in connection pooling. Increased max connections.',
+              followUpRequired: true,
+              followUpNote: 'Monitor database connection pool during peak hours.',
+              assignedToId: staff2.id,
+            },
+          },
+        });
+
+        await prisma.actionTaken.create({
+          data: {
+            ticketId: tkt1.id,
+            performedById: staff2.id,
+            assignedToId: null,
+            actionDateTime: new Date(),
+            description: 'Verified database configuration parameters.',
+            result: 'Confirmed connection pool limits updated in production cluster.',
+            followUpRequired: false,
+            followUpNote: null,
+            attachmentNotes: null,
+          },
+        });
+        console.log('Inserted Actions Taken & Revision for TKT-1001');
+      }
+    }
+
+    const tkt4 = await prisma.ticket.findUnique({ where: { ticketNumber: 'TKT-1004' } });
+    if (tkt4) {
+      const actionCount = await prisma.actionTaken.count({ where: { ticketId: tkt4.id } });
+      if (actionCount === 0) {
+        await prisma.actionTaken.create({
+          data: {
+            ticketId: tkt4.id,
+            performedById: staff1.id,
+            assignedToId: null,
+            actionDateTime: new Date(),
+            description: 'Replaced failed router power adapter in Lab 3.',
+            result: 'Router powered back on and link lights normal.',
+            followUpRequired: false,
+            followUpNote: null,
+            attachmentNotes: null,
+          },
+        });
+        console.log('Inserted Action Taken for TKT-1004');
+      }
+    }
+
     console.log('Seeding finished successfully.');
   } catch (e) {
     console.error(e);
