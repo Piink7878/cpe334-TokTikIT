@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import express, { Request, Response } from "express";
 import { Prisma } from "@prisma/client";
 import cors from "cors";
@@ -1326,6 +1327,481 @@ app.post("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEn
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Actions Taken Endpoints (Lab 4 Part 6)
+// ---------------------------------------------------------------------------
+
+// POST /api/tickets/:id/actions-taken - Record Action Taken
+app.post("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    const {
+      description,
+      result,
+      followUpRequired,
+      followUpNote,
+      attachmentNotes,
+      actionDateTime,
+      assignedToId
+    } = req.body;
+
+    if (!description || typeof description !== "string" || description.trim() === "") {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "description is required" } });
+    }
+
+    if (!result || typeof result !== "string" || result.trim() === "") {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "result is required" } });
+    }
+
+    if (typeof followUpRequired !== "boolean") {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "followUpRequired must be a boolean" } });
+    }
+
+    if (followUpRequired && (!followUpNote || typeof followUpNote !== "string" || followUpNote.trim() === "")) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "followUpNote is required when followUpRequired is true" } });
+    }
+
+    let parsedActionDate = new Date();
+    if (actionDateTime) {
+      const d = new Date(actionDateTime);
+      if (isNaN(d.getTime())) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid actionDateTime" } });
+      }
+      parsedActionDate = d;
+    }
+
+    if (assignedToId) {
+      const assignee = await prisma.user.findUnique({ where: { id: assignedToId } });
+      if (!assignee || !assignee.isActive) {
+        return res.status(400).json({ error: { code: "INACTIVE_ASSIGNEE", message: "Assigned user is inactive." } });
+      }
+      if (assignee.role !== "IT_STAFF" && assignee.role !== "ADMIN") {
+        return res.status(400).json({ error: { code: "INVALID_ASSIGNEE_ROLE", message: "Assignee must have role IT_STAFF or ADMIN." } });
+      }
+    }
+
+    const rawIdempotencyHeader = req.headers["idempotency-key"];
+    const idempotencyKey = (Array.isArray(rawIdempotencyHeader) ? rawIdempotencyHeader[0] : rawIdempotencyHeader)?.trim();
+
+    if (idempotencyKey) {
+      const canonicalPayload = JSON.stringify({
+        description: description.trim(),
+        result: result.trim(),
+        followUpRequired,
+        followUpNote: followUpRequired ? followUpNote.trim() : null,
+        attachmentNotes: attachmentNotes ? attachmentNotes.trim() : null,
+        assignedToId: assignedToId || null,
+      });
+      const requestHash = crypto.createHash("sha256").update(canonicalPayload).digest("hex");
+
+      const existingRecord = await prisma.idempotencyRecord.findUnique({
+        where: {
+          userId_endpoint_ticketId_key: {
+            userId: req.user!.id,
+            endpoint: "POST /api/tickets/:id/actions-taken",
+            ticketId,
+            key: idempotencyKey,
+          },
+        },
+      });
+
+      if (existingRecord) {
+        if (existingRecord.expiresAt > new Date()) {
+          if (existingRecord.requestHash === requestHash) {
+            return res.status(existingRecord.responseStatus).json(existingRecord.responseBody);
+          } else {
+            return res.status(409).json({
+              error: {
+                code: "IDEMPOTENCY_KEY_CONFLICT",
+                message: "The Idempotency-Key has already been used with a different request payload.",
+              },
+            });
+          }
+        }
+      }
+
+      try {
+        const resultPayload = await prisma.$transaction(async (tx) => {
+          await tx.idempotencyRecord.deleteMany({
+            where: {
+              userId: req.user!.id,
+              endpoint: "POST /api/tickets/:id/actions-taken",
+              ticketId,
+              key: idempotencyKey,
+              expiresAt: { lte: new Date() },
+            },
+          });
+
+          const newAction = await tx.actionTaken.create({
+            data: {
+              ticketId,
+              performedById: req.user!.id,
+              assignedToId: assignedToId || null,
+              actionDateTime: parsedActionDate,
+              description: description.trim(),
+              result: result.trim(),
+              followUpRequired,
+              followUpNote: followUpRequired ? followUpNote.trim() : null,
+              attachmentNotes: attachmentNotes ? attachmentNotes.trim() : null,
+            },
+            include: {
+              performedBy: { select: { id: true, fullName: true, role: true } },
+              assignedTo: { select: { id: true, fullName: true, role: true } },
+            },
+          });
+
+          const responsePayload = {
+            message: "Action taken recorded successfully",
+            data: newAction,
+          };
+
+          await tx.idempotencyRecord.create({
+            data: {
+              userId: req.user!.id,
+              endpoint: "POST /api/tickets/:id/actions-taken",
+              ticketId,
+              key: idempotencyKey,
+              requestHash,
+              actionTakenId: newAction.id,
+              responseStatus: 201,
+              responseBody: responsePayload,
+              expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            },
+          });
+
+          return responsePayload;
+        });
+
+        return res.status(201).json(resultPayload);
+      } catch (err: any) {
+        if (err.code === "P2002") {
+          const committedRecord = await prisma.idempotencyRecord.findUnique({
+            where: {
+              userId_endpoint_ticketId_key: {
+                userId: req.user!.id,
+                endpoint: "POST /api/tickets/:id/actions-taken",
+                ticketId,
+                key: idempotencyKey,
+              },
+            },
+          });
+          if (committedRecord && committedRecord.requestHash === requestHash) {
+            return res.status(committedRecord.responseStatus).json(committedRecord.responseBody);
+          } else {
+            return res.status(409).json({
+              error: {
+                code: "IDEMPOTENCY_KEY_CONFLICT",
+                message: "The Idempotency-Key has already been used with a different request payload.",
+              },
+            });
+          }
+        }
+        throw err;
+      }
+    }
+
+    // No idempotency key provided
+    const newAction = await prisma.actionTaken.create({
+      data: {
+        ticketId,
+        performedById: req.user!.id,
+        assignedToId: assignedToId || null,
+        actionDateTime: parsedActionDate,
+        description: description.trim(),
+        result: result.trim(),
+        followUpRequired,
+        followUpNote: followUpRequired ? followUpNote.trim() : null,
+        attachmentNotes: attachmentNotes ? attachmentNotes.trim() : null,
+      },
+      include: {
+        performedBy: { select: { id: true, fullName: true, role: true } },
+        assignedTo: { select: { id: true, fullName: true, role: true } },
+      },
+    });
+
+    return res.status(201).json({
+      message: "Action taken recorded successfully",
+      data: newAction,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// PATCH /api/actions-taken/:actionId - Update Action Taken with Optimistic Concurrency and Revision Audit
+app.patch("/api/actions-taken/:actionId", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const actionId = parseInt(req.params.actionId, 10);
+    if (isNaN(actionId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid action ID" } });
+    }
+
+    const {
+      expectedUpdatedAt,
+      description,
+      result,
+      followUpRequired,
+      followUpNote,
+      attachmentNotes,
+      actionDateTime,
+      assignedToId
+    } = req.body;
+
+    if (!expectedUpdatedAt) {
+      return res.status(400).json({ error: { code: "MISSING_EXPECTED_UPDATED_AT", message: "expectedUpdatedAt is required" } });
+    }
+
+    const expectedDate = new Date(expectedUpdatedAt);
+    if (isNaN(expectedDate.getTime())) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "expectedUpdatedAt must be a valid date" } });
+    }
+
+    const prisma = getPrisma();
+    const existing = await prisma.actionTaken.findUnique({
+      where: { id: actionId },
+      include: {
+        revisions: { orderBy: { revisionNumber: "desc" }, take: 1 },
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Action Taken record not found" } });
+    }
+
+    if (description !== undefined && (typeof description !== "string" || description.trim() === "")) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "description cannot be empty" } });
+    }
+
+    if (result !== undefined && (typeof result !== "string" || result.trim() === "")) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "result cannot be empty" } });
+    }
+
+    if (followUpRequired !== undefined && typeof followUpRequired !== "boolean") {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "followUpRequired must be a boolean" } });
+    }
+
+    const effectiveFollowUpRequired = followUpRequired !== undefined ? followUpRequired : existing.followUpRequired;
+    let effectiveFollowUpNote = existing.followUpNote;
+
+    if (effectiveFollowUpRequired) {
+      if (followUpNote !== undefined) {
+        if (!followUpNote || typeof followUpNote !== "string" || followUpNote.trim() === "") {
+          return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "followUpNote is required when followUpRequired is true" } });
+        }
+        effectiveFollowUpNote = followUpNote.trim();
+      } else if (!existing.followUpNote || existing.followUpNote.trim() === "") {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "followUpNote is required when followUpRequired is true" } });
+      }
+    } else {
+      effectiveFollowUpNote = null;
+    }
+
+    if (assignedToId) {
+      const assignee = await prisma.user.findUnique({ where: { id: assignedToId } });
+      if (!assignee || !assignee.isActive) {
+        return res.status(400).json({ error: { code: "INACTIVE_ASSIGNEE", message: "Assigned user is inactive." } });
+      }
+      if (assignee.role !== "IT_STAFF" && assignee.role !== "ADMIN") {
+        return res.status(400).json({ error: { code: "INVALID_ASSIGNEE_ROLE", message: "Assignee must have role IT_STAFF or ADMIN." } });
+      }
+    }
+
+    try {
+      const txResult = await prisma.$transaction(async (tx) => {
+        const updateResult = await tx.actionTaken.updateMany({
+          where: {
+            id: actionId,
+            updatedAt: expectedDate,
+          },
+          data: {
+            ...(description !== undefined && { description: description.trim() }),
+            ...(result !== undefined && { result: result.trim() }),
+            ...(followUpRequired !== undefined && { followUpRequired }),
+            followUpNote: effectiveFollowUpNote,
+            ...(attachmentNotes !== undefined && { attachmentNotes: attachmentNotes ? attachmentNotes.trim() : null }),
+            ...(actionDateTime !== undefined && { actionDateTime: new Date(actionDateTime) }),
+            ...(assignedToId !== undefined && { assignedToId: assignedToId || null }),
+          },
+        });
+
+        if (updateResult.count === 0) {
+          throw new Error("STALE_UPDATE");
+        }
+
+        const nextRevisionNumber = (existing.revisions[0]?.revisionNumber || 0) + 1;
+        const originalSnapshot = {
+          description: existing.description,
+          result: existing.result,
+          followUpRequired: existing.followUpRequired,
+          followUpNote: existing.followUpNote,
+          attachmentNotes: existing.attachmentNotes,
+          assignedToId: existing.assignedToId,
+          actionDateTime: existing.actionDateTime,
+        };
+
+        const updatedRecord = await tx.actionTaken.findUnique({
+          where: { id: actionId },
+          include: {
+            performedBy: { select: { id: true, fullName: true, role: true } },
+            assignedTo: { select: { id: true, fullName: true, role: true } },
+          },
+        });
+
+        const updatedSnapshot = {
+          description: updatedRecord!.description,
+          result: updatedRecord!.result,
+          followUpRequired: updatedRecord!.followUpRequired,
+          followUpNote: updatedRecord!.followUpNote,
+          attachmentNotes: updatedRecord!.attachmentNotes,
+          assignedToId: updatedRecord!.assignedToId,
+          actionDateTime: updatedRecord!.actionDateTime,
+        };
+
+        const newRevision = await tx.actionTakenRevision.create({
+          data: {
+            actionTakenId: actionId,
+            revisionNumber: nextRevisionNumber,
+            editedById: req.user!.id,
+            originalData: originalSnapshot,
+            updatedData: updatedSnapshot,
+          },
+        });
+
+        return {
+          updatedRecord,
+          newRevision,
+        };
+      });
+
+      return res.status(200).json({
+        message: "Action taken updated successfully",
+        data: {
+          ...txResult.updatedRecord,
+          latestRevision: {
+            revisionNumber: txResult.newRevision.revisionNumber,
+            editedById: txResult.newRevision.editedById,
+            editedAt: txResult.newRevision.editedAt,
+          },
+        },
+      });
+    } catch (err: any) {
+      if (err.message === "STALE_UPDATE") {
+        const currentRecord = await prisma.actionTaken.findUnique({
+          where: { id: actionId },
+          include: {
+            performedBy: { select: { id: true, fullName: true, role: true } },
+            assignedTo: { select: { id: true, fullName: true, role: true } },
+          },
+        });
+        return res.status(409).json({
+          error: {
+            code: "STALE_UPDATE",
+            message: "The record was modified by another user. Please reload and retry.",
+          },
+          current: currentRecord,
+        });
+      }
+      throw err;
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// GET /api/tickets/:id/actions-taken - List Actions Taken
+app.get("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const ticketId = parseInt(req.params.id, 10);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    // Requester authorization & non-enumeration protection
+    if (req.user!.role === "REQUESTER" && ticket.requesterId !== req.user!.id) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    const sortBy = req.query.sortBy === "createdAt" ? "createdAt" : "actionDateTime";
+    const sortOrder = req.query.sortOrder === "desc" ? "desc" : "asc";
+
+    if (req.user!.role === "REQUESTER") {
+      // Requesters receive actions without internal revision history snapshots
+      const actions = await prisma.actionTaken.findMany({
+        where: { ticketId },
+        orderBy: { [sortBy]: sortOrder },
+        include: {
+          performedBy: { select: { id: true, fullName: true, role: true } },
+          assignedTo: { select: { id: true, fullName: true, role: true } },
+        },
+      });
+
+      return res.status(200).json({ data: actions });
+    }
+
+    // IT Staff and Admin receive full actions with nested revisions
+    const actions = await prisma.actionTaken.findMany({
+      where: { ticketId },
+      orderBy: { [sortBy]: sortOrder },
+      include: {
+        performedBy: { select: { id: true, fullName: true, role: true } },
+        assignedTo: { select: { id: true, fullName: true, role: true } },
+        revisions: {
+          orderBy: { revisionNumber: "asc" },
+          include: {
+            editor: { select: { id: true, fullName: true, role: true } },
+          },
+        },
+      },
+    });
+
+    return res.status(200).json({ data: actions });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// Explicit DELETE prohibition for Actions Taken (BR-05 / HTTP 405)
+app.delete(["/api/actions-taken/:actionId", "/api/tickets/:id/actions-taken/:actionId"], requireAuth, (_req: Request, res: Response) => {
+  return res.status(405).json({
+    error: {
+      code: "METHOD_NOT_ALLOWED",
+      message: "Action Taken records represent legal compliance audit history and cannot be deleted.",
+    },
+  });
+});
+
+// Revision mutation/deletion prohibition (HTTP 405)
+app.all(["/api/action-taken-revisions*", "/api/tickets/:id/actions-taken/:actionId/revisions*"], requireAuth, (req: Request, res: Response) => {
+  if (req.method === "GET") {
+    return res.status(404).json({ error: { code: "NOT_FOUND", message: "Not found" } });
+  }
+  return res.status(405).json({
+    error: {
+      code: "METHOD_NOT_ALLOWED",
+      message: "Action Taken revisions are immutable and cannot be modified or deleted.",
+    },
+  });
 });
 
 // ---------------------------------------------------------------------------
