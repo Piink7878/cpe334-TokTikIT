@@ -31,6 +31,10 @@ model User {
   ticketsOwned       Ticket[]        @relation("TicketOwner")
   publicComments     PublicComment[]
   internalNotes      InternalNote[]
+  actionsPerformed   ActionTaken[]         @relation("ActionTakenAuthor")
+  actionsAssigned    ActionTaken[]         @relation("ActionTakenAssignee")
+  actionRevisions    ActionTakenRevision[] @relation("ActionTakenRevisionEditor")
+  idempotencyRecords IdempotencyRecord[]
 }
 
 model Category {
@@ -75,6 +79,8 @@ model Ticket {
   attachments       Attachment[]
   publicComments    PublicComment[]
   internalNotes     InternalNote[]
+  actionsTaken       ActionTaken[]
+  idempotencyRecords IdempotencyRecord[]
 
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
@@ -132,4 +138,65 @@ enum Status {
   REOPENED
   CANCELLED
   REJECTED
+}
+
+model ActionTaken {
+  id               Int      @id @default(autoincrement())
+  ticketId         Int
+  ticket           Ticket   @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  performedById    String
+  performedBy      User     @relation("ActionTakenAuthor", fields: [performedById], references: [id], onDelete: Restrict)
+  assignedToId     String?
+  assignedTo       User?    @relation("ActionTakenAssignee", fields: [assignedToId], references: [id], onDelete: Restrict)
+  actionDateTime   DateTime @default(now())
+  description      String
+  result           String
+  followUpRequired Boolean  @default(false)
+  followUpNote     String?
+  attachmentNotes  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  revisions          ActionTakenRevision[]
+  idempotencyRecords IdempotencyRecord[]
+
+  @@index([ticketId])
+  @@index([performedById])
+  @@index([assignedToId])
+}
+
+model ActionTakenRevision {
+  id             Int         @id @default(autoincrement())
+  actionTakenId  Int
+  actionTaken    ActionTaken @relation(fields: [actionTakenId], references: [id], onDelete: Cascade)
+  revisionNumber Int
+  editedById     String
+  editor         User        @relation("ActionTakenRevisionEditor", fields: [editedById], references: [id], onDelete: Restrict)
+  editedAt       DateTime    @default(now())
+  originalData   Json
+  updatedData    Json
+
+  @@unique([actionTakenId, revisionNumber])
+  @@index([actionTakenId])
+  @@index([editedById])
+}
+
+model IdempotencyRecord {
+  id             Int         @id @default(autoincrement())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  endpoint       String
+  ticketId       Int
+  ticket         Ticket      @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  key            String
+  requestHash    String
+  actionTakenId  Int
+  actionTaken    ActionTaken @relation(fields: [actionTakenId], references: [id], onDelete: Restrict)
+  responseStatus Int
+  responseBody   Json
+  createdAt      DateTime    @default(now())
+  expiresAt      DateTime
+
+  @@unique([userId, endpoint, ticketId, key])
+  @@index([expiresAt])
 }
