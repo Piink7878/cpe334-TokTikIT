@@ -209,9 +209,12 @@ async function main() {
     // TKT-1004: 1 Action (Resolved ticket satisfies Resolution Gate)
     // TKT-1002: 0 Actions (New unassigned ticket)
     if (tkt1) {
-      const actionCount = await prisma.actionTaken.count({ where: { ticketId: tkt1.id } });
-      if (actionCount === 0) {
-        const action1 = await prisma.actionTaken.create({
+      // Each record is checked on its own so an interrupted run is completed by the next one.
+      let action1 = await prisma.actionTaken.findFirst({
+        where: { ticketId: tkt1.id, description: 'Investigated server error 500 in auth log.' },
+      });
+      if (!action1) {
+        action1 = await prisma.actionTaken.create({
           data: {
             ticketId: tkt1.id,
             performedById: staff1.id,
@@ -224,8 +227,12 @@ async function main() {
             attachmentNotes: 'Refer to server metric dashboard snapshot.',
           },
         });
+        console.log('Inserted Action Taken #1 for TKT-1001');
+      }
 
-        // Seed 1 revision on action1
+      // Seed 1 revision on action1
+      const revisionCount = await prisma.actionTakenRevision.count({ where: { actionTakenId: action1.id } });
+      if (revisionCount === 0) {
         await prisma.actionTakenRevision.create({
           data: {
             actionTakenId: action1.id,
@@ -248,7 +255,13 @@ async function main() {
             },
           },
         });
+        console.log('Inserted Revision for TKT-1001 Action Taken #1');
+      }
 
+      const action2 = await prisma.actionTaken.findFirst({
+        where: { ticketId: tkt1.id, description: 'Verified database configuration parameters.' },
+      });
+      if (!action2) {
         await prisma.actionTaken.create({
           data: {
             ticketId: tkt1.id,
@@ -262,7 +275,7 @@ async function main() {
             attachmentNotes: null,
           },
         });
-        console.log('Inserted Actions Taken & Revision for TKT-1001');
+        console.log('Inserted Action Taken #2 for TKT-1001');
       }
     }
 
