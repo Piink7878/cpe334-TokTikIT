@@ -1333,6 +1333,63 @@ app.post("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEn
 // Actions Taken Endpoints (Lab 4 Part 6)
 // ---------------------------------------------------------------------------
 
+// Shared input validation for Action Taken create/update (specification.md BR-04 field limits).
+// Returns a human-readable message for the first invalid field, or null when valid.
+const ACTION_DATE_FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
+
+function validateActionTakenInput(body: any, mode: "create" | "update"): string | null {
+  const { description, result, followUpRequired, followUpNote, attachmentNotes, actionDateTime, assignedToId } = body;
+  const create = mode === "create";
+
+  if (create || description !== undefined) {
+    if (typeof description !== "string" || description.trim() === "") {
+      return create ? "description is required" : "description cannot be empty";
+    }
+    if (description.trim().length < 5 || description.trim().length > 3000) {
+      return "description must be between 5 and 3000 characters";
+    }
+  }
+
+  if (create || result !== undefined) {
+    if (typeof result !== "string" || result.trim() === "") {
+      return create ? "result is required" : "result cannot be empty";
+    }
+    if (result.trim().length < 2 || result.trim().length > 1000) {
+      return "result must be between 2 and 1000 characters";
+    }
+  }
+
+  if ((create || followUpRequired !== undefined) && typeof followUpRequired !== "boolean") {
+    return "followUpRequired must be a boolean";
+  }
+
+  if (followUpNote !== undefined && followUpNote !== null) {
+    if (typeof followUpNote !== "string") return "followUpNote must be a string";
+    if (followUpNote.trim().length > 1000) return "followUpNote must be at most 1000 characters";
+  }
+
+  if (attachmentNotes !== undefined && attachmentNotes !== null) {
+    if (typeof attachmentNotes !== "string") return "attachmentNotes must be a string";
+    if (attachmentNotes.trim().length > 1000) return "attachmentNotes must be at most 1000 characters";
+  }
+
+  if (assignedToId !== undefined && assignedToId !== null && typeof assignedToId !== "string") {
+    return "assignedToId must be a string";
+  }
+
+  // On create an omitted/empty actionDateTime defaults to now(); on update it cannot be cleared.
+  if (actionDateTime !== undefined && (!create || (actionDateTime !== null && actionDateTime !== ""))) {
+    if (typeof actionDateTime !== "string" || isNaN(new Date(actionDateTime).getTime())) {
+      return "Invalid actionDateTime";
+    }
+    if (new Date(actionDateTime).getTime() > Date.now() + ACTION_DATE_FUTURE_TOLERANCE_MS) {
+      return "actionDateTime cannot be more than 5 minutes in the future";
+    }
+  }
+
+  return null;
+}
+
 // POST /api/tickets/:id/actions-taken - Record Action Taken
 app.post("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
@@ -1357,30 +1414,16 @@ app.post("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnf
       assignedToId
     } = req.body;
 
-    if (!description || typeof description !== "string" || description.trim() === "") {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "description is required" } });
+    const validationMessage = validateActionTakenInput(req.body, "create");
+    if (validationMessage) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: validationMessage } });
     }
 
-    if (!result || typeof result !== "string" || result.trim() === "") {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "result is required" } });
-    }
-
-    if (typeof followUpRequired !== "boolean") {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "followUpRequired must be a boolean" } });
-    }
-
-    if (followUpRequired && (!followUpNote || typeof followUpNote !== "string" || followUpNote.trim() === "")) {
+    if (followUpRequired && (!followUpNote || followUpNote.trim() === "")) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "followUpNote is required when followUpRequired is true" } });
     }
 
-    let parsedActionDate = new Date();
-    if (actionDateTime) {
-      const d = new Date(actionDateTime);
-      if (isNaN(d.getTime())) {
-        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid actionDateTime" } });
-      }
-      parsedActionDate = d;
-    }
+    const parsedActionDate = actionDateTime ? new Date(actionDateTime) : new Date();
 
     if (assignedToId) {
       const assignee = await prisma.user.findUnique({ where: { id: assignedToId } });
@@ -1403,6 +1446,7 @@ app.post("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnf
         followUpNote: followUpRequired ? followUpNote.trim() : null,
         attachmentNotes: attachmentNotes ? attachmentNotes.trim() : null,
         assignedToId: assignedToId || null,
+        actionDateTime: actionDateTime ? parsedActionDate.toISOString() : null,
       });
       const requestHash = crypto.createHash("sha256").update(canonicalPayload).digest("hex");
 
@@ -1581,16 +1625,9 @@ app.patch("/api/actions-taken/:actionId", requireAuth, requirePasswordChangeEnfo
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Action Taken record not found" } });
     }
 
-    if (description !== undefined && (typeof description !== "string" || description.trim() === "")) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "description cannot be empty" } });
-    }
-
-    if (result !== undefined && (typeof result !== "string" || result.trim() === "")) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "result cannot be empty" } });
-    }
-
-    if (followUpRequired !== undefined && typeof followUpRequired !== "boolean") {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "followUpRequired must be a boolean" } });
+    const validationMessage = validateActionTakenInput(req.body, "update");
+    if (validationMessage) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: validationMessage } });
     }
 
     const effectiveFollowUpRequired = followUpRequired !== undefined ? followUpRequired : existing.followUpRequired;
