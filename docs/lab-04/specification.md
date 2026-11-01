@@ -57,20 +57,20 @@ Extend the TokTikIT IT Service Desk platform by delivering structured **Actions 
 * **FR-01:** The system shall allow authenticated IT Staff and Administrators to record (create) a new Action Taken record for any valid ticket.
 * **FR-02:** The system shall automatically record the "Performed by" technician identity from the authenticated session user (`req.user.id`), ignoring any client-provided author identifier.
 * **FR-03:** The system shall capture for each Action Taken: Action Date/Time, Description, Result, Follow-Up Required flag, Follow-up Note (mandatory if Follow-Up Required is true), Attachment Notes, and optional Approved Assignee (`assignedToId`).
-* **FR-04:** The system shall allow authenticated IT Staff and Administrators to update existing Action Taken records, including description, result, follow-up fields, attachment notes, and assigned technician.
+* **FR-04:** The system shall allow authenticated IT Staff and Administrators to update existing Action Taken records. Every successful edit must atomically update the current Action Taken record and append an immutable revision record to `ActionTakenRevision` capturing the original data snapshot, updated data snapshot, editor identity (`editedById`), edit timestamp (`editedAt`), and sequential `revisionNumber`.
 * **FR-05:** The system shall allow any active IT Staff member or Administrator to record or update an Action Taken on a ticket regardless of who is designated as the Ticket Owner.
 * **FR-06:** The system shall allow authenticated Requesters to view all Actions Taken records associated with their own tickets in a dedicated "Service Actions" view.
-* **FR-07:** The system shall reject any attempt by a Requester to create or update an Action Taken record with HTTP 403 Forbidden. Action Taken deletion is unavailable to all roles because no DELETE endpoint is provided (see BR-05); deletion attempts are covered separately and do not imply a 403 contract.
+* **FR-07:** The system shall reject any attempt by a Requester to create or update an Action Taken record with HTTP 403 Forbidden. Action Taken deletion is strictly prohibited for all roles because no DELETE endpoint is exposed (see BR-05).
 * **FR-20:** The system shall permit IT Staff and Administrators to assign an Action Taken to an approved technician (`assignedToId`).
 * **FR-21:** The system shall validate that any specified assignee is an active user with role `IT_STAFF` or `ADMIN`, rejecting inactive users (`INACTIVE_ASSIGNEE`) or unauthorized roles (`INVALID_ASSIGNEE_ROLE`) with HTTP 400 Bad Request.
 
 ### Status Transitions & Resolution
 * **FR-08:** The system shall enforce permitted status transitions exclusively on the backend according to the Status Transition Matrix.
-* **FR-09:** The system shall permit IT Staff and Administrators to transition a ticket to `RESOLVED` from `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, or `REOPENED`, subject to backend Resolution Gate validation.
+* **FR-09:** The system shall permit IT Staff and Administrators to transition a ticket to `RESOLVED` from `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, or `REOPENED`, subject to the backend Resolution Gate validation.
 * **FR-10:** The system shall permit IT Staff and Administrators to transition a `RESOLVED` ticket to `CLOSED` (terminal) or `REOPENED` (reactivated).
 * **FR-11:** The system shall prevent any further status transitions from terminal states (`CLOSED`, `CANCELLED`, `REJECTED`).
 * **FR-12:** The system shall automatically record an audit log entry (as an `InternalNote`) whenever a ticket status transition occurs.
-* **FR-22:** The system shall enforce a backend **Resolution Gate** on transitions to `RESOLVED` that cannot be bypassed by direct API calls, requiring an authorized IT Staff/Administrator actor and at least one persisted Action Taken record on the Ticket.
+* **FR-22:** The system shall enforce the **Team-approved Business Rule: Resolution Gate** on transitions to `RESOLVED` that cannot be bypassed by direct API calls, requiring an authorized IT Staff/Administrator actor and at least one persisted Action Taken record on the Ticket (`COUNT(actionsTaken) >= 1`). If zero Actions Taken exist, the backend rejects the transition with HTTP 400 and error code `ACTION_TAKEN_REQUIRED`. Pending follow-ups (`followUpRequired = true`) do not block resolution.
 
 ### Dashboards & Backend Metrics
 * **FR-13:** The system shall provide a dedicated backend endpoint (`GET /api/dashboard/requester`) returning pre-calculated aggregate metrics and recent tickets for the authenticated Requester's tickets.
@@ -81,7 +81,7 @@ Extend the TokTikIT IT Service Desk platform by delivering structured **Actions 
 * **FR-23:** The system shall support displaying empty-state feedback with all metrics displaying zero when a user has no matching tickets or actions.
 
 ### Resilience, Data Preservation & Hardening
-* **FR-18:** The system shall preserve all pre-existing Lab 1–3 data (categories, systems, users, tickets, attachments, comments, notes) across database migration.
+* **FR-18:** The system shall preserve all pre-existing Lab 1–3 data (categories, systems, users, tickets, attachments, comments, notes) and physical attachment files across database migration.
 * **FR-19:** The system shall maintain all existing Lab 1–3 APIs, authentication rules, and permission checks without regression.
 * **FR-24:** The system shall protect user-entered form data in the user interface after recoverable API or network failures, allowing correction and re-submission without retyping.
 * **FR-25:** The system shall prevent or safely handle duplicate Action Taken creation caused by rapid repeated clicking or network retry.
@@ -94,37 +94,73 @@ Extend the TokTikIT IT Service Desk platform by delivering structured **Actions 
 * **BR-02 (Authenticated Attribution & Assignee Validation):**
   * `performedById`: Immutable attribute derived strictly from the authenticated session user (`req.user.id`). Client payloads attempting to specify or override `performedBy` shall be ignored.
   * `assignedToId`: Optional upon creation (defaults to `null`, i.e., unassigned; `performedById` is never used as an implicit assignee fallback). When supplied, `assignedToId` must correspond to an active (`isActive = true`) user holding either `IT_STAFF` or `ADMIN` role. Specifying an inactive user shall be rejected with HTTP 400 Bad Request (`INACTIVE_ASSIGNEE`); specifying a user with role `REQUESTER` shall be rejected with HTTP 400 Bad Request (`INVALID_ASSIGNEE_ROLE`).
-* **BR-03 (Requester Action Prohibition):** Requesters have read-only visibility into Actions Taken on their own tickets and are strictly prohibited from creating or updating Action Taken records (HTTP 403). No DELETE endpoint is exposed for any role; global non-deletability is defined separately in BR-05.
+* **BR-03 (Requester Action Prohibition):** Requesters have read-only visibility into Actions Taken on their own tickets and are strictly prohibited from creating or updating Action Taken records (HTTP 403). Deletion of Actions Taken is prohibited for all users; no DELETE endpoint is exposed.
 * **BR-04 (Action Taken Field Validation):**
-  * `actionDateTime`: Required and non-null in the persisted record. The client may omit this field; when omitted, the server supplies the current timestamp (`now()`). *[Proposed Technical Constraint]* A client-supplied timestamp cannot exceed current server time by more than 5 minutes (future-dating tolerance).
-  * `description`: Required non-empty string. *[Confirmed Handout Requirement]*. *[Proposed Technical Constraint]* Trimmed length between 5 and 3,000 characters.
-  * `result`: Required non-empty string. *[Confirmed Handout Requirement]*. *[Proposed Technical Constraint]* Trimmed length between 2 and 1,000 characters.
-  * `followUpRequired`: Required boolean flag (defaults to `false`). *[Confirmed Handout Requirement]*.
-  * `followUpNote`: String (text). *[Confirmed Handout Requirement]* **Mandatory when `followUpRequired = true`**; optional / null when `followUpRequired = false`. *[Proposed Technical Constraint]* Maximum length of 1,000 characters.
-  * `attachmentNotes`: Optional string (text). *[Confirmed Handout Requirement]*. *[Proposed Technical Constraint]* Maximum length of 1,000 characters.
+  * `actionDateTime`: Required and non-null in the persisted record. The client may omit this field; when omitted, the server supplies the current timestamp (`now()`). Client-supplied timestamp cannot exceed current server time by more than 5 minutes (future-dating tolerance).
+  * `description`: Required non-empty string. Trimmed length between 5 and 3,000 characters.
+  * `result`: Required non-empty string. Trimmed length between 2 and 1,000 characters.
+  * `followUpRequired`: Required boolean flag (defaults to `false`).
+  * `followUpNote`: String (text). **Mandatory when `followUpRequired = true`**; optional / null when `followUpRequired = false`. Maximum length of 1,000 characters.
+  * `attachmentNotes`: Optional string (text). Maximum length of 1,000 characters.
   * `assignedToId`: Optional String (foreign key to `User.id`). Validated per BR-02.
-* **BR-05 (Action Taken Non-Deletability & Ticket Deletion Integrity):** Action Taken records may be created and updated by authorized IT Staff/Admin users but cannot be deleted via the application API (no DELETE endpoint is exposed). Deleting a Ticket or User must not silently cascade or erase associated ActionTaken audit history; referential integrity requires `onDelete: Restrict`.
+* **BR-05 (Action Taken Append-only Revision Architecture & Deletion Prohibition):**
+  * **Creation & Edit:** Authorized IT Staff and Administrators may create and edit Actions Taken.
+  * **Absolute Deletion Prohibition:** Actions Taken records and their revision history can **never be deleted** via the application API. The server explicitly registers route handlers for `DELETE /api/actions-taken/:actionId` and `DELETE /api/tickets/:id/actions-taken/:actionId` returning HTTP `405 Method Not Allowed` with `{ "error": { "code": "METHOD_NOT_ALLOWED", "message": "Actions taken audit records cannot be deleted" } }`, rather than relying on Express's default 404.
+  * **Append-Only Revision History:** When an Action Taken is edited, the original data is **never overwritten or destroyed**. Every successful edit atomically updates the current `ActionTaken` record and appends a new record to the `ActionTakenRevision` table containing:
+    1. Target record ID (`actionTakenId`).
+    2. Snapshot of data prior to modification (`originalData`).
+    3. Snapshot of updated data (`updatedData`).
+    4. Identity of the editing technician (`editedById`).
+    5. Exact timestamp of the revision (`editedAt`).
+    6. Sequential revision number (`revisionNumber`), incremented monotonically per action (enforced by database constraint `@@unique([actionTakenId, revisionNumber])`).
+  * **Performer Immutability:** The `performedById` field is permanently bound to the original creator upon initial record creation. Subsequent edits by other staff or administrators must **never alter `performedById`**.
+  * **Referential Deletion Protection:** Deleting a Ticket or User must not silently cascade or erase associated Action Taken history; referential integrity requires `onDelete: Restrict`.
 * **BR-06 (Standard Lifecycle Statuses):** The system recognizes eight standard lifecycle statuses from the handout: `NEW`, `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CLOSED`, `REOPENED`, and `CANCELLED`.
 * **BR-07 (Existing REJECTED Status Compatibility):** The `REJECTED` status introduced in Lab 3 is retained in schema and read views for backward compatibility as a terminal state. Rejection requires a mandatory rejection reason recorded in an `InternalNote`. Standard ticket resolution workflows adhere to the eight standard lifecycle statuses.
 * **BR-08 (Terminal States):** `CLOSED`, `CANCELLED`, and `REJECTED` are terminal statuses. Once a ticket enters a terminal status, no further status transitions, claims, assignments, or priority modifications are permitted.
 * **BR-09 (Reopened Ticket Workflow):** Transitioning a `RESOLVED` ticket to `REOPENED` reactivates the ticket in the operational queue. From `REOPENED`, IT Staff and Administrators may transition to `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, or `CANCELLED`, as defined in §6.1.
-* **BR-10 (Backend Resolution Gate):**
+* **BR-10 (Team-approved Business Rule: Backend Resolution Gate):**
+  * **Status:** This is a **Team-approved Business Rule** and is strictly binding across backend, frontend, and tests.
   * Only `IT_STAFF` and `ADMIN` may transition a Ticket to `RESOLVED`.
   * The predecessor status must be one of `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, or `REOPENED`, as defined in §6.1.
-  * **Engineering decision:** The Ticket must have **at least one persisted Action Taken record** (`COUNT(actionsTaken) >= 1`). Otherwise, the backend rejects the request with HTTP 400 and `ACTION_TAKEN_REQUIRED`; the Ticket status remains unchanged.
-  * Outstanding `followUpRequired = true` items do **not** block resolution. Follow-up remains a tracked operational obligation and does not represent an incomplete Ticket resolution.
-  * The check must be performed server-side in the same transaction/consistency boundary as the status update so direct API calls cannot bypass it.
-
+  * **Resolution Gate Rule:** A Ticket can transition to `RESOLVED` **only if it has at least one persisted Action Taken record** (`COUNT(actionsTaken) >= 1`).
+  * If no Action Taken records exist on the ticket, the backend MUST reject the transition with HTTP `400 Bad Request` and error code `ACTION_TAKEN_REQUIRED`:
+    ```json
+    {
+      "error": {
+        "code": "ACTION_TAKEN_REQUIRED",
+        "message": "At least one Action Taken is required."
+      }
+    }
+    ```
+  * The Ticket status remains unchanged upon rejection.
+  * **Follow-Up Permitted:** The presence of pending follow-up items (`followUpRequired = true`) does **not** prevent a Ticket from being resolved. Follow-up is an operational tracking obligation, not an impediment to closing out the primary resolution.
+  * **Authoritative Enforcement Point:** The backend is the authoritative enforcement point. The check is executed server-side within the status-update transaction boundary. Frontend validation and UI warnings are supplementary only.
+  * **Status Update Endpoint Contract Preservation:** The Resolution Gate is evaluated on the existing Lab 3 endpoint `PATCH /api/staff/tickets/:id/status`. This endpoint must strictly preserve its established Lab 1–3 response contract (`{ message: "Status updated successfully", ticket: { ... } }` on HTTP 200, and `{ error: { code: "ACTION_TAKEN_REQUIRED", message: "At least one Action Taken is required." } }` on HTTP 400). It must NEVER be wrapped into the new Lab 4 `{ data: ... }` response shape.
 * **BR-11 (Requester Problem Resolution Indication):** Calling `POST /api/tickets/:id/indicate-resolved` appends a public comment indicating the requester believes the issue is resolved, but does not alter `currentStatus`. Only IT Staff or Admin may formally transition the status to `RESOLVED`.
 * **BR-12 (Backend Metric Aggregation & Recent Data Capping):** All dashboard metrics must be computed exclusively by the backend using aggregate SQL queries (`COUNT`). In addition, recent ticket and action summaries returned by dashboard endpoints must be strictly capped (limit of 5 items) and sorted chronologically descending to maintain fast response times without streaming unbounded collections.
 * **BR-13 (Requester Metric & Item Isolation):** Metrics and recent items returned by `GET /api/dashboard/requester` must strictly aggregate only tickets where `requesterId === req.user.id`.
 * **BR-14 (Concurrency, Duplicate Prevention & Form Resilience):**
   * Concurrent mutations on ticket status or Action Taken records must be verified against current state. If a collision or race condition occurs, the server rejects the request with HTTP 409 Conflict.
   * Client interfaces must prevent duplicate submissions on rapid clicking by immediately disabling submit buttons while an operation is in flight.
-  * Network retries or repeated requests must be safely handled without corrupting data or creating uncoordinated duplicates. The server-side idempotency state must be durable for the documented 24-hour retention period; a process-local in-memory cache alone is insufficient.
+  * Action Taken creation supports idempotency via client-supplied `Idempotency-Key` header with 24-hour durable server retention.
+  * Action Taken updates support optimistic concurrency via `expectedUpdatedAt` comparison.
   * Recoverable errors (HTTP 400, 409, 500) must preserve user-entered form data in client state so the user can correct validation issues or retry without losing their input.
 * **BR-15 (Non-Enumeration on Resource Access):** If a Requester attempts to access ticket details or Actions Taken for a ticket they do not own, the system must return HTTP 404 Not Found (not 403) to prevent ticket enumeration.
 * **BR-16 (Administrator Dashboard Role Behavior):** The Administrator dashboard reuses the IT Staff Dashboard layout and API endpoint (`/staff-dashboard` / `GET /api/dashboard/staff`), retaining full administrative privileges across all ticket queues. User management functions remain located on the existing UI route `/user-management` (backed by `/api/admin/users/*`) without introducing separate user-account metrics in this sprint baseline.
+* **BR-17 (API Error Contract & Regression Compatibility):**
+  * Existing Lab 1–3 APIs must preserve their original success response bodies, error response bodies, and HTTP status codes to prevent breaking pre-existing clients.
+  * New Lab 4 APIs must strictly implement the nested error contract:
+    ```json
+    {
+      "error": {
+        "code": "ERROR_CODE",
+        "message": "Human-readable message"
+      }
+    }
+    ```
+  * Existing Lab 1–3 endpoints must **not** be globally converted to the new error schema.
+  * Explicit regression test assertions must verify both successful and failed request payloads against representative existing APIs to ensure complete backward compatibility.
 
 ---
 
@@ -227,7 +263,7 @@ All transitions listed above are enabled. No transition is conditional on future
 * **Read (`GET /api/tickets/:id/actions-taken`):**
   * Allowed: `IT_STAFF`, `ADMIN` (all tickets); `REQUESTER` (only tickets where `ticket.requesterId === req.user.id`).
   * Non-owner requester access returns HTTP 404 Not Found (non-enumeration).
-* **Delete:** Prohibited across all roles.
+* **Delete:** Prohibited across all roles. Explicitly handled by the server on `DELETE /api/actions-taken/:actionId` and `DELETE /api/tickets/:id/actions-taken/:actionId` returning HTTP `405 Method Not Allowed` with `{ "error": { "code": "METHOD_NOT_ALLOWED", "message": "Actions taken audit records cannot be deleted" } }`.
 
 ---
 
@@ -315,35 +351,55 @@ Per handout §4.6, the Administrator dashboard may reuse the IT Staff dashboard.
 
 ```prisma
 model ActionTaken {
-  id               Int       @id @default(autoincrement())
+  id               Int                   @id @default(autoincrement())
   ticketId         Int
-  ticket           Ticket    @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  ticket           Ticket                @relation(fields: [ticketId], references: [id], onDelete: Restrict)
   performedById    String
-  performedBy      User      @relation("ActionTakenAuthor", fields: [performedById], references: [id], onDelete: Restrict)
+  performedBy      User                  @relation("ActionTakenAuthor", fields: [performedById], references: [id], onDelete: Restrict)
   assignedToId     String?
-  assignedTo       User?     @relation("ActionTakenAssignee", fields: [assignedToId], references: [id], onDelete: Restrict)
-  actionDateTime   DateTime  @default(now())
+  assignedTo       User?                 @relation("ActionTakenAssignee", fields: [assignedToId], references: [id], onDelete: Restrict)
+  actionDateTime   DateTime              @default(now())
   description      String
   result           String
-  followUpRequired Boolean   @default(false)
+  followUpRequired Boolean               @default(false)
   followUpNote     String?
   attachmentNotes  String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  revisions        ActionTakenRevision[]
 
   @@index([ticketId])
   @@index([performedById])
   @@index([assignedToId])
+}
+
+model ActionTakenRevision {
+  id             Int         @id @default(autoincrement())
+  actionTakenId  Int
+  actionTaken    ActionTaken @relation(fields: [actionTakenId], references: [id], onDelete: Cascade)
+  revisionNumber Int
+  editedById     String
+  editor         User        @relation("ActionTakenRevisionEditor", fields: [editedById], references: [id], onDelete: Restrict)
+  editedAt       DateTime    @default(now())
+  originalData   Json
+  updatedData    Json
+
+  @@unique([actionTakenId, revisionNumber])
+  @@index([actionTakenId])
+  @@index([editedById])
 }
 ```
 * In `model Ticket`, add relation: `actionsTaken ActionTaken[]`.
 * In `model User`, add relations:
   * `actionsPerformed ActionTaken[] @relation("ActionTakenAuthor")`
   * `actionsAssigned ActionTaken[] @relation("ActionTakenAssignee")`
+  * `actionRevisions ActionTakenRevision[] @relation("ActionTakenRevisionEditor")`
 
-**Two Database-Design Justifications (Handout §5.1 Requirement):**
+**Three Database-Design Justifications:**
 1. **Referential Deletion Protection (`onDelete: Restrict`):** Deleting a `Ticket` or `User` must not cascade to delete associated `ActionTaken` records. Actions Taken represent legal and technical compliance audit history; orphan prevention via `Restrict` ensures that neither ticket deletion nor technician account purge can erase historical intervention logs.
 2. **Explicit Performer vs Assignee Separation:** `performedById` is mandatory and immutably bound to the creator's session, while `assignedToId` is nullable and references an approved active technician. This satisfies the requirement that a ticket's actions can be delegated or assigned to an approved technician while permanently preserving non-repudiable audit attribution of the user who entered the work.
+3. **Immutable Append-Only Revision History (`ActionTakenRevision`):** Modifications to an Action Taken record never discard historical data. Every successful edit atomically increments a sequential `revisionNumber` and records full JSON snapshots of `originalData` and `updatedData`, the editing technician `editedById`, and `editedAt`. The parent `ActionTaken.performedById` remains strictly unchanged, preserving original creator non-repudiation.
 
 ### 9.2 Migration and Rollback/Recovery Strategy
 * **Forward Migration:** Standard Prisma migration (`npx prisma migrate dev --name add_actions_taken`). Strictly additive (`CREATE TABLE "ActionTaken"`, foreign key constraints, indexes). Existing tables remain unmodified.
@@ -449,7 +505,7 @@ model ActionTaken {
 ## 13. Assumptions, Constraints, and Unresolved Decisions
 
 ### 13.1 Confirmed Architectural Decisions
-* **Decision 13.1.1 (Action Taken Non-Deletability):** Actions Taken are non-deletable audit records; authorized IT Staff/Admin may update permitted fields, but no DELETE endpoint is provided. `performedById` remains immutable.
+* **Decision 13.1.1 (Action Taken Revision Architecture & Non-Deletability):** Actions Taken are non-deletable audit records. The `ActionTaken` model stores the current editable state. Every successful edit atomically increments a sequential `revisionNumber` and appends an immutable audit snapshot to `ActionTakenRevision` capturing `originalData`, `updatedData`, `editedById`, and `editedAt`. The original author `performedById` remains immutable. No DELETE endpoint is provided.
 * **Decision 13.1.2 (Action Taken Deletion Integrity):** Deleting a Ticket must not silently cascade or delete associated ActionTaken records (`onDelete: Restrict`).
 * **Decision 13.1.3 (Automatic Technician Attribution):** `performedBy` is populated exclusively from the session `req.user.id`.
 * **Decision 13.1.4 (Approved Assignee Model):** `assignedToId` is optional and validated against active IT Staff/Admin members.
@@ -468,8 +524,9 @@ model ActionTaken {
 * **Compatibility Assumption:** To prevent breaking existing database records, migrations, and Lab 3 regression tests, `REJECTED` is retained as a valid terminal status in the database enum and query handlers. Normal ticket resolution workflows will operate on the eight standard statuses.
 
 ### 13.3 Engineering Decisions and Remaining Technical Constraints
-* **Decision 13.3.1 (Resolution Gate):** Finalized. A Ticket requires at least one persisted Action Taken before it can transition to `RESOLVED`. Outstanding follow-ups do not block resolution.
+* **Decision 13.3.1 (Resolution Gate - Team-Approved Business Rule):** Finalized as a **Team-approved Business Rule**. A Ticket requires at least one persisted Action Taken before it can transition to `RESOLVED` (rejected with HTTP 400 Bad Request and error code `ACTION_TAKEN_REQUIRED` if 0 actions exist). Outstanding follow-ups (`followUpRequired = true`) do not block resolution. The backend is the authoritative enforcement point.
 * **Decision 13.3.2 (Ticket Status Transitions):** Finalized. All transitions listed in §6.1 are approved project workflow behavior and must be implemented consistently in the backend, UI, and tests. Unlisted transitions are rejected.
+* **Decision 13.3.3 (API Compatibility & Error Contract):** Finalized. Existing Lab 1–3 endpoints preserve their legacy response payloads and status codes. New Lab 4 endpoints strictly implement the nested `{ "error": { "code", "message" } }` schema.
 * **Question 13.3.4 (Proposed Field Validation Constraints):** Are the length limits (Description: 5–3,000 chars; Result: 2–1,000 chars; Notes: max 1,000 chars) and the 5-minute future timestamp tolerance acceptable as production constraints?
   * *Current Specification Baseline:* Maintained as *Proposed Technical Constraints* to prevent database overflow and invalid timestamps.
 * **Question 13.3.5 (Attachment Notes Type):** Is `attachmentNotes` purely textual descriptive notes, or must it reference uploaded `Attachment.id` records?

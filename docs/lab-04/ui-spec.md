@@ -274,7 +274,7 @@ Rendered below Status Breakdown in a two-column responsive grid:
 
 - Tab label: `Service Actions (n)` where `n` is the count of loaded records.
 - The "Event Log" tab remains disabled (no backend endpoint exists in Lab 4).
-- Default active tab on page load: no change to existing Lab 3 behavior (currently defaults to "attachments"); preserving existing behavior. **[Proposed / Pending Confirmation: whether Service Actions should become the default tab.]**
+- Default active tab on page load: no change to existing Lab 3 behavior (currently defaults to "attachments"); preserving existing behavior to safeguard regression tests (see UI-Q2 in §8).
 
 #### 3.1.2 Service Actions List (Read-Only)
 
@@ -361,7 +361,7 @@ When the ticket has zero Actions Taken records:
 
 #### 3.2.1 Panel Location in Staff Ticket Detail
 
-The Actions Taken panel is added as a new section below the Activity & Communication feed within `StaffTicketDetail`. On desktop (two-column layout), it occupies the full width of the left column (below the activity feed), or can be implemented as a new tab within an existing tab structure. **[Proposed / Pending Confirmation: exact placement — dedicated section below activity feed vs. new tab.]**
+The Actions Taken panel is added as a dedicated section below the Activity & Communication feed within `StaffTicketDetail`. On desktop (two-column layout), it occupies the full width of the left column (below the activity feed). (See UI-Q4 in §8).
 
 > **Lifecycle Status Clarification (Part 6 Demonstrations):** Action Taken records do **NOT** have their own lifecycle status field or status transition controls (no `PENDING`, `IN_PROGRESS`, `COMPLETED`, or `CANCELLED`). Actions Taken are historical activity records. The Part 6 rubric operations ("status transition, complete, cancel") operate on the **Ticket as a whole** via the Operations panel status dropdown (§4.2). The Actions Taken panel provides List, Create, Assign, Edit, and validation controls for technical interventions, while Ticket completion (`RESOLVED`, `CLOSED`) and cancellation (`CANCELLED`) are managed via the Ticket Workflow in Section 4.
 
@@ -375,23 +375,33 @@ The Actions Taken panel is added as a new section below the Activity & Communica
 
 - Count `(n)` updates after each create or edit operation.
 - `[+ Add Action Taken]` button is visible to `IT_STAFF` and `ADMIN` only.
-- Button is **disabled** when the ticket is in a terminal status (`CLOSED`, `CANCELLED`, `REJECTED`). **[Proposed / Pending Confirmation: whether creating actions on terminal tickets should be blocked at the UI layer.]**
+- Button is **disabled** when the ticket is in a terminal status (`CLOSED`, `CANCELLED`, `REJECTED`), consistent with `BR-08` and terminal state immutability (see UI-Q3 in §8).
 
 #### 3.2.3 Actions Taken List (Staff View)
 
-Each record is displayed as a card, identical to the Requester view (§3.1.2), but with an additional **Edit** button in the card header.
+Each record is displayed as a card, identical to the Requester view (§3.1.2), but with an additional **Edit** button in the card header and an expandable **Revision History** section.
 
 ```
 +------------------------------------------------------------+
-|  Action Taken      Oct 30, 2026 10:15         [Edit]       |
+|  Action Taken #1   Oct 30, 2026 10:15               [Edit] |
 |  Performed by: Staff Technician One  [IT_STAFF]            |
 |  Assigned to:  Staff Technician Two  [IT_STAFF]            |
-|  ...                                                       |
+|  Description:  Replaced damaged CAT6 cable                 |
+|  Result:       Gigabit link negotiated                     |
+|  [v View Revision History (2)]                             |
+|  +-------------------------------------------------------+ |
+|  | Revision 2: Oct 30, 10:30 by Staff Technician Two     | |
+|  | - Result: 'Link negotiated' -> 'Gigabit link neg...'  | |
+|  | Revision 1: Oct 30, 10:15 by Staff Technician One     | |
+|  | - Initial record creation                             | |
+|  +-------------------------------------------------------+ |
 +------------------------------------------------------------+
 ```
 
 - `[Edit]` button is rendered as `btn-outline-secondary` (small).
-- Clicking `[Edit]` opens the **Edit Action Taken Modal** (§3.2.5) pre-populated with the record's data.
+- Clicking `[Edit]` opens the **Edit Action Taken Modal** (§3.2.5) pre-populated with the record's current data.
+- **Revision History Expansion:** If `revisions.length > 0`, an expandable toggle button displays the number of revisions. Clicking expands an immutable timeline of prior edits, showing revision number, editor name, timestamp, and modified values.
+- `performedBy` permanently displays the original author (`performedById`) and cannot be altered.
 
 #### 3.2.4 Add Action Taken — Modal Form
 
@@ -403,13 +413,13 @@ Triggered by clicking `[+ Add Action Taken]`.
 
 | Field | Input Type | Required | Validation |
 |---|---|:---:|---|
-| Action Date/Time | `datetime-local` | No (defaults to now) | *[Proposed]* Cannot exceed server time by > 5 minutes |
-| Assigned To | `<select>` dropdown | No (Optional) | List of active `IT_STAFF` and `ADMIN` users from `GET /api/staff/assignees`. Server validates active status and role (`BR-01`, `AC-17`). Defaults to **unassigned (null)** when not selected; the UI may pre-select the authenticated performer as a convenience default but the server does NOT enforce this default. (`BR-02`, `specification.md §7.3`, `api-spec.md §6.1`) |
-| Description | `<textarea rows={4}>` | **Yes** | Non-empty. *[Proposed]* 5–3,000 chars |
-| Result | `<textarea rows={3}>` | **Yes** | Non-empty. *[Proposed]* 2–1,000 chars |
+| Action Date/Time | `datetime-local` | No (defaults to now) | Cannot exceed server time by > 5 minutes |
+| Assigned To | `<select>` dropdown | No (Optional) | List of active `IT_STAFF` and `ADMIN` users from `GET /api/staff/assignees`. Server validates active status and role (`BR-01`, `AC-17`). Defaults to **unassigned (null)** when not selected. |
+| Description | `<textarea rows={4}>` | **Yes** | Non-empty. 5–3,000 chars |
+| Result | `<textarea rows={3}>` | **Yes** | Non-empty. 2–1,000 chars |
 | Follow-Up Required | `<input type="checkbox">` | **Yes** (defaults unchecked) | Boolean |
-| Follow-Up Note | `<textarea rows={2}>` | **Conditional** | **Mandatory and non-empty when Follow-Up Required is checked**. *[Proposed]* Max 1,000 chars |
-| Attachment Notes | `<textarea rows={2}>` | No | *[Proposed]* Max 1,000 chars |
+| Follow-Up Note | `<textarea rows={2}>` | **Conditional** | **Mandatory and non-empty when Follow-Up Required is checked**. Max 1,000 chars |
+| Attachment Notes | `<textarea rows={2}>` | No | Max 1,000 chars |
 | Performed By | Read-only display | — | Server-derived from session (`performedById`); shows authenticated user's name + role. Not an input field. (`BR-02`, `FR-02`, `AC-03`) |
 
 > **Distinct Roles for `performedBy` and `assignedTo`:** `performedBy` is always derived on the server from the authenticated session (`BR-02`, `AC-03`). `assignedTo` is selected from active IT Staff / Admin members (`BR-01`, `AC-17`).
@@ -427,7 +437,7 @@ Triggered by clicking `[+ Add Action Taken]`.
 - Submit button label: "Record Action"
 - **Submit Button In-Flight State:** While request is in-flight (`isSubmitting === true`), the submit button is disabled and displays a loading spinner to prevent repeated clicks and duplicate submissions (`FR-25`, `BR-14`, `AC-19`).
 - **Form State Retention on Failure:** If submission fails due to client validation error (HTTP 400), inactive assignee rejection (HTTP 400 `INACTIVE_ASSIGNEE`), concurrency conflict (HTTP 409), or network/server error (HTTP 500), the form modal remains open and all user-entered data (`description`, `result`, `followUpRequired`, `followUpNote`, `attachmentNotes`, `assignedToId`) is **preserved in React component state**. The technician does NOT lose entered data and can correct input or retry immediately without re-entering any field (`FR-24`, `AC-19`).
-- **Network Retry Resilience:** The client creates one `Idempotency-Key` UUID for each logical create submission and retains that same key together with the unchanged payload if the request outcome is uncertain (timeout or dropped response). A retry MUST reuse both; after a definitive success or when the user changes the payload to start a new logical submission, the client uses a new key. This allows the API idempotency contract in `api-spec.md §2.1` to prevent duplicate records (`FR-25`, `BR-14`).
+- **Network Retry Resilience:** The client creates one `Idempotency-Key` UUID for each logical create submission and retains that same key together with the unchanged payload if the request outcome is uncertain (timeout or dropped response).
 - On **success** (HTTP 201): Modal closes, form state resets, panel list refreshes, green success toast displayed: "Action Taken recorded successfully."
 - On **error** (HTTP 400): Validation errors shown inline. If server returns a specific code (`INACTIVE_ASSIGNEE`, `INVALID_ASSIGNEE_ROLE`), display an alert above the form: "Selected assignee is inactive or unauthorized. Please select an active IT Staff member."
 - On **error** (HTTP 500/network): Modal-level error alert: "Failed to record action due to network error. Form data has been preserved. Please retry."
@@ -445,16 +455,17 @@ Triggered by clicking `[Edit]` on an existing record.
 
 - Pre-populated with existing record values, including `assignedToId`.
 - Assigned To dropdown allows reassigning the action to another active IT Staff or Admin technician (`FR-21`, `AC-17`).
-- **Optimistic Concurrency:** The `PATCH /api/actions-taken/:actionId` request MUST include `expectedUpdatedAt` copied from the record's `updatedAt` value when it was fetched. The client must not replace it with a timestamp from the edited draft. If the server returns `409 STALE_UPDATE`, preserve the draft and prompt the user to reload/reconcile before retrying.
-- `Performed By` displayed as read-only (original author from server, not the editing user's name). (`specification.md §7.3`: `performedById` is non-editable).
+- **Optimistic Concurrency:** The `PATCH /api/actions-taken/:actionId` request MUST include `expectedUpdatedAt` copied from the record's `updatedAt` value when it was fetched. If the server returns `409 STALE_UPDATE`, preserve the draft and prompt the user to reload/reconcile before retrying.
+- **Append-only Revision Warning:** The modal displays an informational notice: *"Edits to this action will be recorded in the append-only revision history. The original author and previous revisions are permanently preserved."*
+- `Performed By` displayed as read-only (original author from server, not the editing user's name; `performedById` is immutable).
 - Form resilience applies identically: entered edits are preserved in component state upon failure (`FR-24`, `AC-19`).
 - Submit button label: "Save Changes"
 - On **success** (HTTP 200): Modal closes, panel list refreshes, success toast: "Action Taken updated successfully."
 - On **error** (HTTP 400): Validation errors shown inline.
-- On **error** (HTTP 409 `STALE_UPDATE`): Modal-level alert: "This action was updated by another user. Please reload the page to see the latest version before editing." Form data is preserved so the user does not lose their draft. *[Proposed Concurrency Contract — Pending Implementation Confirmation]*
+- On **error** (HTTP 409 `STALE_UPDATE`): Modal-level alert: "This action was updated by another user. Please reload the page to see the latest version before editing." Form data is preserved so the user does not lose their draft.
 - Error states for 500/network: same as create modal.
 
-> **No Delete button** is rendered anywhere in the UI. Actions Taken records can be **edited** by `IT_STAFF` and `ADMIN` (via the Edit modal above), but they **cannot be deleted** through the API or the UI. They are append-or-edit-only audit records. (`BR-05`, `specification.md §2.2`, `specification.md §2.1 — Deletion Prohibition`)
+> **Absolute Deletion Prohibition:** **No Delete button** is rendered anywhere in the UI. Actions Taken records can be **edited** by `IT_STAFF` and `ADMIN` (via the Edit modal above), but they **cannot be deleted** through the API or the UI. They are strictly append-only audit records. (`BR-05`, `specification.md §2.2`)
 
 #### 3.2.6 Empty State (No Actions Taken — Staff View)
 
@@ -515,12 +526,13 @@ The frontend displays **all and only** the permitted next statuses for the Ticke
 | `CANCELLED` | *(none — Terminal)* |
 | `REJECTED` | *(none — Terminal; Lab 3 legacy)* |
 
-**Resolution Gate UI behavior:**
-- `RESOLVED` remains an available transition from each permitted predecessor status.
-- If the Ticket has no recorded Actions Taken, selecting `RESOLVED` must not silently proceed. The UI should show a clear validation message that at least one Action Taken must be recorded first. The backend remains authoritative and returns `400 ACTION_TAKEN_REQUIRED` for direct or stale UI requests.
-- Outstanding follow-ups do not disable resolution; they remain visible as follow-up obligations.
-- When the current status is terminal (`CLOSED`, `CANCELLED`, `REJECTED`), no status dropdown or Change button is shown. Assignment and IT Priority controls are also disabled/hidden per BR-08.
-- `REJECTED` is available only from `NEW` and invokes the existing rejection-reason modal required by Lab 3 compatibility.
+**Resolution Gate UI Behavior (Team-approved Business Rule — `BR-10`):**
+- **Approved Business Rule:** A Ticket can transition to `RESOLVED` only if it has at least one persisted `ActionTaken` record (`COUNT(actionsTaken) >= 1`).
+- **Authoritative Backend Enforcement:** If no `ActionTaken` record exists for the ticket, the backend authoritatively rejects the transition with HTTP `400 Bad Request` and error code `ACTION_TAKEN_REQUIRED`.
+- **Supplementary Frontend Validation:** `RESOLVED` is listed in the status dropdown for permitted predecessor statuses. If the ticket has zero recorded actions taken, the UI displays a supplementary validation warning prompting the technician that at least one Action Taken must be recorded first. However, the backend is the authoritative enforcement point.
+- **Follow-Up Non-Blocking:** The presence of `followUpRequired = true` on any Action Taken does **not** prevent a Ticket from transitioning to `RESOLVED`. Outstanding follow-ups remain visible as follow-up obligations without blocking ticket resolution.
+- **Terminal States:** When the current status is terminal (`CLOSED`, `CANCELLED`, `REJECTED`), no status dropdown or Change button is shown. Assignment and IT Priority controls are also disabled/hidden per `BR-08`.
+- **Rejection Compatibility:** `REJECTED` is available only from `NEW` and invokes the existing rejection-reason modal required by Lab 3 compatibility.
 
 ## 5. Responsive Design & Accessibility
 

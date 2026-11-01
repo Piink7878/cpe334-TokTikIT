@@ -19,7 +19,7 @@ This document details the REST API specification for Sprint 4 (Lab 4). It define
 * **404 Not Found (Non-Enumeration):** Resource does not exist OR the resource is not owned by the requesting user. (If a Requester requests `/api/tickets/99/actions-taken` and they do not own ticket 99, the API returns 404 to prevent resource existence enumeration).
 * **409 Conflict:** Concurrency collisions (e.g., competing simultaneous status changes or transaction serialization conflicts), stale Action Taken updates, or reuse of an `Idempotency-Key` with a different payload.
 
-**Standard Error Response Schema:**
+**Standard Error Response Schema (New Lab 4 APIs):**
 ```json
 {
   "error": {
@@ -29,7 +29,10 @@ This document details the REST API specification for Sprint 4 (Lab 4). It define
 }
 ```
 
-> **Canonical Error Schema:** All error responses throughout this API — including `INACTIVE_ASSIGNEE`, `INVALID_ASSIGNEE_ROLE`, `ACTION_TAKEN_REQUIRED`, `INVALID_STATUS_TRANSITION`, `CONCURRENT_UPDATE`, `STALE_UPDATE`, and `IDEMPOTENCY_KEY_CONFLICT` — MUST use this nested `{ "error": { "code", "message" } }` schema. Flat error objects (e.g., `{ "error": "INACTIVE_ASSIGNEE" }`) are **not** conformant and must not appear in implementation or test expectations.
+> **API Compatibility & Error Contract Policy:**
+> - **Existing Lab 1–3 APIs:** Must preserve all original success response bodies, error response bodies, and HTTP status codes (e.g. `{ "error": "..." }`, `{ "error": { "message": "..." } }`, or `{ "message": "...", "ticket": { ... } }`). Existing endpoints (such as `PATCH /api/staff/tickets/:id/status`) are **not** globally converted or wrapped into the new Lab 4 `{ "data": ... }` envelope, ensuring complete client and test compatibility. The `ACTION_TAKEN_REQUIRED` error on this existing endpoint preserves its established error envelope (`{ "error": { "code": "ACTION_TAKEN_REQUIRED", "message": "..." } }`).
+> - **New Lab 4 APIs:** All new Lab 4 endpoints — including Actions Taken (`POST /api/tickets/:id/actions-taken`, `PATCH /api/actions-taken/:actionId`), and Dashboards (`GET /api/dashboard/*`) — MUST use the new Lab 4 response structure with `{ "data": ... }` on success and nested `{ "error": { "code", "message" } }` contract on failure.
+> - Explicit regression test suites verify that legacy endpoints retain their original success and error response shapes.
 
 ---
 
@@ -49,7 +52,6 @@ This document details the REST API specification for Sprint 4 (Lab 4). It define
   * If the same key is submitted with a **different payload**, the server returns `409 Conflict` (`code: "IDEMPOTENCY_KEY_CONFLICT"`).
   * Idempotency records MUST be stored durably on the server (a process-local in-memory cache alone is non-conformant), retained for **24 hours**, and scoped by authenticated user ID, target ticket ID, and key (not by transient session ID), so a retry after re-authentication or server restart can still resolve to the original request.
   * Requests without an `Idempotency-Key` may be processed once but receive no network-retry deduplication guarantee. The Lab 4 UI MUST always send a key and retain the same key and identical payload when retrying an uncertain request; it MUST disable the submit button while a request is in flight.
-  * *[Proposed Technical Contract — Pending Implementation Confirmation]*
 * **Request Body:**
   ```json
   {
@@ -114,7 +116,7 @@ This document details the REST API specification for Sprint 4 (Lab 4). It define
 ---
 
 ### 2.2 PATCH /api/actions-taken/:actionId
-* **Description:** Updates an existing Action Taken record.
+* **Description:** Updates an existing Action Taken record. Every successful update atomically appends an immutable revision audit log record into `ActionTakenRevision`.
 * **Auth Required:** Yes
 * **Permitted Roles:** `IT_STAFF`, `ADMIN` (Requesters return `403 Forbidden`).
 * **Path Parameters:**
@@ -125,7 +127,22 @@ This document details the REST API specification for Sprint 4 (Lab 4). It define
   * If they match, the update proceeds and the server refreshes `updatedAt` to `now()`.
   * If they do **not** match (another client already updated the record), the server returns `409 Conflict` (`code: "STALE_UPDATE"`, message: `"The record was modified by another user. Please reload and retry."`). The response body also includes the current server-side record so the client can present the latest state.
   * Clients that omit `expectedUpdatedAt` receive `400 Bad Request` (`code: "MISSING_EXPECTED_UPDATED_AT"`).
-  * *[Proposed Technical Contract — Pending Implementation Confirmation]*
+* **Append-Only Revision History Audit & Concurrency Safety:**
+  * The original data is never overwritten without an audit trail.
+  * Within a single atomic interactive database transaction (`$transaction`), the server:
+    1. Reads the current record state as `originalData`.
+    2. Compares `expectedUpdatedAt` with the database `updatedAt`; if mismatched, throws a stale update conflict returning `409 Conflict` (`STALE_UPDATE`).
+    3. Updates the `ActionTaken` record with the new values.
+    4. Appends a new `ActionTakenRevision` row with:
+       - `actionTakenId`: ID of the target action.
+       - `originalData`: JSON snapshot of prior state.
+       - `updatedData`: JSON snapshot of modified fields.
+       - `editedById`: Identity of the editor (`req.user.id`).
+       - `editedAt`: Timestamp of the edit (`now()`).
+       - `revisionNumber`: Monotonically increasing revision sequence (1, 2, 3...) per action.
+  * **Database-Level Concurrency Guarantee:** The Prisma schema defines a unique constraint `@@unique([actionTakenId, revisionNumber])` on `ActionTakenRevision`. Concurrent update attempts cannot generate duplicate revision numbers. If any step within the transaction fails (including revision insert), the entire transaction rolls back atomically, ensuring no partial or corrupted updates occur.
+* **Performer Immutability:**
+  * The `performedById` field is immutable and permanently records the original technician who created the action. Even if edited by another staff or admin, `performedById` **never changes**.
 * **Request Body (Partial update supported):**
   ```json
   {
@@ -140,7 +157,7 @@ This document details the REST API specification for Sprint 4 (Lab 4). It define
   ```
 * **Validation Rules:**
   * Editable fields: `description`, `result`, `followUpRequired`, `followUpNote`, `attachmentNotes`, `actionDateTime`, `assignedToId`.
-  * Non-editable fields: `id`, `ticketId`, `performedById`, `createdAt`. If a client includes any of these fields in the update payload, the server ignores the supplied values and preserves the stored values; the update response remains `200 OK`.
+  * Non-editable fields: `id`, `ticketId`, `performedById`, `createdAt`. If a client includes any of these fields in the update payload, the server ignores the supplied values and preserves the stored values.
   * If `followUpRequired` is updated to `true`, `followUpNote` must be provided as a non-empty string.
   * If `assignedToId` is updated, must reference an active `IT_STAFF` or `ADMIN` user (`INACTIVE_ASSIGNEE` / `INVALID_ASSIGNEE_ROLE`).
 * **Response Payload (200 OK):**
@@ -169,23 +186,28 @@ This document details the REST API specification for Sprint 4 (Lab 4). It define
       "followUpNote": null,
       "attachmentNotes": "Final switch audit log attached.",
       "createdAt": "2026-10-30T10:15:30.000Z",
-      "updatedAt": "2026-10-30T10:30:00.000Z"
+      "updatedAt": "2026-10-30T10:30:00.000Z",
+      "latestRevision": {
+        "revisionNumber": 1,
+        "editedById": "550e8400-e29b-41d4-a716-446655440000",
+        "editedAt": "2026-10-30T10:30:00.000Z"
+      }
     }
   }
   ```
 * **Status Codes:**
-  * `200 OK`: Action Taken updated successfully.
-  * `400 Bad Request`: Invalid ID or validation error (e.g., setting `followUpRequired = true` without `followUpNote`, `INACTIVE_ASSIGNEE`, `INVALID_ASSIGNEE_ROLE`, or `MISSING_EXPECTED_UPDATED_AT`).
+  * `200 OK`: Action Taken updated and revision appended successfully.
+  * `400 Bad Request`: Validation failure (missing `followUpNote` when `followUpRequired = true`, `INACTIVE_ASSIGNEE`, `INVALID_ASSIGNEE_ROLE`, or `MISSING_EXPECTED_UPDATED_AT`).
   * `401 Unauthorized`: Unauthenticated request.
   * `403 Forbidden`: Authenticated user is a `REQUESTER`.
   * `404 Not Found`: Action Taken record not found.
-  * `409 Conflict`: Stale update detected — another client modified the record after the client last fetched it (`STALE_UPDATE`).
-* **Traceability:** `FR-04`, `FR-21`, `FR-25`, `BR-01`, `BR-04`, `BR-14`, `AC-04`, `AC-17`, `AC-19`.
+  * `409 Conflict`: Stale update detected (`STALE_UPDATE`).
+* **Traceability:** `FR-04`, `FR-21`, `FR-25`, `BR-01`, `BR-04`, `BR-05`, `BR-14`, `AC-04`, `AC-17`, `AC-19`.
 
 ---
 
 ### 2.3 GET /api/tickets/:id/actions-taken
-* **Description:** Retrieves all Actions Taken records recorded for a specific ticket.
+* **Description:** Retrieves all Actions Taken records recorded for a specific ticket, including their revision audit history.
 * **Auth Required:** Yes
 * **Permitted Roles:**
   * `IT_STAFF`, `ADMIN`: Allowed for all tickets.
@@ -221,16 +243,56 @@ This document details the REST API specification for Sprint 4 (Lab 4). It define
         "followUpNote": null,
         "attachmentNotes": null,
         "createdAt": "2026-10-30T10:15:30.000Z",
-        "updatedAt": "2026-10-30T10:15:30.000Z"
+        "updatedAt": "2026-10-30T10:30:00.000Z",
+        "revisions": [
+          {
+            "id": 1,
+            "revisionNumber": 1,
+            "editedById": "550e8400-e29b-41d4-a716-446655440000",
+            "editor": {
+              "id": "550e8400-e29b-41d4-a716-446655440000",
+              "fullName": "Staff Technician One",
+              "role": "IT_STAFF"
+            },
+            "editedAt": "2026-10-30T10:30:00.000Z",
+            "originalData": {
+              "description": "Initial cable check",
+              "result": "Intermittent packet loss"
+            },
+            "updatedData": {
+              "description": "Replaced damaged CAT6 cable and verified link.",
+              "result": "Link operational at 1 Gbps."
+            }
+          }
+        ]
       }
     ]
   }
   ```
 * **Status Codes:**
-  * `200 OK`: Actions retrieved successfully.
+  * `200 OK`: Actions and revisions retrieved successfully.
   * `401 Unauthorized`: Unauthenticated request.
   * `404 Not Found`: Ticket not found OR ticket belongs to another requester (non-enumeration).
-* **Traceability:** `FR-06`, `BR-02`, `BR-03`, `BR-15`, `AC-05`, `AC-06`.
+* **Traceability:** `FR-06`, `BR-02`, `BR-03`, `BR-05`, `BR-15`, `AC-05`, `AC-06`.
+
+---
+
+### 2.4 DELETE /api/actions-taken/:actionId (Explicit Deletion Prohibition)
+* **Description:** Deletion of Actions Taken records or revision history is strictly prohibited under legal and compliance audit trail requirements. The application registers an explicit route handler returning HTTP 405 Method Not Allowed rather than falling back to Express's default 404 handler.
+* **Auth Required:** Yes
+* **Registered Endpoints:** `DELETE /api/actions-taken/:actionId` and `DELETE /api/tickets/:id/actions-taken/:actionId`
+* **Status Codes:**
+  * `405 Method Not Allowed`: Explicitly returned when any client attempts a DELETE operation on an Action Taken.
+  * **Error Payload:**
+    ```json
+    {
+      "error": {
+        "code": "METHOD_NOT_ALLOWED",
+        "message": "Action Taken records represent legal compliance audit history and cannot be deleted."
+      }
+    }
+    ```
+* **Traceability:** `BR-05`, `TC-RBAC-03`.
 
 ---
 
@@ -377,27 +439,35 @@ This document details the REST API specification for Sprint 4 (Lab 4). It define
   *(Note: `rejectionReason` is required only if `status === 'REJECTED'` per Lab 3 legacy rules).*
 * **Status Transition Rules Matrix:**
 
-| Current Status | Permitted Next Statuses | Requirement Classification | Condition / Audit Log Trigger |
-|---|---|---|---|
 | Current Status | Permitted Next Statuses | Condition / Audit Log Trigger |
 |---|---|---|
 | **NEW** | `OPEN`, `CANCELLED`, `REJECTED` | Open/claim/assign; cancel before work; `REJECTED` requires a non-empty `rejectionReason`. |
-| **OPEN** | `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CANCELLED` | Start work; request information; quick resolution; or cancel. `RESOLVED` requires the Resolution Gate. |
-| **IN_PROGRESS** | `WAITING_FOR_REQUESTER`, `RESOLVED`, `OPEN`, `CANCELLED` | Await requester; resolve; return paused work to queue; or cancel. `RESOLVED` requires the Resolution Gate. |
-| **WAITING_FOR_REQUESTER** | `IN_PROGRESS`, `RESOLVED`, `CANCELLED` | Resume; resolve after response; or cancel. `RESOLVED` requires the Resolution Gate. |
+| **OPEN** | `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CANCELLED` | Start work; request information; quick resolution; or cancel. `RESOLVED` requires the Team-approved Resolution Gate. |
+| **IN_PROGRESS** | `WAITING_FOR_REQUESTER`, `RESOLVED`, `OPEN`, `CANCELLED` | Await requester; resolve; return paused work to queue; or cancel. `RESOLVED` requires the Team-approved Resolution Gate. |
+| **WAITING_FOR_REQUESTER** | `IN_PROGRESS`, `RESOLVED`, `CANCELLED` | Resume; resolve after response; or cancel. `RESOLVED` requires the Team-approved Resolution Gate. |
 | **RESOLVED** | `CLOSED`, `REOPENED` | Close verified work or reopen recurring/persistent issue. |
-| **REOPENED** | `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CANCELLED` | Resume; request clarification; resolve subject to gate; or cancel. |
+| **REOPENED** | `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CANCELLED` | Resume; request clarification; resolve subject to Team-approved Resolution Gate; or cancel. |
 | **CLOSED** | *None* | Terminal; immutable. |
 | **CANCELLED** | *None* | Terminal; immutable. |
 | **REJECTED** | *None* | Lab 3 legacy terminal; immutable. |
 
 Every transition listed above is enabled. Any transition not listed is rejected with HTTP 400 (`INVALID_STATUS_TRANSITION`). The backend is authoritative; the UI must expose the same permitted set.
 
-* **Backend Resolution Gate Enforcement:**
+* **Backend Resolution Gate Enforcement (Team-Approved Business Rule):**
   * Handout §4.5 strictly requires that the backend enforces the resolution rule even when a client bypasses the normal screen.
   * Direct calls to set `status = "RESOLVED"` are blocked for Requesters (HTTP 403 Forbidden).
   * Direct calls from IT Staff/Admin are validated against predecessor statuses permitted by the approved matrix. `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, and `REOPENED` may transition to `RESOLVED` when the Resolution Gate passes (see `specification.md §6.1`).
-  * **Resolution Gate (approved project rule):** Transitioning to `RESOLVED` requires **at least one persisted Action Taken record** on the ticket. If the ticket has zero Actions Taken, reject with HTTP 400 Bad Request (`code: "ACTION_TAKEN_REQUIRED"`, message: "At least one Action Taken must be recorded before resolving this ticket"). Outstanding follow-ups do not block resolution.
+  * **Team-Approved Resolution Gate Rule:** Transitioning to `RESOLVED` requires **at least one persisted Action Taken record** on the ticket (`COUNT(actionsTaken) >= 1`). If the ticket has zero Actions Taken, the backend rejects the request with HTTP 400 Bad Request and error code `ACTION_TAKEN_REQUIRED`:
+    ```json
+    {
+      "error": {
+        "code": "ACTION_TAKEN_REQUIRED",
+        "message": "At least one Action Taken is required."
+      }
+    }
+    ```
+  * **Follow-Up Permitted:** Outstanding follow-ups (`followUpRequired = true`) do **not** block resolution.
+  * **Authoritative Enforcement Point:** The backend is the authoritative enforcement point. Frontend validation is supplementary only.
 * **Audit Log Generation:** Every successful status transition automatically creates a new `InternalNote` record (`ticketId`, `authorId: req.user.id`, `content: "Status changed from <OLD_STATUS> to <NEW_STATUS>"`). For rejection, the reason is appended to the note.
 * **Concurrency Protection:** The update executes within a transaction verifying current ticket state. Competing simultaneous status updates receive `409 Conflict`.
 * **Response Payload (200 OK):**
@@ -412,14 +482,15 @@ Every transition listed above is enabled. Any transition not listed is rejected 
     }
   }
   ```
+  *(Note: As an established Lab 3 endpoint, `PATCH /api/staff/tickets/:id/status` strictly preserves its existing response envelope: `{ "message": "...", "ticket": { ... } }` on success, and `{ "error": { "code": "...", "message": "..." } }` on failure. It must NEVER be wrapped in `{ "data": ... }`).*
 * **Status Codes:**
   * `200 OK`: Status updated successfully.
-  * `400 Bad Request`: Invalid transition, invalid status value, missing `rejectionReason` on REJECTED, or failure of the approved project Resolution Gate. The `ACTION_TAKEN_REQUIRED` code applies whenever the ticket has no persisted Action Taken record.
+  * `400 Bad Request`: Invalid transition, invalid status value, missing `rejectionReason` on REJECTED, or failure of the Team-approved Resolution Gate (`ACTION_TAKEN_REQUIRED` when zero Action Taken records exist).
   * `401 Unauthorized`: Unauthenticated.
   * `403 Forbidden`: Requester account.
   * `404 Not Found`: Ticket not found.
   * `409 Conflict`: Concurrent update collision.
-* **Traceability:** `FR-08`, `FR-09`, `FR-10`, `FR-11`, `FR-12`, `BR-06`, `BR-07`, `BR-08`, `BR-09`, `BR-10`, `BR-14`, `AC-07`, `AC-08`, `AC-09`, `AC-15`.
+* **Traceability:** `FR-08`, `FR-09`, `FR-10`, `FR-11`, `FR-12`, `BR-06`, `BR-07`, `BR-08`, `BR-09`, `BR-10`, `BR-14`, `AC-07`, `AC-08`, `AC-09`, `AC-15`, `AC-18`.
 
 ---
 

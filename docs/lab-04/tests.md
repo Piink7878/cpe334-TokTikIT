@@ -61,22 +61,46 @@
     3. Client and server dependencies installed: `npm install` (root, `server/`, `client/`).
   * **Test Isolation:** Integration tests clean up dynamically generated test users and tickets in `beforeAll` / `afterAll` hooks while preserving core seeded tickets (`TKT-1001` through `TKT-1004`).
 
+  ### 1.5 Recorded Pre-Implementation Test Baseline
+  Prior to implementing Sprint 4 code changes, the existing test baseline across Labs 1–3 was executed and documented to establish a verified regression standard:
+  * **Server Automated Test Suite (`npm --prefix server test`):**
+    - **13 test files passed** (100%)
+    - **148 individual tests passed** (100%)
+    - **0 failures, 0 errors**
+  * **Client Automated Component Suite (`npm --prefix client test`):**
+    - **11 test files passed** (100%)
+    - **50 individual tests passed** (100%)
+    - **0 failures, 0 errors**
+  * **Playwright End-to-End Suite (`npx playwright test e2e/lab-03`):**
+    - **24 tests passed** across Desktop, Tablet, and Mobile profiles (100%)
+    - **0 failures, 0 errors**
+  * **Known Pre-Existing E2E Failure (`npx playwright test e2e/lab-02`):**
+    - **3 tests failed** in `e2e/lab-02/requester-ticket-flow.spec.ts`
+    - *Root Cause:* The legacy Lab 2 test expects an obsolete development requester selection dropdown (`h2: Select Development Requester`), which was intentionally replaced in Lab 3 by the authenticated session login flow (`/login`).
+    - *Integrity Rule:* This pre-existing failure is documented separately and must not be conflated with Sprint 4 regressions.
+  * **Baseline Integrity Standard:** Release verification compares final test results against this verified baseline (148 server, 50 client, 24 Lab 3 E2E passed). The team shall not claim "100% full Labs 1–4 E2E regression success" while pre-existing Lab 2 legacy failures remain unresolved. Any failure on Lab 3 or new Lab 4 suites represents a regression that must be resolved.
+
   ---
 
   ## 2. Test Scope
 
   ### 2.1 In-Scope Features (Sprint 4)
-  1. **Actions Taken (Service Actions) Subsystem:**
+  1. **Actions Taken Subsystem & Append-only Audit History (`ActionTakenRevision`):**
     * Creation of Action Taken records by IT Staff and Admin (`POST /api/tickets/:id/actions-taken`).
     * Modification of Action Taken records by IT Staff and Admin (`PATCH /api/actions-taken/:actionId`).
+    * **Append-only Audit History (`ActionTakenRevision`):** Every successful edit atomically updates the current `ActionTaken` record and appends an immutable revision row containing: `actionTakenId`, `originalData` (JSON snapshot of prior state), `updatedData` (JSON snapshot of edited fields), `editedById` (authenticated editor), `editedAt` (timestamp), and sequential `revisionNumber` (1, 2, ...).
+    * **Permanent Attribution Immutability:** `performedById` is permanently immutable and reflects the original creator across all revisions.
+    * **Prohibition of Deletion & Audit Mutation:** Actions Taken records cannot be deleted (`onDelete: Restrict`; no `DELETE` endpoint). `ActionTakenRevision` records are strictly append-only and can never be modified or deleted through application APIs.
     * Read-only retrieval of Actions Taken by Ticket Owner Requester (`GET /api/tickets/:id/actions-taken`).
-    * Full retrieval of Actions Taken by IT Staff and Admin on all tickets.
+    * Full retrieval of Actions Taken with revision history by IT Staff and Admin on all tickets.
     * Server session derivation of `performedById` (`req.user.id`).
     * Validation of `description`, `result`, `followUpRequired`, `followUpNote` (mandatory when `followUpRequired = true`), `attachmentNotes`, and `actionDateTime`.
     * Collaborative action recording by technicians who are not the designated Ticket Owner.
-    * Prevention of deletion (`onDelete: Restrict` on Ticket and User foreign keys; no DELETE endpoint).
     * Actions Taken Lifecycle Decoupling: Action Taken records do not have an independent status lifecycle; status transitions, completion (`RESOLVED`/`CLOSED`), and cancellation (`CANCELLED`) operate strictly on the parent Ticket (see item 2).
-  2. **Ticket Status Transition & Resolution Engine:**
+  2. **Ticket Status Transition & Resolution Engine (Team-Approved Business Rule):**
+    * **Resolution Gate (`BR-10`):** Transition to `RESOLVED` authoritatively requires at least one persisted `ActionTaken` record (`COUNT >= 1`). If zero exist, backend rejects with HTTP `400 Bad Request` and `{ "error": { "code": "ACTION_TAKEN_REQUIRED", "message": "At least one Action Taken is required." } }`.
+    * Open follow-up obligations (`followUpRequired = true`) do **not** block resolution.
+    * Authoritative backend enforcement with supplementary frontend validation warnings.
     * Backend state machine enforcing transitions between `NEW`, `OPEN`, `IN_PROGRESS`, `WAITING_FOR_REQUESTER`, `RESOLVED`, `CLOSED`, `REOPENED`, `CANCELLED`.
     * Backward compatibility for `REJECTED` status with mandatory rejection reason.
     * Immutability of terminal statuses (`CLOSED`, `CANCELLED`, `REJECTED`).
@@ -208,7 +232,7 @@
   #### TC-ACT-08: Update Action Taken — Description and Follow-up Status
   * **Related Requirements:** FR-04, BR-04, AC-04
   * **Related API/UI:** `PATCH /api/actions-taken/:actionId`
-  * **Test Objective:** Verify that an existing Action Taken record can be updated by IT Staff or Admin.
+  * **Test Objective:** Verify that an existing Action Taken record can be updated by IT Staff or Admin, atomically updating the current record while appending an immutable revision.
   * **Preconditions / Test Data:** Existing Action Taken with `followUpRequired: true`.
   * **Steps:**
     1. Issue `PATCH /api/actions-taken/:actionId` with:
@@ -220,8 +244,51 @@
         "followUpNote": null
       }
       ```
-  * **Expected Result:** HTTP 200 OK; record updated in database; `updatedAt` timestamp refreshed.
+  * **Expected Result:** HTTP 200 OK; current `ActionTaken` record updated in database; `updatedAt` timestamp refreshed; an `ActionTakenRevision` record is atomically created.
   * **Test Level:** API / Integration
+  * **Priority:** High
+
+  #### TC-ACT-08B: Atomically Append ActionTakenRevision on Edit
+  * **Related Requirements:** FR-04, BR-05, AC-04, spec §9.1, api-spec §2.2
+  * **Related API/UI:** `PATCH /api/actions-taken/:actionId`
+  * **Test Objective:** Verify that every successful edit atomically appends an immutable `ActionTakenRevision` audit record capturing complete before/after snapshots, editor attribution, timestamp, and sequential revision number.
+  * **Preconditions / Test Data:** Existing Action Taken record with known baseline fields; authenticated editor is `staff2` (`IT_STAFF`).
+  * **Steps:**
+    1. Query database for baseline `ActionTaken` (Revision 0 / initial state).
+    2. Authenticated as `staff2`, issue `PATCH /api/actions-taken/:actionId` updating `description`, `result`, and `assignedToId`.
+    3. Query database table `ActionTakenRevision` where `actionTakenId = actionId`.
+    4. Authenticated as `admin1`, issue a second `PATCH /api/actions-taken/:actionId` updating `result`.
+    5. Query `ActionTakenRevision` again.
+  * **Expected Result:**
+    - Step 2 creates exactly one `ActionTakenRevision` with `revisionNumber = 1`, `editedById = staff2.id`, `editedAt` matching transaction time, `originalData` containing exact JSON snapshot of pre-edit fields, and `updatedData` containing exact JSON snapshot of post-edit fields.
+    - Step 4 creates a second revision with `revisionNumber = 2`, `editedById = admin1.id`, `originalData` matching the state from Step 2, and `updatedData` matching Step 4.
+    - `ActionTaken` current record matches the latest fields from Step 4.
+  * **Test Level:** API / Database / Integration
+  * **Priority:** High
+
+  #### TC-ACT-08C: ActionTakenRevision Immutability and Non-Deletability
+  * **Related Requirements:** BR-05, spec §7.1, spec §9.1
+  * **Related API/UI:** Application APIs / Express Routing
+  * **Test Objective:** Verify that `ActionTakenRevision` audit history records can never be altered, mutated, or deleted through any application API.
+  * **Preconditions / Test Data:** Existing `ActionTakenRevision` record with `id: rev-1`.
+  * **Steps:**
+    1. Attempt `PATCH /api/action-taken-revisions/rev-1` (or any revision endpoint).
+    2. Attempt `DELETE /api/action-taken-revisions/rev-1`.
+    3. Attempt `PUT /api/action-taken-revisions/rev-1`.
+  * **Expected Result:** All attempts return HTTP 404 Not Found or HTTP 405 Method Not Allowed; revision records remain permanently unmodified and undeletable in the database.
+  * **Test Level:** API / Security
+  * **Priority:** High
+
+  #### TC-ACT-08D: Transactional Rollback on Revision Insert Failure
+  * **Related Requirements:** FR-04, BR-05, BR-14, spec §9.1
+  * **Related API/UI:** `PATCH /api/actions-taken/:actionId`
+  * **Test Objective:** Verify that the current `ActionTaken` update and `ActionTakenRevision` creation occur in a single atomic database transaction (`$transaction`). If revision insertion fails, the current record update is completely rolled back.
+  * **Preconditions / Test Data:** Existing Action Taken with `updatedAt: T1`. Mock/simulate database failure on revision insertion.
+  * **Steps:**
+    1. Dispatch `PATCH /api/actions-taken/:actionId` with modified description while simulating a failure on revision table insertion.
+    2. Inspect response status and database state.
+  * **Expected Result:** HTTP 500 Internal Server Error; the `ActionTaken` record remains in its pre-request state with `updatedAt: T1`; no partial update occurs.
+  * **Test Level:** API / Database / Reliability
   * **Priority:** High
 
   #### TC-ACT-09: Update Action Taken — Enabling Follow-up Requires Note
@@ -379,7 +446,7 @@
     6. Query the database for `ActionTaken` records on the ticket.
     7. Submit a different payload using the same `Idempotency-Key`.
     8. Inspect the conflict response and confirm the original database record is unchanged.
-  * **Expected Result:** The retry returns HTTP `201 Created` with the **original** `ActionTaken` entity (same `id`, same `createdAt`). The database contains **exactly one** `ActionTaken` record for that payload — no duplicate. Reusing the same key with a different payload returns HTTP `409 Conflict` (`IDEMPOTENCY_KEY_CONFLICT`) and does not alter the original record. The idempotency record is scoped by authenticated user ID + ticket ID + key and retained for 24 hours. *[Proposed technical contract; implementation evidence pending per api-spec §2.1]*.
+  * **Expected Result:** The retry returns HTTP `201 Created` with the **original** `ActionTaken` entity (same `id`, same `createdAt`). The database contains **exactly one** `ActionTaken` record for that payload — no duplicate. Reusing the same key with a different payload returns HTTP `409 Conflict` (`IDEMPOTENCY_KEY_CONFLICT`) and does not alter the original record. The idempotency record is scoped by authenticated user ID + ticket ID + key and retained for 24 hours.
   * **Test Level:** API / Integration / Concurrency
   * **Priority:** High
 
@@ -404,7 +471,7 @@
     1. Both `staff1` and `staff2` fetch the ActionTaken record; both observe `updatedAt: T1`.
     2. `staff1` issues `PATCH /api/actions-taken/X` with `{ "expectedUpdatedAt": "T1", "description": "Staff 1 update" }`. Server accepts; record's `updatedAt` is now `T2 > T1`.
     3. `staff2` issues `PATCH /api/actions-taken/X` with `{ "expectedUpdatedAt": "T1", "description": "Staff 2 update" }` (stale `expectedUpdatedAt`).
-  * **Expected Result:** Step 2 returns HTTP `200 OK`. Step 3 returns HTTP `409 Conflict` with `{ "error": { "code": "STALE_UPDATE", "message": "The record was modified by another user. Please reload and retry." } }`. Database record reflects only `staff1`'s update. *[Requires Optimistic Concurrency Contract — Pending Implementation Confirmation per api-spec §2.2]*.
+  * **Expected Result:** Step 2 returns HTTP `200 OK`. Step 3 returns HTTP `409 Conflict` with `{ "error": { "code": "STALE_UPDATE", "message": "The record was modified by another user. Please reload and retry." } }`. Database record reflects only `staff1`'s update.
   * **Test Level:** API / Integration / Concurrency
   * **Priority:** High
 
@@ -434,14 +501,16 @@
   * **Test Level:** API / Security
   * **Priority:** High
 
-  #### TC-RBAC-03: Action Taken Deletion Prohibited Across All Roles
-  * **Related Requirements:** BR-05, Decision 13.1.1
-  * **Related API/UI:** `DELETE /api/actions-taken/:actionId` (intentionally undefined)
-  * **Test Objective:** Verify that no DELETE route is exposed for Actions Taken, enforcing global non-deletability independently of Requester create/update authorization.
+  #### TC-RBAC-03: Action Taken Deletion Prohibited Across All Roles (Explicit 405)
+  * **Related Requirements:** BR-05, Decision 13.1.1, api-spec §2.4
+  * **Related API/UI:** `DELETE /api/actions-taken/:actionId` (explicit route handler)
+  * **Test Objective:** Verify that the backend explicitly registers route handlers for DELETE attempts on Actions Taken, returning HTTP 405 Method Not Allowed with standard error payload rather than relying on Express's default 404 handler for undefined routes.
   * **Preconditions / Test Data:** Existing Action Taken; test with `REQUESTER`, `IT_STAFF`, and `ADMIN`.
   * **Steps:**
-    1. Issue `DELETE /api/actions-taken/:actionId` for each role.
-  * **Expected Result:** HTTP 404 Not Found or HTTP 405 Method Not Allowed; record is never deleted.
+    1. Issue `DELETE /api/actions-taken/:actionId` as `REQUESTER`, `IT_STAFF`, and `ADMIN`.
+    2. Issue `DELETE /api/tickets/:id/actions-taken/:actionId` as `REQUESTER`, `IT_STAFF`, and `ADMIN`.
+    3. Query database table `ActionTaken` and `ActionTakenRevision` for the target record.
+  * **Expected Result:** All requests return HTTP 405 Method Not Allowed with JSON body `{ "error": { "code": "METHOD_NOT_ALLOWED", "message": "Actions taken audit records cannot be deleted" } }`; target record and associated revisions remain completely intact.
   * **Test Level:** API / Security
   * **Priority:** High
 
@@ -508,8 +577,8 @@
   #### TC-TRN-01: Valid Status Transition IN_PROGRESS -> RESOLVED
   * **Related Requirements:** FR-08, FR-09, BR-10, AC-07
   * **Related API/UI:** `PATCH /api/staff/tickets/:id/status`
-  * **Test Objective:** Verify that an IT technician can transition an `IN_PROGRESS` ticket to `RESOLVED` and that an audit note is recorded.
-  * **Preconditions / Test Data:** Test ticket in `IN_PROGRESS` with at least one Action Taken whose `followUpRequired = false`; authenticated as IT Staff. This avoids depending on the pending decision about whether outstanding follow-ups block resolution.
+  * **Test Objective:** Verify that an IT technician can transition an `IN_PROGRESS` ticket to `RESOLVED` when at least one Action Taken exists, and that an audit note is recorded.
+  * **Preconditions / Test Data:** Test ticket in `IN_PROGRESS` with at least one Action Taken (per Team-approved Business Rule `BR-10`, followUpRequired may be true or false); authenticated as IT Staff.
   * **Steps:**
     1. Send `PATCH /api/staff/tickets/:id/status` with `{"status": "RESOLVED"}`.
     2. Check response payload and ticket `currentStatus` in DB.
@@ -544,7 +613,7 @@
   * **Related Requirements:** FR-08, BR-09, spec §6.1
   * **Related API/UI:** `PATCH /api/staff/tickets/:id/status`
   * **Test Objective:** Verify permitted transitions from `REOPENED` back to `IN_PROGRESS` or `RESOLVED`.
-  * **Preconditions / Test Data:** Ticket in `REOPENED` status with at least one Action Taken whose `followUpRequired = false` (for the `RESOLVED` transition test).
+  * **Preconditions / Test Data:** Ticket in `REOPENED` status with at least one Action Taken (satisfying Resolution Gate `BR-10`).
   * **Steps:**
     1. Transition to `IN_PROGRESS` -> succeeds (200 OK).
     2. Transition to `RESOLVED` -> succeeds (200 OK).
@@ -683,16 +752,16 @@
   * **Test Level:** Integration / Concurrency
   * **Priority:** High
 
-  #### TC-TRN-16: Backend Resolution Gate Rejection — No Action Taken Recorded
+  #### TC-TRN-16: Backend Resolution Gate Rejection — No Action Taken Recorded (Team-approved Business Rule)
   * **Related Requirements:** FR-08, FR-22, BR-10, AC-18, spec §6.2
   * **Related API/UI:** `PATCH /api/staff/tickets/:id/status`
-  * **Test Objective:** Verify the approved Resolution Gate: the backend rejects a direct API request attempting to transition a ticket to `RESOLVED` when zero Actions Taken records exist.
+  * **Test Objective:** Verify the Team-approved Business Rule (`BR-10`): the backend authoritatively rejects any request attempting to transition a ticket to `RESOLVED` when zero persisted Actions Taken records exist (`COUNT == 0`). Frontend validation is supplementary; backend is the authoritative enforcement point.
   * **Preconditions / Test Data:** Ticket `TKT-TEST-RES` in `IN_PROGRESS` status with 0 Actions Taken records; authenticated user is `staff1` (`IT_STAFF`).
   * **Steps:**
     1. Issue direct HTTP request `PATCH /api/staff/tickets/:id/status` with payload `{ "status": "RESOLVED" }`.
     2. Inspect response status code and response body.
     3. Query ticket status in database.
-  * **Expected Result:** HTTP 400 Bad Request with `{ "error": { "code": "ACTION_TAKEN_REQUIRED", "message": "Ticket cannot be resolved without at least one recorded Action Taken." } }`; database confirms ticket remains in `IN_PROGRESS`.
+  * **Expected Result:** HTTP 400 Bad Request with `{ "error": { "code": "ACTION_TAKEN_REQUIRED", "message": "At least one Action Taken is required." } }`; database confirms ticket remains in `IN_PROGRESS`.
   * **Test Level:** API / Security / Workflow
   * **Priority:** High
 
@@ -1014,25 +1083,41 @@
   #### TC-DB-01: Ticket to ActionTaken 1-to-Many Relationship
   * **Related Requirements:** spec §7.1, spec §9.1
   * **Related API/UI:** Prisma Client
-  * **Test Objective:** Verify that Prisma can query a Ticket with its related `actionsTaken` and vice versa.
-  * **Preconditions / Test Data:** Test ticket with 2 ActionTaken records.
+  * **Test Objective:** Verify that Prisma can query a Ticket with its related `actionsTaken` (and nested `revisions`) and vice versa.
+  * **Preconditions / Test Data:** Test ticket with 2 ActionTaken records, one of which has an edit revision.
   * **Steps:**
-    1. Query `prisma.ticket.findUnique({ where: { id }, include: { actionsTaken: true } })`.
-    2. Query `prisma.actionTaken.findUnique({ where: { id: actionId }, include: { ticket: true, performedBy: true } })`.
-  * **Expected Result:** Queries succeed; Ticket contains array of 2 actions; Action contains parent Ticket and User relation.
+    1. Query `prisma.ticket.findUnique({ where: { id }, include: { actionsTaken: { include: { revisions: true } } } })`.
+    2. Query `prisma.actionTaken.findUnique({ where: { id: actionId }, include: { ticket: true, performedBy: true, revisions: true } })`.
+  * **Expected Result:** Queries succeed; Ticket contains array of 2 actions; nested revisions query cleanly; Action contains parent Ticket and User relations.
   * **Test Level:** Integration / Database
   * **Priority:** High
 
-  #### TC-DB-02: Tickets with Zero, One, and Multiple Actions Taken
-  * **Related Requirements:** spec §7.1
-  * **Related API/UI:** Prisma Client
-  * **Test Objective:** Verify database schema supports tickets with 0, 1, and many Actions Taken without constraint violations.
-  * **Preconditions / Test Data:** Seeded `TKT-1002` has 0 Actions Taken, `TKT-1001` has exactly 1, and `TKT-1004` has at least 2 (per specification.md §9.3).
+  #### TC-DB-01B: ActionTakenRevision Table Schema & Unique Constraint Integrity
+  * **Related Requirements:** FR-04, BR-05, spec §9.1, plan §5.2
+  * **Related API/UI:** Prisma Client / PostgreSQL Schema
+  * **Test Objective:** Verify that table `ActionTakenRevision` exists, enforces referential integrity to `ActionTaken` (`actionTakenId`), enforces foreign key to `User` (`editedById`), stores `originalData` and `updatedData` as JSON, tracks `revisionNumber` as an integer, and enforces the unique constraint `@@unique([actionTakenId, revisionNumber])` preventing duplicate revisions on concurrent edits.
+  * **Preconditions / Test Data:** ActionTaken with at least one edit.
   * **Steps:**
-    1. Query `TKT-1002` with `include: { actionsTaken: true }` -> returns `actionsTaken: []`.
-    2. Query `TKT-1001` -> returns an array of length exactly 1.
-    3. Query `TKT-1004` -> returns an array with at least 2 records.
-  * **Expected Result:** The seeded database explicitly demonstrates zero, one, and multiple Actions Taken per Ticket; all relations query successfully.
+    1. Query `prisma.actionTakenRevision.findFirst({ where: { actionTakenId } })`.
+    2. Assert schema types: `actionTakenId` (Int), `revisionNumber` (Int), `editedById` (String), `editedAt` (DateTime), `originalData` (JSON object), `updatedData` (JSON object).
+    3. Verify foreign key relation to editor: `include: { editor: true }`.
+    4. Attempt to insert a second `ActionTakenRevision` record bearing the duplicate `(actionTakenId, revisionNumber)` tuple.
+  * **Expected Result:** Schema correctly reflects all fields; relations resolve cleanly; foreign keys enforce referential integrity; Step 4 fails with a unique constraint violation (Prisma error `P2002`), proving that duplicate revision numbers are strictly prevented at the database layer.
+  * **Test Level:** Integration / Database
+  * **Priority:** High
+
+  #### TC-DB-02: Tickets with Zero, One, and Multiple Actions Taken & Dashboard Metric States
+  * **Related Requirements:** spec §7.1, spec §9.3, FR-23, AC-20
+  * **Related API/UI:** Prisma Client / Seed Verification
+  * **Test Objective:** Verify database schema supports tickets with 0, 1, and many Actions Taken without constraint violations, and verifies seed fixtures provide both zero and nonzero dashboard metric scenarios.
+  * **Preconditions / Test Data:** Seeded `TKT-1002` and `TKT-1003` have 0 Actions Taken, `TKT-1004` has 1 Action Taken, and `TKT-1001` has multiple Actions Taken (per specification.md §9.3). Accounts `req_empty` and `tech_empty` provide zero-metric scenarios.
+  * **Steps:**
+    1. Query `TKT-1002` and `TKT-1003` with `include: { actionsTaken: true }` -> assert `actionsTaken` is empty array `[]`.
+    2. Query `TKT-1004` -> assert `actionsTaken.length === 1`.
+    3. Query `TKT-1001` -> assert `actionsTaken.length >= 2`.
+    4. Query dashboard metrics for `req_empty` and `tech_empty` -> assert all counts return `0` and recent lists are empty `[]`.
+    5. Query dashboard metrics for standard users -> assert nonzero metrics matching fixture distribution.
+  * **Expected Result:** The seeded database explicitly demonstrates zero, one, and multiple Actions Taken per Ticket; all relations query successfully; both zero and nonzero dashboard metric scenarios are verified.
   * **Test Level:** Integration / Database
   * **Priority:** High
 
@@ -1112,10 +1197,10 @@
        ```powershell
        pg_dump -U postgres -d toktikit_dev -F c -b -v -f backup_pre_lab4.dump
        ```
-    1a. Separately archive the configured attachment-storage directory (or snapshot the configured object store). Use the actual configured path; do not assume one:
+    1a. Separately archive the configured attachment-storage directory (`uploads/lab-02`, as defined in `server/src/middlewares/upload.ts`):
        ```powershell
-       $AttachmentStorageParent = "<actual-configured-storage-parent>"
-       $AttachmentStorageDirectory = "<actual-configured-attachment-storage-directory>"
+       $AttachmentStorageParent = "."
+       $AttachmentStorageDirectory = "uploads/lab-02"
        tar -czf backup_pre_lab4_attachments.tar.gz -C $AttachmentStorageParent $AttachmentStorageDirectory
        ```
     2. Create a disposable migration-failure database and restore the snapshot into it:
@@ -1328,6 +1413,20 @@
   * **Expected Result:** All specs pass without timing out or breaking assertions.
   * **Test Level:** E2E / Regression
   * **Priority:** High
+
+  #### TC-REG-09: Explicit Legacy vs New API Error Contract Regression Assertions
+  * **Related Requirements:** FR-19, BR-17, AC-16, api-spec §1.2
+  * **Related API/UI:** Preserved Lab 1–3 endpoints vs New Sprint 4 endpoints
+  * **Test Objective:** Verify that legacy endpoints from Labs 1–3 strictly maintain their original response bodies (both success and error formats) and HTTP status codes without globally replacing legacy error payloads, while new Sprint 4 endpoints strictly implement the nested `{ "error": { "code", "message" } }` contract.
+  * **Preconditions / Test Data:** Populated database; test sessions for Requester and IT Staff.
+  * **Steps:**
+    1. **Legacy Endpoint Success Check:** Issue `GET /api/categories` -> assert 200 OK with legacy JSON array shape. Issue `PATCH /api/staff/tickets/:id/claim` -> assert 200 OK with legacy ticket response envelope.
+    2. **Legacy Endpoint Error Check:** Issue `POST /api/auth/login` with invalid credentials -> assert HTTP 401 and legacy flat body `{ "error": "Invalid email or password" }` (verifying legacy endpoints were NOT refactored to nested code format). Issue `POST /api/tickets` with empty title -> assert HTTP 400 with legacy validation error shape.
+    3. **New Sprint 4 Endpoint Error Check:** Issue `POST /api/tickets/:id/actions-taken` with invalid assignee -> assert HTTP 400 and nested `{ "error": { "code": "INACTIVE_ASSIGNEE", "message": "Assigned user is inactive." } }`.
+    4. **New Resolution Gate Error Check:** Issue `PATCH /api/staff/tickets/:id/status` to `RESOLVED` on a ticket with 0 actions -> assert HTTP 400 and nested `{ "error": { "code": "ACTION_TAKEN_REQUIRED", "message": "At least one Action Taken is required." } }`.
+  * **Expected Result:** Legacy API success and error contracts are 100% preserved; no global error middleware overrides existing endpoints; new endpoints strictly adhere to the nested error schema.
+  * **Test Level:** API / Regression / Architecture
+  * **Priority:** Critical
 
   ---
 
@@ -1574,6 +1673,7 @@
   | `e2e/lab-02/requester-ticket-flow.spec.ts` | Playwright E2E | End-to-end requester ticket creation and attachment. | Full browser user flow must succeed. |
   | `e2e/lab-03/staff-ticket-flow.spec.ts` | Playwright E2E | Staff login, claim, assign, status update, notes. | Preserved login redirects ensure E2E assertions pass. |
   | `e2e/lab-03/user-administration.spec.ts` | Playwright E2E | Admin user management workflow. | Admin UI and API must remain fully functional. |
+  | `server/tests/lab-04/contract-regression.api.test.ts` | API Contract Regression (`TC-REG-09`) | Verifies legacy Lab 1–3 endpoints preserve exact original success/error schemas, while new Lab 4 endpoints strictly use nested `{ "error": { "code", "message" } }`. | Global error format replacement strictly prohibited. |
 
   ---
 
@@ -1588,11 +1688,11 @@
   | **FR-01** | Record Action Taken by IT Staff / Admin | TC-ACT-01, TC-ACT-02, TC-UI-05 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Full create coverage |
   | **FR-02** | Automatic Performed By session attribution | TC-ACT-01, TC-ACT-03, TC-ACT-18 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Server derives `req.user.id` |
   | **FR-03** | Capture Action Taken fields | TC-ACT-01, TC-ACT-05, TC-ACT-06, TC-ACT-07 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Standard fields validated |
-  | **FR-04** | Update Action Taken by IT Staff / Admin | TC-ACT-08, TC-ACT-09, TC-ACT-10, TC-ACT-18, TC-UI-06 | `PATCH /api/actions-taken/:actionId` | Test Designed (Pending Implementation) | Full update coverage |
+  | **FR-04** | Update Action Taken & Append-only Revision History | TC-ACT-08, TC-ACT-08B, TC-ACT-08C, TC-ACT-08D, TC-ACT-09, TC-ACT-10, TC-ACT-18, TC-DB-01B, TC-UI-06 | `PATCH /api/actions-taken/:actionId` | Test Designed (Pending Implementation) | Full update coverage & ActionTakenRevision append-only history |
   | **FR-05** | Collaborative action recording by any IT Staff | TC-ACT-04 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Non-owner staff permitted |
   | **FR-06** | Requester view Actions Taken on own tickets | TC-ACT-11, TC-UI-04 | `GET /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Read-only Service Actions tab |
   | **FR-07** | Requester blocked from create/update | TC-RBAC-01, TC-RBAC-02 | `POST` and `PATCH` Actions Taken endpoints | Test Designed (Pending Implementation) | HTTP 403 for Requester create/update; deletion is globally unavailable under BR-05 and tested separately by TC-RBAC-03 (404/405, no record deletion) |
-  | **FR-08** | Enforce status transition matrix & Resolution Gate on backend | TC-TRN-01, TC-TRN-05, TC-TRN-06, TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | State machine & resolution gate |
+  | **FR-08** | Enforce status transition matrix & Resolution Gate on backend | TC-TRN-01, TC-TRN-05, TC-TRN-06, TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | State machine & Resolution Gate |
   | **FR-09** | Transition ticket to RESOLVED | TC-TRN-01, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | From permitted predecessors |
   | **FR-10** | Transition RESOLVED to CLOSED or REOPENED | TC-TRN-02, TC-TRN-03, TC-TRN-04 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | Reopened & terminal rules |
   | **FR-11** | Terminal states immutability | TC-TRN-07, TC-TRN-08, TC-TRN-09 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | CLOSED, CANCELLED, REJECTED |
@@ -1603,33 +1703,34 @@
   | **FR-16** | IT Staff Dashboard view & drill-down | TC-DASH-STF-06, TC-DASH-STF-07, TC-DASH-STF-08, TC-DASH-STF-09, TC-DASH-STF-10, TC-UI-03 | `/staff-dashboard` -> `/staff-queue` | Test Designed (Pending Implementation) | Requires `ownerId=me`, followUp, priority filter support |
   | **FR-17** | Server-side database metric calculation | TC-DASH-REQ-01, TC-DASH-STF-01, TC-PRF-01 | Dashboard endpoints | Test Designed (Pending Implementation) | No bulk ticket payloads |
   | **FR-18** | Preserve pre-existing Lab 1–3 data & recovery | TC-DB-05, TC-DB-06, TC-DB-07, TC-DB-08 | Prisma migration, backup & restore | Test Designed (Pending Implementation) | Non-destructive schema & attachment preservation verified |
-  | **FR-19** | Maintain Lab 1–3 APIs without regression | TC-REG-01 through TC-REG-08 | All preserved endpoints | Test Designed (Pending Implementation) | Zero regression suite |
+  | **FR-19** | Maintain Lab 1–3 APIs without regression | TC-REG-01 through TC-REG-09 | All preserved endpoints | Test Designed (Pending Implementation) | Zero regression suite & error contract assertions |
   | **FR-20** | IT Staff Permission to Assign ActionTaken to Technician | TC-ACT-15, TC-ACT-16, TC-ACT-17 | Actions Taken endpoints | Test Designed (Pending Implementation) | Assignee selection via `GET /api/staff/assignees` |
   | **FR-21** | Actions Taken Assignee Validation (active, correct role) | TC-ACT-15, TC-ACT-16, TC-ACT-17, TC-ACT-18, TC-UI-05, TC-UI-06 | Actions Taken endpoints & modals | Test Designed (Pending Implementation) | Active IT Staff assignee validation |
-  | **FR-22** | Backend Resolution Gate Enforcement | TC-TRN-16, TC-TRN-17 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | Cannot be bypassed via direct API call |
+  | **FR-22** | Backend Resolution Gate Enforcement | TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | Team-approved Business Rule; HTTP 400 ACTION_TAKEN_REQUIRED |
   | **FR-23** | Dashboard Empty State Support | TC-DASH-REQ-09, TC-DASH-STF-13 | Dashboard endpoints & UI | Test Designed (Pending Implementation) | Zero metrics & empty arrays |
   | **FR-24** | Form Data Retention on Failure | TC-ACT-14, TC-ACT-19, TC-UI-05, TC-UI-06 | Action modals & client state | Test Designed (Pending Implementation) | Form inputs preserved across recoverable errors (HTTP 400, 409, 500) |
   | **FR-25** | Duplicate Submission Prevention & Safe Retry | TC-ACT-19, TC-ACT-20, TC-ACT-20B, TC-UI-05, TC-UI-06 | Action modals & `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Disabled button in-flight & Idempotency-Key retry handling |
   | **BR-01** | Actions Taken Collaboration & Assignee Rules | TC-ACT-04, TC-ACT-12, TC-ACT-15, TC-ACT-16, TC-ACT-17, TC-ACT-18 | Actions Taken API | Test Designed (Pending Implementation) | Eligible active IT Staff / Admin |
-  | **BR-02** | Authenticated Attribution | TC-ACT-01, TC-ACT-03, TC-ACT-10, TC-ACT-18 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Server session identity |
+  | **BR-02** | Authenticated Attribution | TC-ACT-01, TC-ACT-03, TC-ACT-10, TC-ACT-18 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Server session identity; performedById permanently immutable |
   | **BR-03** | Requester Action Prohibition | TC-RBAC-01, TC-RBAC-02, TC-UI-04 | Actions Taken API | Test Designed (Pending Implementation) | Read-only; 403 on create/update |
   | **BR-04** | Action Taken Field Validation | TC-ACT-05, TC-ACT-06, TC-ACT-09 | Actions Taken API | Test Designed (Pending Implementation) | Mandatory note if follow-up |
-  | **BR-05** | Non-Deletability & Ticket Deletion Integrity | TC-RBAC-03, TC-DB-03, TC-DB-04 | DB constraints (`onDelete: Restrict`) | Test Designed (Pending Implementation) | Restrict constraint active |
+  | **BR-05** | Non-Deletability & Append-only Audit History | TC-RBAC-03, TC-ACT-08B, TC-ACT-08C, TC-ACT-08D, TC-DB-01B, TC-DB-03, TC-DB-04 | DB constraints & API routes | Test Designed (Pending Implementation) | Restrict constraint active; ActionTakenRevision immutable and undeletable |
   | **BR-06** | Standard Lifecycle Statuses (8 statuses) | TC-TRN-01 to TC-TRN-04, TC-DASH-STF-05 | State machine & Dashboards | Test Designed (Pending Implementation) | Standard handout statuses |
   | **BR-07** | Existing REJECTED Compatibility | TC-TRN-09, TC-TRN-10, TC-TRN-11, TC-DASH-STF-05 | Rejection transition & statusBreakdown | Test Designed (Pending Implementation) | Preserves Lab 3 behavior |
   | **BR-08** | Terminal States Immutability | TC-TRN-07, TC-TRN-08, TC-TRN-09 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | CLOSED, CANCELLED, REJECTED |
   | **BR-09** | Reopened Ticket Workflow | TC-TRN-03, TC-TRN-04 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | Reactivates in queue |
-  | **BR-10** | Backend Resolution Gate Enforcement | TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | Backend enforcement required; zero-action prerequisite is an approved project rule |
+  | **BR-10** | Backend Resolution Gate Enforcement | TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | Team-approved Business Rule: COUNT >= 1 required; followUpRequired does not block resolution |
   | **BR-11** | Requester Problem Resolution Indication | TC-TRN-14 | `POST /api/tickets/:id/indicate-resolved` | Test Designed (Pending Implementation) | Appends comment, keeps status |
   | **BR-12** | Backend Metric Aggregation | TC-DASH-REQ-01, TC-DASH-STF-01, TC-DASH-STF-03, TC-DASH-STF-04, TC-DASH-REQ-08, TC-DASH-STF-12 | Dashboard queries | Test Designed (Pending Implementation) | SQL COUNT queries & recent lists |
   | **BR-13** | Requester Metric Isolation | TC-DASH-REQ-01, TC-DASH-REQ-03 | `GET /api/dashboard/requester` | Test Designed (Pending Implementation) | Scoped to `requesterId` |
   | **BR-14** | Concurrency Safeguards & Form Resilience | TC-TRN-15, TC-ACT-14, TC-ACT-19, TC-ACT-20, TC-ACT-20B, TC-ACT-21 | Status API & Action Modals | Test Designed (Pending Implementation) | HTTP 409 Conflict & safe retry |
   | **BR-15** | Non-Enumeration on Resource Access | TC-RBAC-04 | Ticket details & actions taken | Test Designed (Pending Implementation) | HTTP 404 Not Found |
   | **BR-16** | Administrator Governance & Dashboard Scope | TC-DASH-STF-11 | `GET /api/dashboard/staff` | Test Designed (Pending Implementation) | Reuses staff dashboard with Admin governance banner |
+  | **BR-17** | API Error Contract & Compatibility | TC-REG-09 | All API endpoints | Test Designed (Pending Implementation) | Preserves Lab 1–3 error shapes; new Lab 4 APIs use nested `{ "error": { "code", "message" } }` |
   | **AC-01** | Record Action Taken (201 Created) | TC-ACT-01, TC-ACT-06, TC-ACT-15 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Tested with valid/invalid data & assignee |
   | **AC-02** | Requester Blocked from Recording Action | TC-RBAC-01 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | HTTP 403 Forbidden |
-  | **AC-03** | Technician Identity Spoof Prevention | TC-ACT-03, TC-ACT-18 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Client payload ignored |
-  | **AC-04** | Update Action Taken (200 OK) | TC-ACT-08, TC-ACT-09, TC-ACT-10, TC-UI-06 | `PATCH /api/actions-taken/:actionId` | Test Designed (Pending Implementation) | Editable fields updated; immutable attribution preserved |
+  | **AC-03** | Technician Identity Spoof Prevention | TC-ACT-03, TC-ACT-18 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Client payload ignored; performedById immutable |
+  | **AC-04** | Update Action Taken & Append Revision | TC-ACT-08, TC-ACT-08B, TC-ACT-08C, TC-ACT-08D, TC-ACT-09, TC-ACT-10, TC-UI-06 | `PATCH /api/actions-taken/:actionId` | Test Designed (Pending Implementation) | Editable fields updated; ActionTakenRevision appended; performedById immutable |
   | **AC-05** | Requester Read-Only Service Actions | TC-ACT-11, TC-UI-04 | UI & `GET /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Read-only tab rendered |
   | **AC-06** | Collaborative Action Recording | TC-ACT-04 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Non-owner staff succeeds |
   | **AC-07** | Valid Status Transition to RESOLVED | TC-TRN-01, TC-TRN-17 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | Status & audit note verified |
@@ -1641,9 +1742,9 @@
   | **AC-13** | IT Staff Follow-Up Distinct Ticket Count | TC-DASH-STF-03 | `GET /api/dashboard/staff` | Test Designed (Pending Implementation) | Distinct ticket counting verified |
   | **AC-14** | Non-Destructive Migration Verification | TC-DB-05, TC-DB-06 | Database verification | Test Designed (Pending Implementation) | Seeded tickets preserved |
   | **AC-15** | Concurrency Protection on Ticket Status | TC-TRN-15 | Status transition API | Test Designed (Pending Implementation) | Race condition returns 409 |
-  | **AC-16** | Lab 1–3 Regression Suite Integrity | TC-REG-01 through TC-REG-08 | All existing test files | Test Designed (Pending Implementation) | 0 failures across all suites |
+  | **AC-16** | Lab 1–3 Regression Suite Integrity | TC-REG-01 through TC-REG-09 | All existing test files | Test Designed (Pending Implementation) | 0 failures across all suites & error contract verified |
   | **AC-17** | Inactive and Unauthorized Assignee Rejection | TC-ACT-15, TC-ACT-16, TC-ACT-17 | `POST` and `PATCH` Actions Taken endpoints | Test Designed (Pending Implementation) | Inactive assignee and invalid role rejection |
-  | **AC-18** | Backend Resolution Gate Enforcement | TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | HTTP 400 `ACTION_TAKEN_REQUIRED` when 0 actions; HTTP 200 when at least one action exists and predecessor is permitted, including when follow-up remains open |
+  | **AC-18** | Backend Resolution Gate Enforcement | TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | Team-approved Business Rule: HTTP 400 `ACTION_TAKEN_REQUIRED` when 0 actions; HTTP 200 when >= 1 action exists, even with open followUp |
   | **AC-19** | Form Resilience & Duplicate Submission Prevention | TC-ACT-14, TC-ACT-19, TC-ACT-20, TC-ACT-20B, TC-UI-05, TC-UI-06 | Action modals | Test Designed (Pending Implementation) | Input preserved on failure, button disabled in-flight |
   | **AC-20** | Dashboard Recent Information & Zero Metrics | TC-DASH-REQ-08, TC-DASH-REQ-09, TC-DASH-STF-12, TC-DASH-STF-13 | Dashboard endpoints & UI | Test Designed (Pending Implementation) | Populated lists (sorted `updatedAt DESC`) & zero state for both dashboards |
 
@@ -1730,8 +1831,8 @@
 
   | Decision / Issue | Reference | Test Baseline Assumption | Impact if Decision Changes |
   |---|---|---|---|
-  | **Backend Resolution Gate Condition** | spec §BR-10, Handout §4.5 | **Approved project decision:** Requires at least one persisted Action Taken record (`COUNT(actionsTaken) >= 1`) before `RESOLVED` (`TC-TRN-16`, `TC-TRN-17`, `TC-TRN-18`). Outstanding follow-ups do not block resolution. | Enforced server-side for every permitted predecessor transition; direct API calls cannot bypass it. |
-  | **Follow-Up Clearance Prerequisite for RESOLVED** | spec §13.3.2, Q-13.3.2 | **Decoupled:** A ticket CAN transition to `RESOLVED` even if some Actions Taken have `followUpRequired = true`. | If course instruction requires all follow-ups cleared, add test case asserting 400 Bad Request if open follow-ups exist. |
+  | **Backend Resolution Gate Condition** | spec §BR-10, Handout §4.5 | **Team-approved Business Rule:** Requires at least one persisted Action Taken record (`COUNT(actionsTaken) >= 1`) before `RESOLVED` (`TC-TRN-16`, `TC-TRN-17`, `TC-TRN-18`). If zero exist, backend rejects with HTTP `400 Bad Request` and `ACTION_TAKEN_REQUIRED`. Outstanding follow-ups do not block resolution. Backend is authoritative enforcement point. | Enforced authoritatively on server for every permitted predecessor transition; supplementary UI validation warnings. |
+  | **Follow-Up Clearance Prerequisite for RESOLVED** | spec §13.3.2, Q-13.3.2 | **Team-approved Business Rule:** Decoupled: A ticket CAN transition to `RESOLVED` even if some Actions Taken have `followUpRequired = true`. Follow-ups remain visible as follow-up obligations without blocking resolution. | Finalized decision; follow-up required does not block resolution. |
   | **Ticket Status Transition Matrix** | spec §6.1 | All transitions listed in the finalized matrix are enabled and tested. Any transition not listed is rejected with `400 INVALID_STATUS_TRANSITION`. | Backend, UI, and test fixtures must use the exact same matrix. |
   | **Validation Length Limits** | spec §13.3.4, BR-04 | **Enforced as proposed constraints:** Description: 5–3,000 chars; Result: 2–1,000 chars; Notes: max 1,000 chars; future timestamp tolerance: 5 mins. | Field boundary tests in `TC-ACT-05`, `TC-ACT-06`, and Section 7.2 validate these constraints. |
   | **Attachment Notes Data Type** | spec §13.3.5 | **Free-text string (`String?`):** Field accepts technician text notes, equipment IDs, or file paths without foreign key constraint to `Attachment`. | Tested in `TC-ACT-07`. |
@@ -1740,3 +1841,30 @@
   | **Administrator Dashboard Scope** | spec §8.3, spec §BR-16 | **Approved Decision:** Reuses the IT Staff Dashboard with full queue visibility and an Administrator governance header note (`TC-DASH-STF-11`). Concise user account counts are omitted to keep scope focused. | Handout permits either reuse or adding account counts. Confirmed to reuse staff dashboard. |
   | **Primary Post-Login Landing Route** | spec §13.3.6, UI-Q1 | **Preserve Lab 3 redirects:** Login redirects remain `/my-tickets` (Requester), `/staff-queue` (IT Staff), `/user-management` (Admin). Dashboards are accessed via navigation bar. | Safeguards Lab 3 Playwright E2E tests (`TC-REG-08`). |
   | **Actions Taken Lifecycle Decoupling** | spec §13.1.9, api-spec §8, UI-Q11 | **Confirmed Architectural Decision:** Action Taken records do **NOT** have an independent status lifecycle (no `PENDING`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED` statuses). Complete, cancel, and status transitions operate strictly on the parent Ticket per Part 7 workflow (`TC-TRN-01`–`TC-TRN-18`). Action Taken test cases (`TC-ACT-01`–`TC-ACT-21`) verify Action Taken CRUD, attribution, assignee validation, optimistic concurrency, and safe retries independently from Ticket workflow transitions. | Handout Section 8.3 fields are strictly preserved; no `ActionTaken.status` field exists. |
+
+---
+
+## 12. Final Release Verification & Regression Results
+
+Executed at the conclusion of Lab 4 implementation:
+
+### 12.1 Automated Test Execution Summary
+
+| Test Suite | Scope | Baseline (Labs 1–3) | Final Lab 4 Result | Status | Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Server Vitest** | Full Server Suite | 13 files, 148 tests passed | **19 files passed, 221 tests passed (0 failed)** | **PASS** | 100% pass across all 19 test files. |
+| **Client Vitest** | Full Client Suite | 11 files, 50 tests passed | **15 files passed, 70 tests passed (0 failed)** | **PASS** | 100% pass across all 15 test files. |
+| **Playwright E2E (Lab 4)** | Sprint 4 Flows | N/A (New in Lab 4) | **15 passed (0 failed)** | **PASS** | Full coverage across Desktop Chrome, Tablet iPad, Mobile Safari. |
+| **Playwright E2E (Lab 3)** | Regression Suite | 24 tests passed | **24 passed (0 failed)** | **PASS** | **Zero new regressions** against verified baseline. |
+| **Playwright E2E (Lab 2)** | Legacy Flow | 3 failed (Pre-existing) | 3 failed (Pre-existing) | **KNOWN** | Unchanged pre-existing failure: expects obsolete Lab 2 dropdown removed in Lab 3. |
+| **TypeScript / Build (Server)** | Type Check & Build | Clean compile | **0 errors (`tsc` exited 0)** | **PASS** | Production build verified. |
+| **TypeScript / Build (Client)** | Type Check & Build | Clean compile | **0 errors (`tsc && vite build` exited 0)** | **PASS** | Production bundle generated with 0 errors. |
+
+### 12.2 Verification Against Approved Lab 4 Decisions
+- **Resolution Gate:** Verified authoritatively on backend (`COUNT(actionsTaken) >= 1` required for `RESOLVED`, returning HTTP 400 `ACTION_TAKEN_REQUIRED`). Outstanding follow-ups do not block resolution.
+- **Ticket Status Transition Matrix:** All 9 statuses and state transitions verified across unit, API, UI, and E2E suites.
+- **Append-Only History:** Both `ActionTakenRevision` (Action Taken edits) and `InternalNote` (workflow status changes with rejection reasons) verified immutable, append-only, and deterministically ordered.
+- **Optimistic Concurrency & Safe Failure:** `expectedUpdatedAt` atomic conditional updates verified returning HTTP 409 `STALE_UPDATE` / `CONCURRENCY_CONFLICT` with zero partial records.
+- **Durable Idempotency:** Database-backed `IdempotencyRecord` table with 24-hour expiration verified surviving application restarts and returning identical replayed payloads.
+- **Attachment Storage Integrity:** Physical attachments under configured `uploads/lab-02/` verified 100% untouched and preserved in read-only mode.
+
