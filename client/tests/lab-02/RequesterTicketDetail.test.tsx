@@ -8,6 +8,7 @@ import * as auth from '../../src/contexts/AuthContext';
 vi.mock('../../src/api', () => ({
   getTicket: vi.fn(),
   getPublicComments: vi.fn(),
+  getActionsTaken: vi.fn(),
 }));
 vi.mock('../../src/contexts/AuthContext');
 
@@ -73,7 +74,7 @@ describe('RequesterTicketDetail Component', () => {
     expect(screen.getByText('John Doe')).toBeInTheDocument();
   });
 
-  it('shows disabled tabs for out of scope features', async () => {
+  it('keeps the Event Log tab disabled (out of scope)', async () => {
     (api.getTicket as any).mockResolvedValueOnce({ data: mockTicket });
     (api.getPublicComments as any).mockResolvedValue({ data: [] });
     renderComponent();
@@ -82,8 +83,9 @@ describe('RequesterTicketDetail Component', () => {
       expect(screen.getByText(/Public Comments/)).toBeInTheDocument();
     });
 
+    // Lab 4 (ui-spec.md §3.1): the Service Actions tab is now active; Event Log stays out of scope.
     const serviceActionsTab = screen.getByText(/Service Actions/);
-    expect(serviceActionsTab).toBeDisabled();
+    expect(serviceActionsTab).toBeEnabled();
 
     const eventLogTab = screen.getByText(/Event Log/);
     expect(eventLogTab).toBeDisabled();

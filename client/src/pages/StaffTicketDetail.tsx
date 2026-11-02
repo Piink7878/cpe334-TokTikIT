@@ -11,6 +11,7 @@ import {
   addInternalNote
 } from "../api";
 import { useAuth } from "../contexts/AuthContext";
+import ActionsTakenSection from "../components/ActionsTakenSection";
 
 type Ticket = any;
 type User = { id: string; fullName: string; role: string };
@@ -333,6 +334,15 @@ export default function StaffTicketDetail() {
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="mt-4">
+            <ActionsTakenSection
+              ticketId={ticket.id}
+              ticketStatus={ticket.status}
+              isStaff={true}
+              assignees={assignees}
+            />
           </div>
         </div>
 

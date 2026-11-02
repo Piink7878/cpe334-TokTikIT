@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { getTicket, Ticket, getPublicComments, addPublicComment, indicateProblemResolved } from "../api";
+import { getTicket, Ticket, getPublicComments, addPublicComment, indicateProblemResolved, getActionsTaken } from "../api";
 import { AttachmentSection } from "../components/AttachmentSection";
+import ActionsTakenSection from "../components/ActionsTakenSection";
 
 export const RequesterTicketDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -12,6 +13,7 @@ export const RequesterTicketDetail: React.FC = () => {
 
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [comments, setComments] = useState<any[]>([]);
+  const [actionsCount, setActionsCount] = useState(0);
   const [activeTab, setActiveTab] = useState("attachments");
   const [newComment, setNewComment] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
@@ -25,12 +27,15 @@ export const RequesterTicketDetail: React.FC = () => {
     setIsLoading(true);
     try {
       const ticketIdNum = parseInt(id, 10);
-      const [ticketRes, commentsRes] = await Promise.all([
+      const [ticketRes, commentsRes, actionsRes] = await Promise.all([
         getTicket(ticketIdNum),
-        getPublicComments(ticketIdNum)
+        getPublicComments(ticketIdNum),
+        // The tab count is informational; a failure here must not block the ticket page.
+        Promise.resolve(getActionsTaken(ticketIdNum)).catch(() => null)
       ]);
       setTicket(ticketRes.data);
       setComments(commentsRes.data);
+      setActionsCount(actionsRes?.data?.length ?? 0);
       setError(null);
     } catch (err: any) {
       setError(err.message || "Failed to load ticket details.");
@@ -236,8 +241,12 @@ export const RequesterTicketDetail: React.FC = () => {
               </button>
             </li>
             <li className="nav-item">
-              <button className="nav-link disabled" style={{ color: '#8C9B94', backgroundColor: 'transparent', border: 'none' }} disabled>
-                Service Actions (0)
+              <button
+                className={`nav-link ${activeTab === 'actions' ? 'active' : ''}`}
+                onClick={() => setActiveTab('actions')}
+                style={activeTab === 'actions' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#8C9B94', backgroundColor: 'transparent', border: 'none' }}
+              >
+                Service Actions ({actionsCount})
               </button>
             </li>
             <li className="nav-item">
@@ -254,6 +263,14 @@ export const RequesterTicketDetail: React.FC = () => {
                 ticketId={ticket.id} 
                 attachments={ticket.attachments || []} 
                 onAttachmentUpdate={fetchTicket} 
+              />
+            )}
+            {activeTab === 'actions' && (
+              <ActionsTakenSection
+                ticketId={ticket.id}
+                ticketStatus={ticket.status}
+                isStaff={false}
+                onCountChange={setActionsCount}
               />
             )}
             {activeTab === 'comments' && (
