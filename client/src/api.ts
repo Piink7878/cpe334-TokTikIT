@@ -492,3 +492,119 @@ export async function resetUserPassword(id: string, newPassword: string) {
   }
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// Lab 4: Actions Taken client APIs (specification.md BR-04/BR-05, api-spec.md §2)
+// ---------------------------------------------------------------------------
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export interface ActionTakenUser {
+  id: string;
+  fullName: string;
+  role: string;
+}
+
+export interface ActionTakenRevision {
+  id: number;
+  revisionNumber: number;
+  editedAt: string;
+  editor?: ActionTakenUser;
+  originalData?: Record<string, unknown>;
+  updatedData?: Record<string, unknown>;
+}
+
+export interface ActionTaken {
+  id: number;
+  ticketId: number;
+  performedBy: ActionTakenUser;
+  assignedToId?: string | null;
+  assignedTo?: ActionTakenUser | null;
+  actionDateTime: string;
+  description: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  // Only returned to IT Staff / Admin.
+  revisions?: ActionTakenRevision[];
+}
+
+export interface CreateActionTakenInput {
+  description: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote?: string;
+  attachmentNotes?: string;
+  actionDateTime?: string;
+  assignedToId?: string;
+}
+
+export interface UpdateActionTakenInput {
+  expectedUpdatedAt: string;
+  description?: string;
+  result?: string;
+  followUpRequired?: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+  actionDateTime?: string;
+  assignedToId?: string | null;
+}
+
+async function toApiError(res: Response, fallback: string): Promise<ApiError> {
+  const errorData = await res.json().catch(() => null);
+  return new ApiError(errorData?.error?.message || fallback, res.status, errorData?.error?.code);
+}
+
+export async function getActionsTaken(ticketId: number): Promise<{ data: ActionTaken[] }> {
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions-taken`, {
+    credentials: "include",
+    method: "GET",
+    headers: { "Content-Type": "application/json" }
+  });
+  if (!res.ok) throw await toApiError(res, "Failed to fetch actions taken");
+  return res.json();
+}
+
+export async function createActionTaken(
+  ticketId: number,
+  data: CreateActionTakenInput,
+  idempotencyKey?: string
+): Promise<{ message: string; data: ActionTaken }> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/actions-taken`, {
+    credentials: "include",
+    method: "POST",
+    headers,
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) throw await toApiError(res, "Failed to record action taken");
+  return res.json();
+}
+
+export async function updateActionTaken(
+  actionId: number,
+  data: UpdateActionTakenInput
+): Promise<{ message: string; data: ActionTaken }> {
+  const res = await fetch(`${API_URL}/api/actions-taken/${actionId}`, {
+    credentials: "include",
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) throw await toApiError(res, "Failed to update action taken");
+  return res.json();
+}
