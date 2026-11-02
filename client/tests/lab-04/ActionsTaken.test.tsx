@@ -575,6 +575,31 @@ describe("ActionsTakenSection — IT Staff / Admin view (ui-spec §3.2)", () => 
       expect(screen.getByLabelText(/^Result/)).toHaveValue("My unsaved edit");
     });
 
+    it("shows the server validation message on a 400 and keeps the draft", async () => {
+      (api.updateActionTaken as any).mockRejectedValue(new api.ApiError("result must be between 2 and 1000 characters", 400, "VALIDATION_ERROR"));
+      renderStaff();
+      await openEditModal();
+
+      setField(/^Result/, "My unsaved edit");
+      fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+      expect(await screen.findByText("result must be between 2 and 1000 characters")).toBeInTheDocument();
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Result/)).toHaveValue("My unsaved edit");
+    });
+
+    it("requires an Action Date/Time on edit instead of crashing when it is cleared", async () => {
+      renderStaff();
+      await openEditModal();
+
+      setField(/^Action Date\/Time/, "");
+      fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+      expect(await screen.findByText("Action Date/Time is required.")).toBeInTheDocument();
+      expect(api.updateActionTaken).not.toHaveBeenCalled();
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+
     it("applies the same validation as create (e.g. cannot clear the description)", async () => {
       renderStaff();
       await openEditModal();

@@ -97,7 +97,7 @@ const valuesFromAction = (a: ActionTaken): FormValues => ({
 });
 
 // Mirrors the server limits in specification.md BR-04.
-function validate(values: FormValues): FormErrors {
+function validate(values: FormValues, isEdit = false): FormErrors {
   const errors: FormErrors = {};
   const description = values.description.trim();
   const result = values.result.trim();
@@ -114,7 +114,9 @@ function validate(values: FormValues): FormErrors {
 
   if (values.attachmentNotes.trim().length > 1000) errors.attachmentNotes = "Attachment Notes must be at most 1,000 characters.";
 
-  if (values.actionDateTime) {
+  // On create a blank date means "now"; an existing record always has one, so it cannot be cleared.
+  if (isEdit && !values.actionDateTime) errors.actionDateTime = "Action Date/Time is required.";
+  else if (values.actionDateTime) {
     const t = new Date(values.actionDateTime).getTime();
     if (isNaN(t)) errors.actionDateTime = "Enter a valid date and time.";
     else if (t > Date.now() + FUTURE_TOLERANCE_MS) errors.actionDateTime = "Action Date/Time cannot be more than 5 minutes in the future.";
@@ -268,7 +270,7 @@ function ActionFormModal({ mode, action, performer, assignees, onClose, onSubmit
     if (submittingRef.current) return;
 
     setFormError("");
-    const found = validate(values);
+    const found = validate(values, isEdit);
     setErrors(found);
     if (Object.keys(found).length > 0) {
       const order: (keyof FormValues)[] = ["actionDateTime", "description", "result", "followUpNote", "attachmentNotes"];
