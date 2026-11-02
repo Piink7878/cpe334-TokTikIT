@@ -433,10 +433,11 @@ This document details the REST API specification for Sprint 4 (Lab 4). It define
   ```json
   {
     "status": "RESOLVED",
-    "rejectionReason": "..."
+    "rejectionReason": "...",
+    "expectedUpdatedAt": "2026-10-30T10:30:00.000Z"
   }
   ```
-  *(Note: `rejectionReason` is required only if `status === 'REJECTED'` per Lab 3 legacy rules).*
+  *(Note: `rejectionReason` is required only if `status === 'REJECTED'` per Lab 3 legacy rules. `expectedUpdatedAt` is optional: the `updatedAt` of the Ticket as last seen by the caller. If the Ticket has changed since, the request is rejected with `409 CONCURRENCY_CONFLICT` before the transition is evaluated. The Staff Ticket Detail screen always sends it.)*
 * **Status Transition Rules Matrix:**
 
 | Current Status | Permitted Next Statuses | Condition / Audit Log Trigger |
@@ -469,7 +470,8 @@ Every transition listed above is enabled. Any transition not listed is rejected 
   * **Follow-Up Permitted:** Outstanding follow-ups (`followUpRequired = true`) do **not** block resolution.
   * **Authoritative Enforcement Point:** The backend is the authoritative enforcement point. Frontend validation is supplementary only.
 * **Audit Log Generation:** Every successful status transition automatically creates a new `InternalNote` record (`ticketId`, `authorId: req.user.id`, `content: "Status changed from <OLD_STATUS> to <NEW_STATUS>"`). For rejection, the reason is appended to the note.
-* **Concurrency Protection:** The update executes within a transaction verifying current ticket state. Competing simultaneous status updates receive `409 Conflict`.
+* **Concurrency Protection:** The update executes within a transaction verifying current ticket state. Competing simultaneous status updates, and updates whose `expectedUpdatedAt` is outdated, receive `409 Conflict` with `code: "CONCURRENCY_CONFLICT"`.
+* **Terminal Tickets:** Besides status changes (`INVALID_STATUS_TRANSITION`), `PATCH /api/staff/tickets/:id/claim`, `/assign` and `/priority` on a `CLOSED`, `CANCELLED` or `REJECTED` Ticket return `400 Bad Request` with `code: "TICKET_TERMINAL"` (`BR-08`, `AC-09`).
 * **Response Payload (200 OK):**
   ```json
   {

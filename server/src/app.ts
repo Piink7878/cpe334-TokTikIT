@@ -959,6 +959,15 @@ app.get("/api/staff/tickets/:id", requireAuth, requirePasswordChangeEnforcement,
   }
 });
 
+// BR-08: CLOSED, CANCELLED and REJECTED tickets accept no further status, owner or priority changes.
+const TERMINAL_TICKET_STATUSES = ["CLOSED", "CANCELLED", "REJECTED"];
+
+function sendTerminalTicketError(res: Response): Response {
+  return res.status(400).json({
+    error: { code: "TICKET_TERMINAL", message: "Ticket is in a terminal status and can no longer be modified." }
+  });
+}
+
 // ---------------------------------------------------------------------------
 // PATCH /api/staff/tickets/:id/claim - Claim a ticket
 // ---------------------------------------------------------------------------
@@ -973,6 +982,10 @@ app.patch("/api/staff/tickets/:id/claim", requireAuth, requirePasswordChangeEnfo
     const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
     if (!ticket) {
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    if (TERMINAL_TICKET_STATUSES.includes(ticket.currentStatus)) {
+      return sendTerminalTicketError(res);
     }
 
     const newStatus = ticket.currentStatus === "NEW" ? "OPEN" : ticket.currentStatus;
@@ -1034,6 +1047,10 @@ app.patch("/api/staff/tickets/:id/assign", requireAuth, requirePasswordChangeEnf
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
     }
 
+    if (TERMINAL_TICKET_STATUSES.includes(ticket.currentStatus)) {
+      return sendTerminalTicketError(res);
+    }
+
     const newStatus = ticket.currentStatus === "NEW" ? "OPEN" : ticket.currentStatus;
 
     const updateData: any = {
@@ -1087,6 +1104,10 @@ app.patch("/api/staff/tickets/:id/priority", requireAuth, requirePasswordChangeE
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
     }
 
+    if (TERMINAL_TICKET_STATUSES.includes(ticket.currentStatus)) {
+      return sendTerminalTicketError(res);
+    }
+
     const updatedTicket = await prisma.ticket.update({
       where: { id: ticketId },
       data: { itPriority }
@@ -1112,9 +1133,18 @@ app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnf
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
 
-    const { status, rejectionReason } = req.body;
+    const { status, rejectionReason, expectedUpdatedAt } = req.body;
     if (!status) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "status is required" } });
+    }
+
+    // Optional stale-update guard (requirements §6.1): the caller's last-seen ticket.updatedAt.
+    let expectedDate: Date | undefined;
+    if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null) {
+      expectedDate = typeof expectedUpdatedAt === "string" ? new Date(expectedUpdatedAt) : new Date(NaN);
+      if (isNaN(expectedDate.getTime())) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "expectedUpdatedAt must be a valid date" } });
+      }
     }
 
     const prisma = getPrisma();
@@ -1125,13 +1155,17 @@ app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnf
 
     const currentStatus = ticket.currentStatus;
 
-    // BR-04: Validate allowed state machine transitions
-    // NEW -> OPEN, REJECTED, CANCELLED
-    // OPEN -> RESOLVED, CANCELLED
-    // RESOLVED -> CLOSED, REOPENED
-    // REOPENED -> RESOLVED, CANCELLED
-    // Terminal states: CLOSED, REJECTED, CANCELLED
+    // A caller working from an outdated view is told so (409) before its transition is judged against newer state.
+    if (expectedDate && expectedDate.getTime() !== ticket.updatedAt.getTime()) {
+      return res.status(409).json({
+        error: {
+          code: "CONCURRENCY_CONFLICT",
+          message: "Ticket was modified by another concurrent update. Please reload and retry."
+        }
+      });
+    }
 
+    // Approved status transition matrix (specification.md §6.1). Terminal states have no exits (BR-08).
     const allowedTransitions: Record<string, string[]> = {
       NEW: ["OPEN", "REJECTED", "CANCELLED"],
       OPEN: ["RESOLVED", "CANCELLED", "IN_PROGRESS", "WAITING_FOR_REQUESTER"],
@@ -1147,38 +1181,64 @@ app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnf
     const permittedNext = allowedTransitions[currentStatus] || [];
     
     if (!permittedNext.includes(status)) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: `Invalid transition from ${currentStatus} to ${status}` } });
+      return res.status(400).json({ error: { code: "INVALID_STATUS_TRANSITION", message: `Invalid transition from ${currentStatus} to ${status}` } });
     }
 
     // BR-05: Enforce rejection note
     if (status === "REJECTED" && (!rejectionReason || typeof rejectionReason !== "string" || rejectionReason.trim() === "")) {
-      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "rejectionReason is required when rejecting a ticket" } });
+      return res.status(400).json({ error: { code: "REJECTION_REASON_REQUIRED", message: "rejectionReason is required when rejecting a ticket" } });
     }
 
-    const updateData: any = {
-      currentStatus: status
-    };
-
-    const noteBody = status === "REJECTED" 
+    const noteBody = status === "REJECTED"
       ? `Status changed from ${currentStatus} to ${status}. Reason: ${rejectionReason.trim()}`
       : `Status changed from ${currentStatus} to ${status}`;
 
-    updateData.internalNotes = {
-      create: {
-        content: noteBody,
-        authorId: req.user!.id
+    try {
+      const updatedTicket = await prisma.$transaction(async (tx) => {
+        // BR-10 Resolution Gate: RESOLVED needs at least one persisted Action Taken (follow-ups do not block).
+        if (status === "RESOLVED") {
+          const actionsCount = await tx.actionTaken.count({ where: { ticketId } });
+          if (actionsCount === 0) {
+            throw new Error("ACTION_TAKEN_REQUIRED");
+          }
+        }
+
+        // BR-14: compare-and-set on the state we validated against, so a competing or stale update loses with 409.
+        const updated = await tx.ticket.updateMany({
+          where: { id: ticketId, currentStatus, ...(expectedDate ? { updatedAt: expectedDate } : {}) },
+          data: { currentStatus: status }
+        });
+        if (updated.count === 0) {
+          throw new Error("CONCURRENCY_CONFLICT");
+        }
+
+        await tx.internalNote.create({
+          data: { ticketId, authorId: req.user!.id, content: noteBody }
+        });
+
+        return tx.ticket.findUnique({ where: { id: ticketId } });
+      });
+
+      return res.status(200).json({
+        message: "Status updated successfully",
+        ticket: updatedTicket
+      });
+    } catch (err: any) {
+      if (err.message === "ACTION_TAKEN_REQUIRED") {
+        return res.status(400).json({
+          error: { code: "ACTION_TAKEN_REQUIRED", message: "At least one Action Taken is required." }
+        });
       }
-    };
-
-    const updatedTicket = await prisma.ticket.update({
-      where: { id: ticketId },
-      data: updateData
-    });
-
-    return res.status(200).json({
-      message: "Status updated successfully",
-      ticket: updatedTicket
-    });
+      if (err.message === "CONCURRENCY_CONFLICT") {
+        return res.status(409).json({
+          error: {
+            code: "CONCURRENCY_CONFLICT",
+            message: "Ticket was modified by another concurrent update. Please reload and retry."
+          }
+        });
+      }
+      throw err;
+    }
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });
