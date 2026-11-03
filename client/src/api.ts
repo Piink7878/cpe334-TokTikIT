@@ -373,17 +373,17 @@ export async function updateTicketPriority(ticketId: number, itPriority: string)
   return res.json();
 }
 
-export async function updateTicketStatus(ticketId: number, status: string, rejectionReason?: string) {
+export async function updateTicketStatus(ticketId: number, status: string, rejectionReason?: string, expectedUpdatedAt?: string) {
   const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}/status`, {
     credentials: "include",
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status, rejectionReason })
+    body: JSON.stringify({ status, rejectionReason, expectedUpdatedAt })
   });
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => null);
-    throw new Error(errorData?.error?.message || "Failed to update status");
+    // ApiError is an Error, so existing callers reading err.message keep working; code/status drive the workflow messages.
+    throw await toApiError(res, "Failed to update status");
   }
 
   return res.json();

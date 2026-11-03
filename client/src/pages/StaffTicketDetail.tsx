@@ -48,6 +48,7 @@ export default function StaffTicketDetail() {
   const [assigneeId, setAssigneeId] = useState("");
   const [itPriority, setItPriority] = useState("");
   const [newStatus, setNewStatus] = useState("");
+  const [actionsCount, setActionsCount] = useState<number | null>(null);
   
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -89,8 +90,9 @@ export default function StaffTicketDetail() {
     }
   };
 
-  const fetchTicketAndAssignees = async () => {
-    setLoading(true);
+  // silent = refresh in place after a change, without replacing the page (and its Actions Taken section) by a spinner.
+  const fetchTicketAndAssignees = async (silent = false) => {
+    if (!silent) setLoading(true);
     setErrorMsg("");
     try {
       const ticketId = parseInt(id as string, 10);
@@ -120,7 +122,7 @@ export default function StaffTicketDetail() {
       setSuccessMsg("");
       await claimTicket(ticket.id);
       setSuccessMsg("Ticket claimed successfully");
-      await fetchTicketAndAssignees();
+      await fetchTicketAndAssignees(true);
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to claim ticket");
     }
@@ -133,7 +135,7 @@ export default function StaffTicketDetail() {
       setSuccessMsg("");
       await assignTicket(ticket.id, assigneeId);
       setSuccessMsg("Ticket assigned successfully");
-      await fetchTicketAndAssignees();
+      await fetchTicketAndAssignees(true);
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to assign ticket");
     }
@@ -145,7 +147,7 @@ export default function StaffTicketDetail() {
       setSuccessMsg("");
       await updateTicketPriority(ticket.id, itPriority);
       setSuccessMsg("Priority updated successfully");
-      await fetchTicketAndAssignees();
+      await fetchTicketAndAssignees(true);
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to update priority");
     }
@@ -163,14 +165,22 @@ export default function StaffTicketDetail() {
     try {
       setErrorMsg("");
       setSuccessMsg("");
-      await updateTicketStatus(ticket.id, status, reason);
+      await updateTicketStatus(ticket.id, status, reason, ticket.updatedAt);
       setSuccessMsg("Status updated successfully");
       setShowRejectModal(false);
       setRejectionReason("");
-      await fetchTicketAndAssignees();
+      await fetchTicketAndAssignees(true);
     } catch (err: any) {
-      setErrorMsg(err.message || "Failed to update status");
       setShowRejectModal(false);
+      if (err.code === "ACTION_TAKEN_REQUIRED") {
+        setErrorMsg("Record at least one Action Taken before resolving this ticket.");
+      } else if (err.status === 409) {
+        // Show the latest state, then explain why the change was not applied.
+        await fetchTicketAndAssignees(true);
+        setErrorMsg("This ticket was changed by someone else, so your status change was not applied. The latest status is shown; review it and try again.");
+      } else {
+        setErrorMsg(err.message || "Failed to update status");
+      }
     }
   };
 
@@ -214,6 +224,8 @@ export default function StaffTicketDetail() {
   };
 
   const permittedNext = allowedTransitions[ticket.status] || [];
+  // BR-08: terminal tickets accept no assignment or priority changes (the backend enforces this too).
+  const isTerminal = ["CLOSED", "CANCELLED", "REJECTED"].includes(ticket.status);
 
   const combinedActivity = [
     ...(ticket.publicComments || []).map((pc: any) => ({ ...pc, type: 'public' })),
@@ -342,6 +354,7 @@ export default function StaffTicketDetail() {
               ticketStatus={ticket.status}
               isStaff={true}
               assignees={assignees}
+              onCountChange={setActionsCount}
             />
           </div>
         </div>
@@ -377,15 +390,16 @@ export default function StaffTicketDetail() {
                     className="form-select" 
                     value={assigneeId} 
                     onChange={e => setAssigneeId(e.target.value)}
+                    disabled={isTerminal}
                   >
                     <option value="">-- Select Assignee --</option>
                     {assignees.map(a => (
                       <option key={a.id} value={a.id}>{a.fullName} ({a.role})</option>
                     ))}
                   </select>
-                  <button className="btn btn-primary text-nowrap" onClick={handleAssign} disabled={!assigneeId || assigneeId === ticket.owner?.id}>Assign</button>
+                  <button className="btn btn-primary text-nowrap" onClick={handleAssign} disabled={isTerminal || !assigneeId || assigneeId === ticket.owner?.id}>Assign</button>
                 </div>
-                {ticket.owner?.id !== user?.id && (
+                {ticket.owner?.id !== user?.id && !isTerminal && (
                   <button className="btn btn-outline-primary mt-2 w-100" onClick={handleClaim}>
                     Claim Ticket
                   </button>
@@ -396,13 +410,13 @@ export default function StaffTicketDetail() {
                 <label className="form-label fw-bold" htmlFor="priority-select">IT Priority</label>
                 <div className="mb-2">Requested: <span className={`badge ${PRIORITY_COLORS[ticket.requestedPriority]}`}>{ticket.requestedPriority}</span></div>
                 <div className="d-flex gap-2">
-                  <select id="priority-select" className="form-select" value={itPriority} onChange={e => setItPriority(e.target.value)}>
+                  <select id="priority-select" className="form-select" value={itPriority} onChange={e => setItPriority(e.target.value)} disabled={isTerminal}>
                     <option value="LOW">LOW</option>
                     <option value="MEDIUM">MEDIUM</option>
                     <option value="HIGH">HIGH</option>
                     <option value="CRITICAL">CRITICAL</option>
                   </select>
-                  <button className="btn btn-primary" onClick={handleUpdatePriority} disabled={itPriority === ticket.itPriority}>Update</button>
+                  <button className="btn btn-primary" onClick={handleUpdatePriority} disabled={isTerminal || itPriority === ticket.itPriority}>Update</button>
                 </div>
               </div>
 
@@ -411,15 +425,22 @@ export default function StaffTicketDetail() {
                 {permittedNext.length === 0 ? (
                   <div className="alert alert-secondary py-2">No further transitions allowed from {ticket.status}.</div>
                 ) : (
-                  <div className="d-flex gap-2">
-                    <select id="status-select" className="form-select" value={newStatus} onChange={e => setNewStatus(e.target.value)}>
-                      <option value={ticket.status} disabled>{ticket.status.replace(/_/g, " ")}</option>
-                      {permittedNext.map(st => (
-                        <option key={st} value={st}>{st.replace(/_/g, " ")}</option>
-                      ))}
-                    </select>
-                    <button className="btn btn-warning" onClick={handleUpdateStatus} disabled={newStatus === ticket.status}>Change</button>
-                  </div>
+                  <>
+                    <div className="d-flex gap-2">
+                      <select id="status-select" className="form-select" value={newStatus} onChange={e => setNewStatus(e.target.value)}>
+                        <option value={ticket.status} disabled>{ticket.status.replace(/_/g, " ")}</option>
+                        {permittedNext.map(st => (
+                          <option key={st} value={st}>{st.replace(/_/g, " ")}</option>
+                        ))}
+                      </select>
+                      <button className="btn btn-warning" onClick={handleUpdateStatus} disabled={newStatus === ticket.status}>Change</button>
+                    </div>
+                    {newStatus === "RESOLVED" && actionsCount === 0 && (
+                      <div className="alert alert-warning py-2 mt-2 mb-0 small" role="alert">
+                        Resolution Gate: record at least one Action Taken before resolving this ticket.
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>

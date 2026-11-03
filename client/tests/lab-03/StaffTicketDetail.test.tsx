@@ -187,7 +187,7 @@ describe("StaffTicketDetail UI", () => {
     fireEvent.click(submitRejectBtn);
 
     await waitFor(() => {
-      expect(api.updateTicketStatus).toHaveBeenCalledWith(1, "REJECTED", "Not an IT issue");
+      expect(api.updateTicketStatus).toHaveBeenCalledWith(1, "REJECTED", "Not an IT issue", expect.any(String));
     });
   });
   it("should trigger claim ticket and assert API call", async () => {
@@ -350,7 +350,7 @@ describe("StaffTicketDetail UI", () => {
     fireEvent.click(changeBtn);
 
     await waitFor(() => {
-      expect(api.updateTicketStatus).toHaveBeenCalledWith(1, "RESOLVED", undefined);
+      expect(api.updateTicketStatus).toHaveBeenCalledWith(1, "RESOLVED", undefined, expect.any(String));
     });
   });
 });
