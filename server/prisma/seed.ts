@@ -42,17 +42,19 @@ async function main() {
     const passwordHash = await bcrypt.hash('Password123!', 10);
 
     const usersToSeed = [
-      // Requesters (4 Active, 1 Inactive)
+      // Requesters (4 Active, 1 Inactive, 1 zero-metric dashboard account)
       { email: 'req1@toktikit.local', fullName: 'Requester One', role: Role.REQUESTER, isActive: true, mustChangePassword: true },
       { email: 'req2@toktikit.local', fullName: 'Requester Two', role: Role.REQUESTER, isActive: true, mustChangePassword: false },
       { email: 'req3@toktikit.local', fullName: 'Requester Three', role: Role.REQUESTER, isActive: true, mustChangePassword: false },
       { email: 'req4@toktikit.local', fullName: 'Requester Four', role: Role.REQUESTER, isActive: true, mustChangePassword: true },
+      { email: 'req_empty@toktikit.local', fullName: 'Requester Empty', role: Role.REQUESTER, isActive: true, mustChangePassword: false },
       { email: 'req5_inactive@toktikit.local', fullName: 'Requester Inactive', role: Role.REQUESTER, isActive: false, mustChangePassword: false },
 
-      // IT Staff (3 Active, 1 Inactive)
+      // IT Staff (3 Active, 1 Inactive, 1 zero-metric dashboard account)
       { email: 'staff1@toktikit.local', fullName: 'IT Staff One', role: Role.IT_STAFF, isActive: true, mustChangePassword: true },
       { email: 'staff2@toktikit.local', fullName: 'IT Staff Two', role: Role.IT_STAFF, isActive: true, mustChangePassword: false },
       { email: 'staff3@toktikit.local', fullName: 'IT Staff Three', role: Role.IT_STAFF, isActive: true, mustChangePassword: false },
+      { email: 'tech_empty@toktikit.local', fullName: 'Staff Empty', role: Role.IT_STAFF, isActive: true, mustChangePassword: false },
       { email: 'staff4_inactive@toktikit.local', fullName: 'IT Staff Inactive', role: Role.IT_STAFF, isActive: false, mustChangePassword: false },
 
       // Administrator (1 Active)

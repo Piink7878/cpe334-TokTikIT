@@ -376,6 +376,18 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
 // ---------------------------------------------------------------------------
 // GET /api/tickets - List Requester Tickets (My Tickets)
 // ---------------------------------------------------------------------------
+const ALL_TICKET_STATUSES = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", "CANCELLED", "REJECTED"];
+const ALL_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const UNRESOLVED_TICKET_STATUSES = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "REOPENED"];
+
+// Parses a single value or a comma-separated list (dashboard drill-downs) into a Prisma filter.
+// Returns null when any value is not part of the allowed set.
+function parseEnumFilter(raw: string, allowed: string[]): string | { in: string[] } | null {
+  const values = raw.split(",").map((v) => v.trim());
+  if (values.some((v) => !allowed.includes(v))) return null;
+  return values.length === 1 ? values[0] : { in: values };
+}
+
 app.get("/api/tickets", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
   try {
     const requesterId = req.user!.id;
@@ -414,13 +426,25 @@ app.get("/api/tickets", requireAuth, requirePasswordChangeEnforcement, async (re
       }
     }
     if (requestedPriority && typeof requestedPriority === "string") {
-      where.requestedPriority = requestedPriority;
+      const requestedFilter = parseEnumFilter(requestedPriority, ALL_PRIORITIES);
+      if (!requestedFilter) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid requestedPriority filter" } });
+      }
+      where.requestedPriority = requestedFilter;
     }
     if (itPriority && typeof itPriority === "string") {
-      where.itPriority = itPriority;
+      const priorityFilter = parseEnumFilter(itPriority, ALL_PRIORITIES);
+      if (!priorityFilter) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid itPriority filter" } });
+      }
+      where.itPriority = priorityFilter;
     }
     if (status && typeof status === "string") {
-      where.currentStatus = status;
+      const statusFilter = parseEnumFilter(status, ALL_TICKET_STATUSES);
+      if (!statusFilter) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid status filter" } });
+      }
+      where.currentStatus = statusFilter;
     }
 
     const validSortFields = ["ticketNumber", "createdAt", "updatedAt", "summary"];
@@ -757,6 +781,7 @@ app.get("/api/staff/tickets", requireAuth, requirePasswordChangeEnforcement, req
       itPriority,
       status,
       ownerId,
+      followUpRequired,
       sortBy = "createdAt",
       sortOrder = "desc",
       page = "1",
@@ -788,18 +813,35 @@ app.get("/api/staff/tickets", requireAuth, requirePasswordChangeEnforcement, req
       }
     }
     if (requestedPriority && typeof requestedPriority === "string") {
-      where.requestedPriority = requestedPriority;
+      const requestedFilter = parseEnumFilter(requestedPriority, ALL_PRIORITIES);
+      if (!requestedFilter) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid requestedPriority filter" } });
+      }
+      where.requestedPriority = requestedFilter;
     }
     if (itPriority && typeof itPriority === "string") {
-      where.itPriority = itPriority;
+      const priorityFilter = parseEnumFilter(itPriority, ALL_PRIORITIES);
+      if (!priorityFilter) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid itPriority filter" } });
+      }
+      where.itPriority = priorityFilter;
     }
     if (status && typeof status === "string") {
-      where.currentStatus = status;
+      const statusFilter = parseEnumFilter(status, ALL_TICKET_STATUSES);
+      if (!statusFilter) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid status filter" } });
+      }
+      where.currentStatus = statusFilter;
     }
     if (ownerId === "unassigned") {
       where.ownerId = null;
+    } else if (ownerId === "me") {
+      where.ownerId = req.user!.id;
     } else if (ownerId && typeof ownerId === "string") {
       where.ownerId = ownerId;
+    }
+    if (followUpRequired === "true") {
+      where.actionsTaken = { some: { followUpRequired: true } };
     }
 
     const validSortFields = ["ticketNumber", "createdAt", "updatedAt", "summary", "itPriority", "status"];
@@ -1919,6 +1961,138 @@ app.all(["/api/action-taken-revisions*", "/api/tickets/:id/actions-taken/:action
       message: "Action Taken revisions are immutable and cannot be modified or deleted.",
     },
   });
+});
+
+// ---------------------------------------------------------------------------
+// Dashboards (FR-13..FR-17, BR-12, BR-13, BR-16)
+// All metrics are database aggregates; recent lists are capped at 5.
+// ---------------------------------------------------------------------------
+const DASHBOARD_RECENT_LIMIT = 5;
+
+// Every status is present in the breakdown, with 0 for statuses that currently have no tickets.
+export function buildStatusBreakdown(rows: { currentStatus: string; _count: { _all: number } }[]): Record<string, number> {
+  const breakdown: Record<string, number> = {};
+  for (const status of ALL_TICKET_STATUSES) breakdown[status] = 0;
+  for (const row of rows) breakdown[row.currentStatus] = row._count._all;
+  return breakdown;
+}
+
+// GET /api/dashboard/requester - metrics for the authenticated Requester's own tickets
+app.get("/api/dashboard/requester", requireAuth, requirePasswordChangeEnforcement, requireRole(["REQUESTER"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const prisma = getPrisma();
+    const requesterId = req.user!.id;
+
+    const [totalTickets, activeTickets, waitingForRequesterTickets, resolvedOrClosedTickets, recent] = await Promise.all([
+      prisma.ticket.count({ where: { requesterId } }),
+      prisma.ticket.count({ where: { requesterId, currentStatus: { in: ["NEW", "OPEN", "IN_PROGRESS"] } } }),
+      prisma.ticket.count({ where: { requesterId, currentStatus: "WAITING_FOR_REQUESTER" } }),
+      prisma.ticket.count({ where: { requesterId, currentStatus: { in: ["RESOLVED", "CLOSED"] } } }),
+      prisma.ticket.findMany({
+        where: { requesterId },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        take: DASHBOARD_RECENT_LIMIT,
+        select: { id: true, ticketNumber: true, summary: true, currentStatus: true, itPriority: true, updatedAt: true }
+      })
+    ]);
+
+    return res.status(200).json({
+      data: {
+        totalTickets,
+        activeTickets,
+        waitingForRequesterTickets,
+        resolvedOrClosedTickets,
+        recentTickets: recent.map((t) => ({
+          id: t.id,
+          ticketNumber: t.ticketNumber,
+          title: t.summary,
+          currentStatus: t.currentStatus,
+          itPriority: t.itPriority,
+          updatedAt: t.updatedAt
+        }))
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// GET /api/dashboard/staff - global queue metrics for IT Staff and Administrators
+app.get("/api/dashboard/staff", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const prisma = getPrisma();
+    const userId = req.user!.id;
+    const unresolved = { in: UNRESOLVED_TICKET_STATUSES as any };
+
+    const [
+      unassignedTickets,
+      myActiveTickets,
+      ticketsRequiringFollowUp,
+      criticalOrHighPriorityTickets,
+      statusCounts,
+      recent,
+      actions
+    ] = await Promise.all([
+      prisma.ticket.count({ where: { ownerId: null, currentStatus: { in: ["NEW", "OPEN"] } } }),
+      prisma.ticket.count({ where: { ownerId: userId, currentStatus: { in: ["OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "REOPENED"] } } }),
+      // Counts tickets, not actions: several follow-up actions on one ticket still count once (AC-13).
+      prisma.ticket.count({ where: { currentStatus: unresolved, actionsTaken: { some: { followUpRequired: true } } } }),
+      prisma.ticket.count({ where: { currentStatus: unresolved, itPriority: { in: ["CRITICAL", "HIGH"] } } }),
+      prisma.ticket.groupBy({ by: ["currentStatus"], _count: { _all: true } }),
+      prisma.ticket.findMany({
+        where: { currentStatus: unresolved },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        take: DASHBOARD_RECENT_LIMIT,
+        select: { id: true, ticketNumber: true, summary: true, currentStatus: true, itPriority: true, ownerId: true, updatedAt: true }
+      }),
+      prisma.actionTaken.findMany({
+        where: { OR: [{ performedById: userId }, { assignedToId: userId }] },
+        orderBy: [{ actionDateTime: "desc" }, { id: "desc" }],
+        take: DASHBOARD_RECENT_LIMIT,
+        select: {
+          id: true,
+          ticketId: true,
+          description: true,
+          result: true,
+          actionDateTime: true,
+          followUpRequired: true,
+          ticket: { select: { ticketNumber: true } }
+        }
+      })
+    ]);
+
+    return res.status(200).json({
+      data: {
+        unassignedTickets,
+        myActiveTickets,
+        ticketsRequiringFollowUp,
+        criticalOrHighPriorityTickets,
+        statusBreakdown: buildStatusBreakdown(statusCounts),
+        recentTickets: recent.map((t) => ({
+          id: t.id,
+          ticketNumber: t.ticketNumber,
+          title: t.summary,
+          currentStatus: t.currentStatus,
+          itPriority: t.itPriority,
+          ownerId: t.ownerId,
+          updatedAt: t.updatedAt
+        })),
+        currentUserActions: actions.map((a) => ({
+          id: a.id,
+          ticketId: a.ticketId,
+          ticketNumber: a.ticket.ticketNumber,
+          description: a.description,
+          result: a.result,
+          actionDateTime: a.actionDateTime,
+          followUpRequired: a.followUpRequired
+        }))
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
 });
 
 // ---------------------------------------------------------------------------
