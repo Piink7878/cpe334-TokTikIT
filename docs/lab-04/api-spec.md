@@ -471,7 +471,7 @@ Every transition listed above is enabled. Any transition not listed is rejected 
   * **Authoritative Enforcement Point:** The backend is the authoritative enforcement point. Frontend validation is supplementary only.
 * **Audit Log Generation:** Every successful status transition automatically creates a new `InternalNote` record (`ticketId`, `authorId: req.user.id`, `content: "Status changed from <OLD_STATUS> to <NEW_STATUS>"`). For rejection, the reason is appended to the note.
 * **Concurrency Protection:** The update executes within a transaction verifying current ticket state. Competing simultaneous status updates, and updates whose `expectedUpdatedAt` is outdated, receive `409 Conflict` with `code: "CONCURRENCY_CONFLICT"`.
-* **Terminal Tickets:** Besides status changes (`VALIDATION_ERROR`), `PATCH /api/staff/tickets/:id/claim`, `/assign` and `/priority` on a `CLOSED`, `CANCELLED` or `REJECTED` Ticket return `400 Bad Request` with `code: "TICKET_TERMINAL"` (`BR-08`, `AC-09`).
+* **Terminal Tickets:** Besides status changes (`VALIDATION_ERROR`), `PATCH /api/staff/tickets/:id/claim`, `/assign` and `/priority` on a `CLOSED`, `CANCELLED` or `REJECTED` Ticket return `400 Bad Request` with `code: "TICKET_TERMINAL"` (`BR-08`, `AC-09`). These three writes are conditional: if the Ticket becomes terminal between validation and write the same `TICKET_TERMINAL` response is returned, and if its status changed to another non-terminal status in the meantime (`claim`/`assign`) the response is `409 Conflict` with `code: "CONCURRENCY_CONFLICT"`, so a terminal Ticket can never be modified or re-opened by a racing request.
 * **Response Payload (200 OK):**
   ```json
   {
