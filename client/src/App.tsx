@@ -95,6 +95,8 @@ function RootRedirect() {
 import UserManagement from "./pages/UserManagement";
 
 import StaffTicketDetail from "./pages/StaffTicketDetail";
+import RequesterDashboard from "./pages/RequesterDashboard";
+import StaffDashboard from "./pages/StaffDashboard";
 
 export default function App() {
   return (
@@ -107,6 +109,8 @@ export default function App() {
           <Route path="/change-password" element={<ChangePassword />} />
           <Route element={<AppLayout />}>
             <Route path="/" element={<RootRedirect />} />
+            <Route path="/requester-dashboard" element={<RequesterDashboard />} />
+            <Route path="/staff-dashboard" element={<StaffDashboard />} />
             <Route path="/my-tickets" element={<MyTickets />} />
             <Route path="/staff-queue" element={<StaffTicketQueue />} />
             <Route path="/staff/tickets/:id" element={<StaffTicketDetail />} />
