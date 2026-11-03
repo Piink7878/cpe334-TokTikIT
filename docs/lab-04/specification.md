@@ -209,7 +209,7 @@ The following matrix is the **single approved Lab 4 workflow contract**. Every l
 | **CANCELLED** | *None* | N/A | Terminal state; immutable. |
 | **REJECTED** | *None* | N/A | Lab 3 legacy terminal state; immutable. |
 
-All transitions listed above are enabled. No transition is conditional on future instructor approval. A transition not listed in this matrix is invalid and must be rejected by the backend with HTTP 400 (`INVALID_STATUS_TRANSITION`). Terminal-state mutation restrictions remain governed by BR-08.
+All transitions listed above are enabled. No transition is conditional on future instructor approval. A transition not listed in this matrix is invalid and must be rejected by the backend with HTTP 400 (`VALIDATION_ERROR`). Terminal-state mutation restrictions remain governed by BR-08.
 
 ### 6.2 Resolution and Rejection Rules
 1. **Authorized Roles:** Only authenticated users with `IT_STAFF` or `ADMIN` roles may transition a ticket to `RESOLVED` or `REJECTED`.

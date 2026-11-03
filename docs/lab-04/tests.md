@@ -639,7 +639,7 @@
   * **Preconditions / Test Data:** Ticket in `NEW` status.
   * **Steps:**
     1. Send `PATCH /api/staff/tickets/:id/status` with `{"status": "RESOLVED"}`.
-  * **Expected Result:** HTTP 400 Bad Request; error code `INVALID_STATUS_TRANSITION`; status remains `NEW`.
+  * **Expected Result:** HTTP 400 Bad Request; error code `VALIDATION_ERROR`; status remains `NEW`.
   * **Test Level:** API / Integration
   * **Priority:** High
 
@@ -699,7 +699,7 @@
   * **Preconditions / Test Data:** Ticket in `NEW` status.
   * **Steps:**
     1. Send `PATCH /api/staff/tickets/:id/status` with `{"status": "REJECTED"}` and no reason.
-  * **Expected Result:** HTTP 400 Bad Request (`REJECTION_REASON_REQUIRED`); status remains `NEW`.
+  * **Expected Result:** HTTP 400 Bad Request (`VALIDATION_ERROR`); status remains `NEW`.
   * **Test Level:** API / Integration
   * **Priority:** High
 
@@ -787,7 +787,7 @@
     1. Iterate through every permitted source/destination pair in the canonical matrix and submit the status update as `IT_STAFF`.
     2. Attempt representative unlisted transitions, including `NEW -> IN_PROGRESS`, `CLOSED -> REOPENED`, `CANCELLED -> OPEN`, and `REJECTED -> OPEN`.
     3. Inspect the status dropdown for each source status and compare its options with the matrix.
-  * **Expected Result:** Every listed transition succeeds with HTTP 200 and an audit `InternalNote`, subject to the Resolution Gate and rejection-reason rules. Every unlisted transition returns HTTP 400 (`INVALID_STATUS_TRANSITION`) and leaves the status unchanged. The UI options exactly match the permitted destination set. Terminal statuses expose no transition controls.
+  * **Expected Result:** Every listed transition succeeds with HTTP 200 and an audit `InternalNote`, subject to the Resolution Gate and rejection-reason rules. Every unlisted transition returns HTTP 400 (`VALIDATION_ERROR`) and leaves the status unchanged. The UI options exactly match the permitted destination set. Terminal statuses expose no transition controls.
   * **Test Level:** API / Integration / UI Component
   * **Priority:** Critical
 
@@ -1643,9 +1643,9 @@
   | `actionDateTime` | Future timestamp exceeding server clock by > 5 minutes. | `TC-ACT-01` | `400 Bad Request` (`FUTURE_TIMESTAMP_NOT_ALLOWED`) | *Proposed Technical Constraint (spec §13.3.4)* |
   | `assignedToId` | Referencing user with `isActive: false`. | `TC-ACT-16` | `400 Bad Request` (`INACTIVE_ASSIGNEE`) | Confirmed Handout Requirement |
   | `assignedToId` | Referencing user with role `REQUESTER`. | `TC-ACT-17` | `400 Bad Request` (`INVALID_ASSIGNEE_ROLE`) | Confirmed Handout Requirement |
-  | `status` | Unlisted transition (e.g., `NEW -> IN_PROGRESS`, `CLOSED -> OPEN`). | `TC-TRN-06`, `TC-TRN-07` | `400 Bad Request` (`INVALID_STATUS_TRANSITION`) | Confirmed Handout Requirement |
+  | `status` | Unlisted transition (e.g., `NEW -> IN_PROGRESS`, `CLOSED -> OPEN`). | `TC-TRN-06`, `TC-TRN-07` | `400 Bad Request` (`VALIDATION_ERROR`) | Confirmed Handout Requirement |
   | `status` (Resolution Gate) | Transitioning to `RESOLVED` when ticket has 0 Action Taken records. | `TC-TRN-16` | `400 Bad Request` (`ACTION_TAKEN_REQUIRED`) | Approved project rule (spec §BR-10) |
-  | `rejectionReason` | `status = REJECTED` with empty or missing reason. | `TC-TRN-11` | `400 Bad Request` (`REJECTION_REASON_REQUIRED`) | Lab 3 Legacy Compatibility |
+  | `rejectionReason` | `status = REJECTED` with empty or missing reason. | `TC-TRN-11` | `400 Bad Request` (`VALIDATION_ERROR`) | Lab 3 Legacy Compatibility |
 
   ---
 
@@ -1833,7 +1833,7 @@
   |---|---|---|---|
   | **Backend Resolution Gate Condition** | spec §BR-10, Handout §4.5 | **Team-approved Business Rule:** Requires at least one persisted Action Taken record (`COUNT(actionsTaken) >= 1`) before `RESOLVED` (`TC-TRN-16`, `TC-TRN-17`, `TC-TRN-18`). If zero exist, backend rejects with HTTP `400 Bad Request` and `ACTION_TAKEN_REQUIRED`. Outstanding follow-ups do not block resolution. Backend is authoritative enforcement point. | Enforced authoritatively on server for every permitted predecessor transition; supplementary UI validation warnings. |
   | **Follow-Up Clearance Prerequisite for RESOLVED** | spec §13.3.2, Q-13.3.2 | **Team-approved Business Rule:** Decoupled: A ticket CAN transition to `RESOLVED` even if some Actions Taken have `followUpRequired = true`. Follow-ups remain visible as follow-up obligations without blocking resolution. | Finalized decision; follow-up required does not block resolution. |
-  | **Ticket Status Transition Matrix** | spec §6.1 | All transitions listed in the finalized matrix are enabled and tested. Any transition not listed is rejected with `400 INVALID_STATUS_TRANSITION`. | Backend, UI, and test fixtures must use the exact same matrix. |
+  | **Ticket Status Transition Matrix** | spec §6.1 | All transitions listed in the finalized matrix are enabled and tested. Any transition not listed is rejected with `400 VALIDATION_ERROR`. | Backend, UI, and test fixtures must use the exact same matrix. |
   | **Validation Length Limits** | spec §13.3.4, BR-04 | **Enforced as proposed constraints:** Description: 5–3,000 chars; Result: 2–1,000 chars; Notes: max 1,000 chars; future timestamp tolerance: 5 mins. | Field boundary tests in `TC-ACT-05`, `TC-ACT-06`, and Section 7.2 validate these constraints. |
   | **Attachment Notes Data Type** | spec §13.3.5 | **Free-text string (`String?`):** Field accepts technician text notes, equipment IDs, or file paths without foreign key constraint to `Attachment`. | Tested in `TC-ACT-07`. |
   | **Dashboard Drill-Down Multi-Status Format** | ui-spec §2.1.2, UI-Q7 | **Implementation Requirement:** Query format `?status=NEW,OPEN,IN_PROGRESS` and `?status=RESOLVED,CLOSED` requires extending `TicketFilters.status` in `MyTickets.tsx` and backend `GET /api/tickets`. | Test cases `TC-DASH-REQ-05` and `TC-DASH-REQ-07` test this extended multi-status filter behavior. |

@@ -176,13 +176,13 @@ describe("Ticket workflow and Resolution Gate API (Lab 4 Issue 4)", () => {
       );
     });
 
-    it("rejects every unlisted transition with INVALID_STATUS_TRANSITION and leaves the status unchanged", async () => {
+    it("rejects every unlisted transition with the Lab 3 VALIDATION_ERROR code (BR-17) and leaves the status unchanged", async () => {
       const failures: string[] = [];
       for (const [from, to] of unlisted) {
         const ticket = await makeTicket(from, { withAction: true });
         const res = await setStatus(ticket.id, { status: to, rejectionReason: "reason" });
         const unchanged = (await statusOf(ticket.id)) === from;
-        if (res.status !== 400 || res.body?.error?.code !== "INVALID_STATUS_TRANSITION" || !unchanged) {
+        if (res.status !== 400 || res.body?.error?.code !== "VALIDATION_ERROR" || !unchanged) {
           failures.push(`${from} -> ${to}: ${res.status} ${res.body?.error?.code}`);
         }
       }
@@ -193,15 +193,15 @@ describe("Ticket workflow and Resolution Gate API (Lab 4 Issue 4)", () => {
       const ticket = await makeTicket("OPEN");
       const res = await setStatus(ticket.id, { status: "BOGUS" });
       expect(res.status).toBe(400);
-      expect(res.body.error.code).toBe("INVALID_STATUS_TRANSITION");
+      expect(res.body.error.code).toBe("VALIDATION_ERROR");
     });
 
-    it("requires a rejection reason for NEW -> REJECTED (REJECTION_REASON_REQUIRED)", async () => {
+    it("requires a rejection reason for NEW -> REJECTED (Lab 3 VALIDATION_ERROR code, BR-17)", async () => {
       const ticket = await makeTicket("NEW");
       for (const body of [{ status: "REJECTED" }, { status: "REJECTED", rejectionReason: "   " }]) {
         const res = await setStatus(ticket.id, body);
         expect(res.status).toBe(400);
-        expect(res.body.error.code).toBe("REJECTION_REASON_REQUIRED");
+        expect(res.body.error.code).toBe("VALIDATION_ERROR");
       }
       expect(await statusOf(ticket.id)).toBe("NEW");
     });
@@ -250,6 +250,50 @@ describe("Ticket workflow and Resolution Gate API (Lab 4 Issue 4)", () => {
     });
   });
 
+  describe("Claim, assign and priority racing with a status change (BR-08, BR-14)", () => {
+    const attempts: [string, (id: number) => request.Test][] = [
+      ["claim", (id) => request(app).patch(`/api/staff/tickets/${id}/claim`).set("Cookie", staffCookie)],
+      ["assign", (id) => request(app).patch(`/api/staff/tickets/${id}/assign`).set("Cookie", staffCookie).send({ assigneeId: staff2.id })],
+      ["priority", (id) => request(app).patch(`/api/staff/tickets/${id}/priority`).set("Cookie", staffCookie).send({ itPriority: "CRITICAL" })]
+    ];
+
+    // The request reads the ticket, then waits on the row lock; meanwhile another request changes the status.
+    const raceWithStatusChange = async (id: number, makeRequest: (id: number) => request.Test, newStatus: string) => {
+      let pending: Promise<request.Response> = Promise.resolve({} as request.Response);
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Ticket" WHERE id = ${id} FOR UPDATE`;
+        pending = makeRequest(id).then((r) => r);
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        await tx.ticket.update({ where: { id }, data: { currentStatus: newStatus as any } });
+      });
+      return pending;
+    };
+
+    it.each(attempts)("%s cannot touch a ticket that became CANCELLED after it was validated", async (_name, makeRequest) => {
+      const ticket = await makeTicket("NEW");
+      const res = await raceWithStatusChange(ticket.id, makeRequest, "CANCELLED");
+
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("TICKET_TERMINAL");
+      const after = (await prisma.ticket.findUnique({ where: { id: ticket.id } }))!;
+      expect(after.currentStatus).toBe("CANCELLED");
+      expect(after.ownerId).toBeNull();
+      expect(after.itPriority).toBe("MEDIUM");
+      expect(await prisma.internalNote.count({ where: { ticketId: ticket.id } })).toBe(0);
+    });
+
+    it.each(attempts.slice(0, 2))("%s does not overwrite a status that moved on from NEW in the meantime", async (_name, makeRequest) => {
+      const ticket = await makeTicket("NEW");
+      const res = await raceWithStatusChange(ticket.id, makeRequest, "IN_PROGRESS");
+
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe("CONCURRENCY_CONFLICT");
+      const after = (await prisma.ticket.findUnique({ where: { id: ticket.id } }))!;
+      expect(after.currentStatus).toBe("IN_PROGRESS");
+      expect(after.ownerId).toBeNull();
+    });
+  });
+
   describe("Concurrent and stale status updates (BR-14, AC-15, requirements §6.1)", () => {
     it("lets exactly one of several competing transitions win and answers the rest with 409", async () => {
       const ticket = await makeTicket("IN_PROGRESS", { withAction: true });
@@ -267,9 +311,10 @@ describe("Ticket workflow and Resolution Gate API (Lab 4 Issue 4)", () => {
       });
       const responses = await pending;
 
+      // Asserting the whole status list makes any unexpected response (e.g. a 500) visible in the failure output.
+      expect(responses.map((r) => r.status).sort()).toEqual([200, 409, 409, 409, 409, 409, 409, 409]);
       const winners = responses.filter((r) => r.status === 200);
       const losers = responses.filter((r) => r.status !== 200);
-      expect(winners).toHaveLength(1);
       expect(losers.every((r) => r.status === 409 && r.body.error.code === "CONCURRENCY_CONFLICT")).toBe(true);
       expect(await statusOf(ticket.id)).toBe(winners[0].body.ticket.currentStatus);
       expect(await prisma.internalNote.count({ where: { ticketId: ticket.id } })).toBe(1);

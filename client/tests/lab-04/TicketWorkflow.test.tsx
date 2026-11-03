@@ -191,7 +191,7 @@ describe("Staff ticket workflow UI (Lab 4 Issue 4)", () => {
 
     it("falls back to the server message for other failures", async () => {
       await renderPage("OPEN");
-      (api.updateTicketStatus as any).mockRejectedValue(new api.ApiError("Invalid transition from OPEN to NEW", 400, "INVALID_STATUS_TRANSITION"));
+      (api.updateTicketStatus as any).mockRejectedValue(new api.ApiError("Invalid transition from OPEN to NEW", 400, "VALIDATION_ERROR"));
 
       chooseStatus("CANCELLED");
       fireEvent.click(screen.getByRole("button", { name: "Change" }));

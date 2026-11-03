@@ -968,6 +968,37 @@ function sendTerminalTicketError(res: Response): Response {
   });
 }
 
+function sendConcurrencyConflict(res: Response): Response {
+  return res.status(409).json({
+    error: {
+      code: "CONCURRENCY_CONFLICT",
+      message: "Ticket was modified by another concurrent update. Please reload and retry."
+    }
+  });
+}
+
+// BR-08 / BR-14: the earlier read only decides the response; the write itself must still be conditional, otherwise a
+// concurrent request can move the ticket to a terminal status between the check and the update.
+async function updateTicketIfUnchanged(
+  ticketId: number,
+  guard: Prisma.TicketWhereInput,
+  data: Prisma.TicketUncheckedUpdateManyInput,
+  auditNote?: { content: string; authorId: string }
+): Promise<{ ticket: any } | { failure: "TERMINAL" | "CONFLICT" }> {
+  return getPrisma().$transaction(async (tx) => {
+    const updated = await tx.ticket.updateMany({ where: { id: ticketId, ...guard }, data });
+    if (updated.count === 0) {
+      const current = await tx.ticket.findUnique({ where: { id: ticketId }, select: { currentStatus: true } });
+      const terminal = !!current && TERMINAL_TICKET_STATUSES.includes(current.currentStatus);
+      return { failure: terminal ? ("TERMINAL" as const) : ("CONFLICT" as const) };
+    }
+    if (auditNote) {
+      await tx.internalNote.create({ data: { ticketId, ...auditNote } });
+    }
+    return { ticket: await tx.ticket.findUnique({ where: { id: ticketId } }) };
+  });
+}
+
 // ---------------------------------------------------------------------------
 // PATCH /api/staff/tickets/:id/claim - Claim a ticket
 // ---------------------------------------------------------------------------
@@ -990,28 +1021,19 @@ app.patch("/api/staff/tickets/:id/claim", requireAuth, requirePasswordChangeEnfo
 
     const newStatus = ticket.currentStatus === "NEW" ? "OPEN" : ticket.currentStatus;
 
-    const updateData: any = {
-      ownerId: req.user!.id,
-      currentStatus: newStatus
-    };
-
-    if (ticket.currentStatus === "NEW") {
-      updateData.internalNotes = {
-        create: {
-          content: "Status changed from NEW to OPEN",
-          authorId: req.user!.id
-        }
-      };
+    const result = await updateTicketIfUnchanged(
+      ticketId,
+      { currentStatus: ticket.currentStatus },
+      { ownerId: req.user!.id, currentStatus: newStatus },
+      ticket.currentStatus === "NEW" ? { content: "Status changed from NEW to OPEN", authorId: req.user!.id } : undefined
+    );
+    if ("failure" in result) {
+      return result.failure === "TERMINAL" ? sendTerminalTicketError(res) : sendConcurrencyConflict(res);
     }
-
-    const updatedTicket = await prisma.ticket.update({
-      where: { id: ticketId },
-      data: updateData
-    });
 
     return res.status(200).json({
       message: "Ticket claimed successfully",
-      ticket: updatedTicket
+      ticket: result.ticket
     });
   } catch (error) {
     console.error(error);
@@ -1053,28 +1075,19 @@ app.patch("/api/staff/tickets/:id/assign", requireAuth, requirePasswordChangeEnf
 
     const newStatus = ticket.currentStatus === "NEW" ? "OPEN" : ticket.currentStatus;
 
-    const updateData: any = {
-      ownerId: assigneeId,
-      currentStatus: newStatus
-    };
-
-    if (ticket.currentStatus === "NEW") {
-      updateData.internalNotes = {
-        create: {
-          content: "Status changed from NEW to OPEN",
-          authorId: req.user!.id
-        }
-      };
+    const result = await updateTicketIfUnchanged(
+      ticketId,
+      { currentStatus: ticket.currentStatus },
+      { ownerId: assigneeId, currentStatus: newStatus },
+      ticket.currentStatus === "NEW" ? { content: "Status changed from NEW to OPEN", authorId: req.user!.id } : undefined
+    );
+    if ("failure" in result) {
+      return result.failure === "TERMINAL" ? sendTerminalTicketError(res) : sendConcurrencyConflict(res);
     }
-
-    const updatedTicket = await prisma.ticket.update({
-      where: { id: ticketId },
-      data: updateData
-    });
 
     return res.status(200).json({
       message: "Ticket assigned successfully",
-      ticket: updatedTicket
+      ticket: result.ticket
     });
   } catch (error) {
     console.error(error);
@@ -1108,14 +1121,18 @@ app.patch("/api/staff/tickets/:id/priority", requireAuth, requirePasswordChangeE
       return sendTerminalTicketError(res);
     }
 
-    const updatedTicket = await prisma.ticket.update({
-      where: { id: ticketId },
-      data: { itPriority }
-    });
+    const result = await updateTicketIfUnchanged(
+      ticketId,
+      { currentStatus: { notIn: TERMINAL_TICKET_STATUSES as any } },
+      { itPriority }
+    );
+    if ("failure" in result) {
+      return result.failure === "TERMINAL" ? sendTerminalTicketError(res) : sendConcurrencyConflict(res);
+    }
 
     return res.status(200).json({
       message: "Priority updated successfully",
-      ticket: updatedTicket
+      ticket: result.ticket
     });
   } catch (error) {
     console.error(error);
@@ -1157,12 +1174,7 @@ app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnf
 
     // A caller working from an outdated view is told so (409) before its transition is judged against newer state.
     if (expectedDate && expectedDate.getTime() !== ticket.updatedAt.getTime()) {
-      return res.status(409).json({
-        error: {
-          code: "CONCURRENCY_CONFLICT",
-          message: "Ticket was modified by another concurrent update. Please reload and retry."
-        }
-      });
+      return sendConcurrencyConflict(res);
     }
 
     // Approved status transition matrix (specification.md §6.1). Terminal states have no exits (BR-08).
@@ -1181,12 +1193,12 @@ app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnf
     const permittedNext = allowedTransitions[currentStatus] || [];
     
     if (!permittedNext.includes(status)) {
-      return res.status(400).json({ error: { code: "INVALID_STATUS_TRANSITION", message: `Invalid transition from ${currentStatus} to ${status}` } });
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: `Invalid transition from ${currentStatus} to ${status}` } });
     }
 
     // BR-05: Enforce rejection note
     if (status === "REJECTED" && (!rejectionReason || typeof rejectionReason !== "string" || rejectionReason.trim() === "")) {
-      return res.status(400).json({ error: { code: "REJECTION_REASON_REQUIRED", message: "rejectionReason is required when rejecting a ticket" } });
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "rejectionReason is required when rejecting a ticket" } });
     }
 
     const noteBody = status === "REJECTED"
@@ -1230,12 +1242,7 @@ app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnf
         });
       }
       if (err.message === "CONCURRENCY_CONFLICT") {
-        return res.status(409).json({
-          error: {
-            code: "CONCURRENCY_CONFLICT",
-            message: "Ticket was modified by another concurrent update. Please reload and retry."
-          }
-        });
+        return sendConcurrencyConflict(res);
       }
       throw err;
     }
