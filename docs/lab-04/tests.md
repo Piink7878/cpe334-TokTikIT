@@ -1673,6 +1673,10 @@
   | `e2e/lab-02/requester-ticket-flow.spec.ts` | Playwright E2E | End-to-end requester ticket creation and attachment. | Full browser user flow must succeed. |
   | `e2e/lab-03/staff-ticket-flow.spec.ts` | Playwright E2E | Staff login, claim, assign, status update, notes. | Preserved login redirects ensure E2E assertions pass. |
   | `e2e/lab-03/user-administration.spec.ts` | Playwright E2E | Admin user management workflow. | Admin UI and API must remain fully functional. |
+  | `server/tests/lab-04/hardening.api.test.ts` | Hardening / Security | Security headers, CORS allow-list, session regeneration at login, JSON 400/404/413 failures, and a sweep that sends wrongly-typed, NUL-containing and out-of-range input to every write endpoint and expects a 4xx. | api-spec §1.3. |
+  | `server/tests/lab-04/performance-smoke.api.test.ts` | Performance-Smoke (`TC-PRF-01`–`TC-PRF-03`) | Dashboards ≤ 300 ms (mean and p95 over 10 calls), Actions Taken list/create ≤ 200 ms, status transition ≤ 250 ms. | Local database, warm connection. |
+  | `client/tests/lab-04/Hardening.test.tsx` | Client Hardening | Mobile menu toggle, logout when the session is gone, plain-language network failures, double-click protection on staff actions, dialog error display and inert background. | Draft/typed data preserved after failures. |
+  | `e2e/lab-04/hardening.spec.ts` | Playwright E2E (Desktop, Tablet, Mobile) | Per role and screen: no console errors, no failed API calls, no unknown links, no placeholder text, no horizontal overflow, touch targets ≥ 44 px on narrow screens, axe WCAG A/AA scan (including the user-management dialogs), reachable navigation. | `@axe-core/playwright` (dev dependency). |
   | `server/tests/lab-04/contract-regression.api.test.ts` | API Contract Regression (`TC-REG-09`) | Verifies legacy Lab 1–3 endpoints preserve exact original success/error schemas, while new Lab 4 endpoints strictly use nested `{ "error": { "code", "message" } }`. | Global error format replacement strictly prohibited. |
 
   ---

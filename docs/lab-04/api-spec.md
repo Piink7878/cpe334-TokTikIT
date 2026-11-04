@@ -17,7 +17,16 @@ This document details the REST API specification for Sprint 4 (Lab 4). It define
 * **401 Unauthorized:** Missing, invalid, or expired session.
 * **403 Forbidden:** Authenticated user lacks role permissions (e.g., Requester attempting to record Actions Taken or access Staff Queue / Staff Dashboard).
 * **404 Not Found (Non-Enumeration):** Resource does not exist OR the resource is not owned by the requesting user. (If a Requester requests `/api/tickets/99/actions-taken` and they do not own ticket 99, the API returns 404 to prevent resource existence enumeration).
+* **413 Payload Too Large:** A JSON request body above the 100 KB limit (`code: "PAYLOAD_TOO_LARGE"`).
 * **409 Conflict:** Concurrency collisions (e.g., competing simultaneous status changes or transaction serialization conflicts), stale Action Taken updates, or reuse of an `Idempotency-Key` with a different payload.
+
+### 1.3 Transport & Input Hardening
+* **Malformed input never crashes a handler.** A wrongly-typed field (object, array, number, boolean where a string is expected), a NUL character in any string (body, query or URL), or a numeric id outside the 32-bit range is answered with `400 Bad Request` (`code: "VALIDATION_ERROR"`), never `500`. Existing Lab 1–3 success and error bodies are unchanged (BR-17); only inputs that previously caused a `500` now return `400`.
+* **JSON for every API failure.** A malformed JSON body returns `400` (`VALIDATION_ERROR`, "Malformed JSON request body"); an unknown `/api/*` path returns `404` (`NOT_FOUND`); neither response contains an HTML page or a stack trace.
+* **CORS allow-list.** Credentialed cross-origin requests are accepted only from the origins in `CORS_ORIGIN` (comma-separated, default `http://localhost:5173`). Requests without an `Origin` header (same-origin, curl, tests) are unaffected. Other origins receive no CORS grant.
+* **Response headers.** `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`; `X-Powered-By` is not sent.
+* **Session fixation.** `POST /api/auth/login` issues a new session id on success; an id presented before login never becomes an authenticated one. With `NODE_ENV=production` the server refuses to start without `SESSION_SECRET`.
+* **Duplicate submissions.** Server-side replay protection exists only for Action Taken creation (`Idempotency-Key`, FR-25). For other writes the UI disables the control while a request is in flight; a user who retries after a network timeout on ticket creation, comments or notes can still create a duplicate (documented limitation).
 
 **Standard Error Response Schema (New Lab 4 APIs):**
 ```json
