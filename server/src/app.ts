@@ -288,11 +288,7 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
     }
 
     if (details.length > 0) {
-      if (req.files) {
-        for (const file of req.files as Express.Multer.File[]) {
-          fs.unlink(file.path, () => {});
-        }
-      }
+      discardUploadedFiles(req);
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Validation failed", details } });
     }
 
@@ -308,7 +304,7 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
     }
 
     const currentYear = new Date().getFullYear();
-    const attachmentsData = [];
+    const attachmentsData: { originalName: string; storedName: string; mimeType: string; sizeBytes: number }[] = [];
     if (req.files) {
       for (const file of req.files as Express.Multer.File[]) {
         attachmentsData.push({
@@ -320,24 +316,41 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
       }
     }
 
+    // Optional replay protection: the payload includes the uploaded files' content so a retry must match exactly.
+    let idem: IdempotencyStart = { kind: "none" };
+    if (req.headers["idempotency-key"] !== undefined) {
+      const uploaded = (req.files as Express.Multer.File[] | undefined) ?? [];
+      const files = await Promise.all(
+        uploaded.map(async (f) => ({
+          name: f.originalname,
+          type: f.mimetype,
+          size: f.size,
+          sha256: crypto.createHash("sha256").update(await fs.promises.readFile(f.path)).digest("hex")
+        }))
+      );
+      idem = await beginIdempotent(req, res, "POST /api/tickets", { categoryId, relatedSystemId, requestedPriority, summary, description, files }, () => discardUploadedFiles(req));
+      if (idem.kind === "handled") return;
+    }
+
     let maxRetries = 5;
     let ticket: any = null;
+    let storedBody: unknown = null;
 
     while (maxRetries > 0) {
-      const lastTicket = await prisma.ticket.findFirst({
-        where: { ticketNumber: { startsWith: `TKT-${currentYear}-` } },
-        orderBy: { ticketNumber: "desc" }
-      });
+      const create = async (db: Prisma.TransactionClient) => {
+        const lastTicket = await db.ticket.findFirst({
+          where: { ticketNumber: { startsWith: `TKT-${currentYear}-` } },
+          orderBy: { ticketNumber: "desc" }
+        });
 
-      let sequence = 1;
-      if (lastTicket) {
-        const parts = lastTicket.ticketNumber.split('-');
-        sequence = parseInt(parts[2], 10) + 1;
-      }
-      const ticketNumber = `TKT-${currentYear}-${String(sequence).padStart(6, '0')}`;
+        let sequence = 1;
+        if (lastTicket) {
+          const parts = lastTicket.ticketNumber.split('-');
+          sequence = parseInt(parts[2], 10) + 1;
+        }
+        const ticketNumber = `TKT-${currentYear}-${String(sequence).padStart(6, '0')}`;
 
-      try {
-        ticket = await prisma.ticket.create({
+        return db.ticket.create({
           data: {
             ticketNumber,
             requesterId,
@@ -354,8 +367,27 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
           },
           include: { attachments: true }
         });
+      };
+
+      try {
+        if (idem.kind === "new") {
+          // The ticket and its stored response commit together (see createWithIdempotency).
+          ticket = await prisma.$transaction(async (tx) => {
+            const created = await create(tx);
+            storedBody = { data: formatTicket(created) };
+            await recordIdempotent(tx, req, idem.ctx, 201, storedBody);
+            return created;
+          });
+        } else {
+          ticket = await create(prisma as unknown as Prisma.TransactionClient);
+        }
         break; // Successfully created
       } catch (err: any) {
+        if (isIdempotencyConflict(err) && idem.kind === "new") {
+          // An identical request committed first: answer with its stored response and keep no files of ours.
+          if (await replayIfRecorded(req, res, idem.ctx, () => discardUploadedFiles(req))) return;
+          throw err;
+        }
         if (err.code === "P2002") {
           maxRetries--;
           if (maxRetries === 0) {
@@ -368,48 +400,12 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
       }
     }
 
-    const formattedTicket = {
-        id: ticket.id,
-        ticketNumber: ticket.ticketNumber,
-        requesterId: ticket.requesterId,
-        categoryId: ticket.categoryId,
-        relatedSystemId: ticket.relatedSystemId,
-        summary: ticket.summary,
-        description: ticket.description,
-        requestedPriority: ticket.requestedPriority,
-        itPriority: ticket.itPriority,
-        status: ticket.currentStatus,
-        createdAt: ticket.createdAt,
-        updatedAt: ticket.updatedAt,
-        attachments: ticket.attachments ? ticket.attachments.map((att: {
-            id: number;
-            originalName: string;
-            sizeBytes: number;
-            mimeType: string;
-            isRemoved: boolean;
-            removedAt: Date | null;
-            removalReason: string | null;
-            createdAt: Date;
-        }) => ({
-            id: att.id,
-            originalFilename: att.originalName,
-            fileSize: att.sizeBytes,
-            contentType: att.mimeType,
-            isRemoved: att.isRemoved,
-            removedAt: att.removedAt,
-            removedReason: att.removalReason,
-            createdAt: att.createdAt
-        })) : []
-    };
+    const formattedTicket = formatTicket(ticket);
 
     return res.status(201).json({ data: formattedTicket });
 
   } catch (error: any) {
-    if (req.files) {
-      for (const file of req.files as Express.Multer.File[]) {
-        fs.unlink(file.path, () => {});
-      }
-    }
+    discardUploadedFiles(req);
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });
   }
@@ -422,6 +418,148 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
 function parseId(raw: unknown): number {
   const n = parseInt(String(raw), 10);
   return Number.isInteger(n) && Math.abs(n) <= 2147483647 ? n : NaN;
+}
+
+// ---------------------------------------------------------------------------
+// Replay protection for creating tickets, public comments and internal notes (safe network retries).
+// A request that carries an Idempotency-Key is recorded together with its response; a retry with the same key and
+// payload (for example after the response was lost to a timeout) gets that stored response and creates nothing.
+// Without the header every endpoint behaves exactly as before.
+// ---------------------------------------------------------------------------
+const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
+
+type IdempotencyContext = { key: string; endpoint: string; requestHash: string };
+type IdempotencyStart = { kind: "none" } | { kind: "handled" } | { kind: "new"; ctx: IdempotencyContext };
+
+const hashPayload = (payload: unknown) => crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+
+// Answers the request itself (kind "handled") for an invalid key, a replay, or a key reused with a different payload.
+// `cleanup` runs before any such answer is sent (e.g. to delete files the request uploaded).
+async function beginIdempotent(req: Request, res: Response, endpoint: string, payload: unknown, cleanup?: () => void): Promise<IdempotencyStart> {
+  const raw = req.headers["idempotency-key"];
+  const key = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+  if (key === undefined) return { kind: "none" };
+  if (!IDEMPOTENCY_KEY_PATTERN.test(key)) {
+    cleanup?.();
+    res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Idempotency-Key must be 8-128 characters: letters, digits, '.', '_', ':' or '-'" } });
+    return { kind: "handled" };
+  }
+  const ctx = { key, endpoint, requestHash: hashPayload(payload) };
+  return (await replayIfRecorded(req, res, ctx, cleanup)) ? { kind: "handled" } : { kind: "new", ctx };
+}
+
+async function replayIfRecorded(req: Request, res: Response, ctx: IdempotencyContext, cleanup?: () => void): Promise<boolean> {
+  const record = await getPrisma().requestIdempotency.findUnique({
+    where: { userId_endpoint_key: { userId: req.user!.id, endpoint: ctx.endpoint, key: ctx.key } }
+  });
+  if (!record || record.expiresAt <= new Date()) return false;
+  cleanup?.();
+  if (record.requestHash !== ctx.requestHash) {
+    res.status(409).json({ error: { code: "IDEMPOTENCY_KEY_CONFLICT", message: "The Idempotency-Key has already been used with a different request payload." } });
+    return true;
+  }
+  res.setHeader("Idempotent-Replay", "true");
+  res.status(record.responseStatus).json(record.responseBody);
+  return true;
+}
+
+// Called inside the same transaction that creates the record, so either both exist or neither does.
+async function recordIdempotent(tx: Prisma.TransactionClient, req: Request, ctx: IdempotencyContext, status: number, body: unknown) {
+  await tx.requestIdempotency.deleteMany({ where: { expiresAt: { lte: new Date() } } });
+  await tx.requestIdempotency.create({
+    data: {
+      userId: req.user!.id,
+      endpoint: ctx.endpoint,
+      key: ctx.key,
+      requestHash: ctx.requestHash,
+      responseStatus: status,
+      responseBody: body as Prisma.InputJsonValue,
+      expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS)
+    }
+  });
+}
+
+// A concurrent request with the same key committed first: its unique record makes this transaction fail.
+function isIdempotencyConflict(err: any): boolean {
+  if (err?.code !== "P2002") return false;
+  const target = err.meta?.target;
+  return Array.isArray(target) ? target.includes("endpoint") : String(target ?? "").includes("RequestIdempotency");
+}
+
+// Creates a record through `create` and answers 201. With an idempotency context the record and its stored response
+// are committed together, and a lost race against an identical request replays the winner's response.
+async function createWithIdempotency(
+  req: Request,
+  res: Response,
+  idem: IdempotencyStart,
+  create: (db: Prisma.TransactionClient) => Promise<unknown>
+): Promise<any> {
+  const prisma = getPrisma();
+  if (idem.kind !== "new") {
+    return res.status(201).json(await create(prisma as unknown as Prisma.TransactionClient));
+  }
+  try {
+    const body = await prisma.$transaction(async (tx) => {
+      const created = await create(tx);
+      await recordIdempotent(tx, req, idem.ctx, 201, created);
+      return created;
+    });
+    return res.status(201).json(body);
+  } catch (err) {
+    if (isIdempotencyConflict(err) && (await replayIfRecorded(req, res, idem.ctx))) return;
+    throw err;
+  }
+}
+
+// Removes files multer already wrote to disk for a request that will not create an attachment record.
+// Synchronous, so the files are gone before the response that rejects the request is sent.
+function discardUploadedFiles(req: Request) {
+  if (!req.files) return;
+  for (const file of req.files as Express.Multer.File[]) {
+    try {
+      fs.unlinkSync(file.path);
+    } catch {
+      /* already removed */
+    }
+  }
+}
+
+// Response shape of POST /api/tickets (also what the idempotency record stores for replays).
+function formatTicket(ticket: any) {
+  return {
+      id: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      requesterId: ticket.requesterId,
+      categoryId: ticket.categoryId,
+      relatedSystemId: ticket.relatedSystemId,
+      summary: ticket.summary,
+      description: ticket.description,
+      requestedPriority: ticket.requestedPriority,
+      itPriority: ticket.itPriority,
+      status: ticket.currentStatus,
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt,
+      attachments: ticket.attachments ? ticket.attachments.map((att: {
+          id: number;
+          originalName: string;
+          sizeBytes: number;
+          mimeType: string;
+          isRemoved: boolean;
+          removedAt: Date | null;
+          removalReason: string | null;
+          createdAt: Date;
+      }) => ({
+          id: att.id,
+          originalFilename: att.originalName,
+          fileSize: att.sizeBytes,
+          contentType: att.mimeType,
+          isRemoved: att.isRemoved,
+          removedAt: att.removedAt,
+          removedReason: att.removalReason,
+          createdAt: att.createdAt
+      })) : []
+  };
 }
 
 const ALL_TICKET_STATUSES = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", "CANCELLED", "REJECTED"];
@@ -1402,16 +1540,20 @@ app.post("/api/tickets/:id/comments", requireAuth, requirePasswordChangeEnforcem
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
     }
 
-    const comment = await prisma.publicComment.create({
-      data: {
-        ticketId,
-        authorId: req.user!.id,
-        content: content.trim()
-      },
-      include: { author: { select: { id: true, fullName: true, role: true } } }
-    });
+    const idem = await beginIdempotent(req, res, "POST /api/tickets/:id/comments", { ticketId, content: content.trim() });
+    if (idem.kind === "handled") return;
 
-    return res.status(201).json({ data: comment });
+    return createWithIdempotency(req, res, idem, async (db) => {
+      const comment = await db.publicComment.create({
+        data: {
+          ticketId,
+          authorId: req.user!.id,
+          content: content.trim()
+        },
+        include: { author: { select: { id: true, fullName: true, role: true } } }
+      });
+      return { data: comment };
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });
@@ -1470,16 +1612,20 @@ app.post("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEn
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
     }
 
-    const note = await prisma.internalNote.create({
-      data: {
-        ticketId,
-        authorId: req.user!.id,
-        content: content.trim()
-      },
-      include: { author: { select: { id: true, fullName: true, role: true } } }
-    });
+    const idem = await beginIdempotent(req, res, "POST /api/tickets/:id/internal-notes", { ticketId, content: content.trim() });
+    if (idem.kind === "handled") return;
 
-    return res.status(201).json({ data: note });
+    return createWithIdempotency(req, res, idem, async (db) => {
+      const note = await db.internalNote.create({
+        data: {
+          ticketId,
+          authorId: req.user!.id,
+          content: content.trim()
+        },
+        include: { author: { select: { id: true, fullName: true, role: true } } }
+      });
+      return { data: note };
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });

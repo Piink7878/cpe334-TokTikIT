@@ -200,3 +200,20 @@ model IdempotencyRecord {
   @@unique([userId, endpoint, ticketId, key])
   @@index([expiresAt])
 }
+
+// Replay protection for creating tickets, public comments and internal notes: a retry that carries the same
+// Idempotency-Key and payload receives the stored response instead of creating a second record.
+model RequestIdempotency {
+  id             Int      @id @default(autoincrement())
+  userId         String
+  endpoint       String
+  key            String
+  requestHash    String
+  responseStatus Int
+  responseBody   Json
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  @@unique([userId, endpoint, key])
+  @@index([expiresAt])
+}
