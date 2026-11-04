@@ -17,8 +17,48 @@ void getPrisma;
 // Supertest can import `app` without opening a port. Do not merge these files.
 export const app = express();
 
-app.use(cors({ origin: true, credentials: true }));
+app.disable("x-powered-by");
+
+// The browser app is served from the Vite dev server (proxying /api); only configured origins may make credentialed
+// cross-origin requests. Requests without an Origin header (same-origin, curl, tests) are unaffected.
+const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET must be set when NODE_ENV=production");
+}
+
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "same-origin");
+  next();
+});
+app.use(cors({ origin: (origin, callback) => callback(null, !origin || allowedOrigins.includes(origin)), credentials: true }));
 app.use(express.json());
+
+// PostgreSQL text columns cannot hold NUL characters; reject them up front instead of failing inside a query.
+const containsNullByte = (value: unknown): boolean => {
+  if (typeof value === "string") return value.includes("\u0000");
+  if (Array.isArray(value)) return value.some(containsNullByte);
+  if (value && typeof value === "object") return Object.entries(value).some(([k, v]) => containsNullByte(k) || containsNullByte(v));
+  return false;
+};
+app.use((req, res, next) => {
+  // An undecodable URL is left to Express (it answers path-parameter decoding failures with a 400 handled below).
+  let url = req.originalUrl;
+  try {
+    url = decodeURIComponent(url);
+  } catch {
+    /* keep the raw URL */
+  }
+  if (containsNullByte(url) || /%00/i.test(req.originalUrl) || containsNullByte(req.body) || containsNullByte(req.query)) {
+    return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Request contains an invalid character" } });
+  }
+  next();
+});
 
 app.use(session({
   secret: process.env.SESSION_SECRET || "default_secret_for_local_dev",
@@ -39,7 +79,7 @@ app.use(session({
 app.post("/api/auth/login", async (req: Request, res: Response): Promise<any> => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
+    if (!email || !password || typeof email !== "string" || typeof password !== "string") {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Email and password are required" } });
     }
 
@@ -55,6 +95,8 @@ app.post("/api/auth/login", async (req: Request, res: Response): Promise<any> =>
       return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid email or password" } });
     }
 
+    // A new session id at login prevents session fixation (a pre-login id never becomes an authenticated one).
+    await new Promise<void>((resolve, reject) => req.session.regenerate((err) => (err ? reject(err) : resolve())));
     req.session.userId = user.id;
     req.session.establishedAt = Date.now();
     
@@ -222,8 +264,8 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
   try {
     const requesterId = req.user!.id;
 
-    const categoryId = parseInt(req.body.categoryId, 10);
-    const relatedSystemId = parseInt(req.body.relatedSystemId, 10);
+    const categoryId = parseId(req.body.categoryId);
+    const relatedSystemId = parseId(req.body.relatedSystemId);
     const summary = req.body.summary?.trim();
     const description = req.body.description?.trim();
     const requestedPriority = req.body.requestedPriority;
@@ -376,6 +418,12 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
 // ---------------------------------------------------------------------------
 // GET /api/tickets - List Requester Tickets (My Tickets)
 // ---------------------------------------------------------------------------
+// Integer ids must fit the database's 32-bit integer column; anything larger is treated like a non-numeric id.
+function parseId(raw: unknown): number {
+  const n = parseInt(String(raw), 10);
+  return Number.isInteger(n) && Math.abs(n) <= 2147483647 ? n : NaN;
+}
+
 const ALL_TICKET_STATUSES = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", "CANCELLED", "REJECTED"];
 const ALL_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 const UNRESOLVED_TICKET_STATUSES = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "REOPENED"];
@@ -420,7 +468,7 @@ app.get("/api/tickets", requireAuth, requirePasswordChangeEnforcement, async (re
       ];
     }
     if (categoryId) {
-      const parsedCategoryId = parseInt(categoryId as string, 10);
+      const parsedCategoryId = parseId(categoryId);
       if (!isNaN(parsedCategoryId)) {
         where.categoryId = parsedCategoryId;
       }
@@ -508,7 +556,7 @@ app.get("/api/tickets/:id", requireAuth, requirePasswordChangeEnforcement, async
   try {
     const requesterId = req.user!.id;
 
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -587,7 +635,7 @@ app.post("/api/tickets/:id/attachments", requireAuth, requirePasswordChangeEnfor
   try {
     const requesterId = req.user!.id;
 
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       if (req.file) fs.unlink(req.file.path, () => {});
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
@@ -660,7 +708,7 @@ app.get("/api/attachments/:id/download", requireAuth, requirePasswordChangeEnfor
   try {
     const requesterId = req.user!.id;
 
-    const attachmentId = parseInt(req.params.id, 10);
+    const attachmentId = parseId(req.params.id);
     if (isNaN(attachmentId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid attachment ID" } });
     }
@@ -710,7 +758,7 @@ app.delete("/api/attachments/:id", requireAuth, requirePasswordChangeEnforcement
   try {
     const requesterId = req.user!.id;
 
-    const attachmentId = parseInt(req.params.id, 10);
+    const attachmentId = parseId(req.params.id);
     if (isNaN(attachmentId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid attachment ID" } });
     }
@@ -807,7 +855,7 @@ app.get("/api/staff/tickets", requireAuth, requirePasswordChangeEnforcement, req
       ];
     }
     if (categoryId) {
-      const parsedCategoryId = parseInt(categoryId as string, 10);
+      const parsedCategoryId = parseId(categoryId);
       if (!isNaN(parsedCategoryId)) {
         where.categoryId = parsedCategoryId;
       }
@@ -945,7 +993,7 @@ app.get("/api/staff/assignees", requireAuth, requirePasswordChangeEnforcement, r
 // ---------------------------------------------------------------------------
 app.get("/api/staff/tickets/:id", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1046,7 +1094,7 @@ async function updateTicketIfUnchanged(
 // ---------------------------------------------------------------------------
 app.patch("/api/staff/tickets/:id/claim", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1088,13 +1136,13 @@ app.patch("/api/staff/tickets/:id/claim", requireAuth, requirePasswordChangeEnfo
 // ---------------------------------------------------------------------------
 app.patch("/api/staff/tickets/:id/assign", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
 
     const { assigneeId } = req.body;
-    if (!assigneeId) {
+    if (!assigneeId || typeof assigneeId !== "string") {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "assigneeId is required" } });
     }
 
@@ -1142,7 +1190,7 @@ app.patch("/api/staff/tickets/:id/assign", requireAuth, requirePasswordChangeEnf
 // ---------------------------------------------------------------------------
 app.patch("/api/staff/tickets/:id/priority", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1187,7 +1235,7 @@ app.patch("/api/staff/tickets/:id/priority", requireAuth, requirePasswordChangeE
 // ---------------------------------------------------------------------------
 app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1299,7 +1347,7 @@ app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnf
 // ---------------------------------------------------------------------------
 app.get("/api/tickets/:id/comments", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1333,7 +1381,7 @@ app.get("/api/tickets/:id/comments", requireAuth, requirePasswordChangeEnforceme
 // ---------------------------------------------------------------------------
 app.post("/api/tickets/:id/comments", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1375,7 +1423,7 @@ app.post("/api/tickets/:id/comments", requireAuth, requirePasswordChangeEnforcem
 // ---------------------------------------------------------------------------
 app.get("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1405,7 +1453,7 @@ app.get("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEnf
 // ---------------------------------------------------------------------------
 app.post("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1507,7 +1555,7 @@ function validateActionTakenInput(body: any, mode: "create" | "update"): string 
 // POST /api/tickets/:id/actions-taken - Record Action Taken
 app.post("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1706,7 +1754,7 @@ app.post("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnf
 // PATCH /api/actions-taken/:actionId - Update Action Taken with Optimistic Concurrency and Revision Audit
 app.patch("/api/actions-taken/:actionId", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const actionId = parseInt(req.params.actionId, 10);
+    const actionId = parseId(req.params.actionId);
     if (isNaN(actionId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid action ID" } });
     }
@@ -1884,7 +1932,7 @@ app.patch("/api/actions-taken/:actionId", requireAuth, requirePasswordChangeEnfo
 // GET /api/tickets/:id/actions-taken - List Actions Taken
 app.get("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -2100,7 +2148,7 @@ app.get("/api/dashboard/staff", requireAuth, requirePasswordChangeEnforcement, r
 // ---------------------------------------------------------------------------
 app.post("/api/tickets/:id/indicate-resolved", requireAuth, requirePasswordChangeEnforcement, requireRole(["REQUESTER"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -2176,7 +2224,7 @@ app.get("/api/admin/users", requireAuth, requirePasswordChangeEnforcement, requi
 app.post("/api/admin/users", requireAuth, requirePasswordChangeEnforcement, requireRole(["ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
     const { name, email, role, password } = req.body;
-    if (!name || !email || !role || !password) {
+    if (!name || !email || !role || !password || [name, email, role, password].some((v) => typeof v !== "string")) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Name, email, role, and password are required" } });
     }
     const validRoles = ["REQUESTER", "IT_STAFF", "ADMIN"];
@@ -2226,6 +2274,12 @@ const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "User ID required" }});
     }
     const { name, email, role, isActive } = req.body;
+    if (
+      [name, email, role].some((v) => v !== undefined && v !== null && typeof v !== "string") ||
+      (isActive !== undefined && typeof isActive !== "boolean")
+    ) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid field type" } });
+    }
     if (role) {
       const validRoles = ["REQUESTER", "IT_STAFF", "ADMIN"];
       if (!validRoles.includes(role)) {
@@ -2347,7 +2401,7 @@ app.post("/api/admin/users/:id/reset-password", requireAuth, requirePasswordChan
   try {
     const userId = req.params.id;
     const { newPassword } = req.body;
-    if (!newPassword) {
+    if (!newPassword || typeof newPassword !== "string") {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "newPassword is required" } });
     }
 
@@ -2371,6 +2425,28 @@ app.post("/api/admin/users/:id/reset-password", requireAuth, requirePasswordChan
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });
   }
+});
+
+// Unknown API paths and body-parser failures answer in JSON like every other API error (no HTML, no stack trace).
+app.use("/api", (_req: Request, res: Response) => {
+  res.status(404).json({ error: { code: "NOT_FOUND", message: "Resource not found" } });
+});
+
+app.use((err: any, _req: Request, res: Response, next: express.NextFunction) => {
+  if (res.headersSent) return next(err);
+  if (err?.type === "entity.parse.failed") {
+    return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Malformed JSON request body" } });
+  }
+  if (err?.type === "entity.too.large") {
+    return res.status(413).json({ error: { code: "PAYLOAD_TOO_LARGE", message: "Request body is too large" } });
+  }
+  // Client errors raised by Express itself (e.g. an undecodable path parameter, an unsupported charset).
+  const status = Number(err?.status ?? err?.statusCode);
+  if (status >= 400 && status < 500) {
+    return res.status(status).json({ error: { code: "VALIDATION_ERROR", message: "The request could not be processed" } });
+  }
+  console.error(err);
+  return res.status(500).json({ error: { message: "Internal server error" } });
 });
 
 export default app;
