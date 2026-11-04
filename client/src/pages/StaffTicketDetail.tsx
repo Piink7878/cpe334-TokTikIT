@@ -96,7 +96,10 @@ export default function StaffTicketDetail() {
   };
 
   // silent = refresh in place after a change, without replacing the page (and its Actions Taken section) by a spinner.
+  // Only the latest request may write state: a slower, older response must not reset what the user has since selected.
+  const fetchSeqRef = useRef(0);
   const fetchTicketAndAssignees = async (silent = false) => {
+    const seq = ++fetchSeqRef.current;
     if (!silent) setLoading(true);
     setErrorMsg("");
     try {
@@ -105,15 +108,17 @@ export default function StaffTicketDetail() {
         getStaffTicketDetail(ticketId),
         getStaffAssignees()
       ]);
+      if (seq !== fetchSeqRef.current) return;
       setTicket(ticketRes);
       setAssignees(assigneesRes.data);
       setAssigneeId(ticketRes.owner?.id || "");
       setItPriority(ticketRes.itPriority);
       setNewStatus(ticketRes.status);
     } catch (err: any) {
+      if (seq !== fetchSeqRef.current) return;
       setErrorMsg(err.message || "Failed to load ticket details");
     } finally {
-      setLoading(false);
+      if (seq === fetchSeqRef.current) setLoading(false);
     }
   };
 
@@ -192,10 +197,11 @@ export default function StaffTicketDetail() {
         setErrorMsg("");
         setSuccessMsg("");
         await updateTicketStatus(ticket.id, status, reason, ticket.updatedAt);
-        setSuccessMsg("Status updated successfully");
         setShowRejectModal(false);
         setRejectionReason("");
+        // Refresh first: it resets the status selector, which would overwrite a choice made while it was running.
         await fetchTicketAndAssignees(true);
+        setSuccessMsg("Status updated successfully");
       } catch (err: any) {
         setShowRejectModal(false);
         if (err.code === "ACTION_TAKEN_REQUIRED") {
@@ -478,18 +484,19 @@ export default function StaffTicketDetail() {
       {showRejectModal && (
         <>
           <div className="modal-backdrop fade show"></div>
-          <div className="modal fade show d-block" tabIndex={-1} role="dialog">
+          <div className="modal fade show d-block" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="reject-modal-title">
             <div className="modal-dialog modal-dialog-centered" role="document">
               <div className="modal-content">
                 <div className="modal-header bg-danger text-white">
-                  <h5 className="modal-title">Reject Ticket</h5>
-                  <button type="button" className="btn-close btn-close-white" onClick={() => setShowRejectModal(false)}></button>
+                  <h5 className="modal-title" id="reject-modal-title">Reject Ticket</h5>
+                  <button type="button" className="btn-close btn-close-white" aria-label="Close" onClick={() => setShowRejectModal(false)}></button>
                 </div>
                 <div className="modal-body">
                   <p>Please provide a reason for rejecting this ticket. This will be recorded as an internal note.</p>
                   <textarea 
                     className="form-control" 
-                    rows={4} 
+                    rows={4}
+                    aria-label="Rejection reason"
                     placeholder="Enter rejection reason..."
                     value={rejectionReason}
                     onChange={e => setRejectionReason(e.target.value)}
