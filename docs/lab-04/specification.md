@@ -426,14 +426,16 @@ model ActionTakenRevision {
   5. *Recovery Verification Test:* Documented in `tests.md §6.2` (`TC-DB-08`), asserting that all pre-existing database rows and attachment binaries are completely intact post-recovery.
 
 ### 9.3 Idempotent Seed Plan (`server/prisma/seed.ts`)
-* Add sample Actions Taken records linked to seeded tickets:
-  * `TKT-1002` (retain its existing status): Add **zero** Action Taken records.
-  * `TKT-1001` (`IN_PROGRESS`): Add **one** Action Taken performed by `staff1`, assigned to `staff1` (`"Inspected email daemon logs; found memory leak; scheduled process restart"` with `followUpRequired: true`, `followUpNote: "Verify heap allocation after restart"`).
-  * `TKT-1004` (`RESOLVED`): Add **at least two** Action Taken records performed by `staff1` (one describing the core-switch reboot and faulty patch-cord replacement, with `result: "Router online; latency normal"`, `followUpRequired: false`; and a second distinct intervention with its own description/result and `followUpRequired: false`). This provides explicit zero-, one-, and multiple-action seed scenarios.
+* Add sample Actions Taken records linked to seeded tickets (zero-, one- and multiple-action scenarios):
+  * `TKT-1002` (retain its existing status): **zero** Action Taken records.
+  * `TKT-1004` (`RESOLVED`): **one** Action Taken (`"Replaced failed router power adapter in Lab 3."`, `followUpRequired: false`), which satisfies the Resolution Gate for the already resolved ticket.
+  * `TKT-1001` (`IN_PROGRESS`): **two** Action Taken records. The first (`"Investigated server error 500 in auth log."`, `followUpRequired: true`) carries **one** `ActionTakenRevision`, so Revision History has seeded data; the second (`"Verified database configuration parameters."`, `followUpRequired: false`) has none.
 * **Zero Dashboard Metrics Seed Accounts (Handout §5.3 Requirement):**
   * Seed a dedicated test requester `req_empty@toktikit.local` with **zero tickets** to verify 0 metrics and empty recent list.
   * Seed a dedicated test staff member `tech_empty@toktikit.local` with **zero assigned tickets and zero actions** to verify 0 active metrics and empty lists.
 * Seeder utilizes check-before-insert (`count` check or upsert) to remain safe for repeated runs.
+  * Each Action Taken and revision is checked individually, so a seed interrupted half-way is completed by the next run and never duplicates rows (verified: two consecutive runs leave `ActionTaken` = 3, `ActionTakenRevision` = 1).
+  * Behaviour inherited from Lab 3 and unchanged: re-running the seed re-applies the seeded fixtures' role/active flags and the `TKT-1001`–`TKT-1004` owner/status/priority, and bumps their `updatedAt`. Password hashes are never reset. Do not re-seed a database whose seeded fixtures have been edited by hand.
 
 ---
 

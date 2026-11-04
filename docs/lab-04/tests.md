@@ -78,6 +78,7 @@
     - **3 tests failed** in `e2e/lab-02/requester-ticket-flow.spec.ts`
     - *Root Cause:* The legacy Lab 2 test expects an obsolete development requester selection dropdown (`h2: Select Development Requester`), which was intentionally replaced in Lab 3 by the authenticated session login flow (`/login`).
     - *Integrity Rule:* This pre-existing failure is documented separately and must not be conflated with Sprint 4 regressions.
+  * **Status of this section:** these figures were recorded before Lab 4 implementation and are kept as the regression reference. The Lab 2 failure listed above was resolved during Sprint 4; the final measured results are in §12.
   * **Baseline Integrity Standard:** Release verification compares final test results against this verified baseline (148 server, 50 client, 24 Lab 3 E2E passed). The team shall not claim "100% full Labs 1–4 E2E regression success" while pre-existing Lab 2 legacy failures remain unresolved. Any failure on Lab 3 or new Lab 4 suites represents a regression that must be resolved.
 
   ---
@@ -1679,6 +1680,9 @@
   | `server/tests/lab-04/performance-smoke.api.test.ts` | Performance-Smoke (`TC-PRF-01`–`TC-PRF-03`) | Dashboards ≤ 300 ms (mean and p95 over 10 calls), Actions Taken list/create ≤ 200 ms, status transition ≤ 250 ms. | Local database, warm connection. |
   | `client/tests/lab-04/Hardening.test.tsx` | Client Hardening | Mobile menu toggle, logout when the session is gone, plain-language network failures, double-click protection on staff actions, dialog error display and inert background. | Draft/typed data preserved after failures. |
   | `e2e/lab-04/hardening.spec.ts` | Playwright E2E (Desktop, Tablet, Mobile) | Per role and screen: no console errors, no failed API calls, no unknown links, no placeholder text, no horizontal overflow, touch targets ≥ 44 px on narrow screens, axe WCAG A/AA scan (including the user-management dialogs), reachable navigation; plus a simulated lost response (the server saves, the browser never receives the answer) for ticket creation, a requester comment and a staff internal note, each retried by the user and created exactly once. | `@axe-core/playwright` (dev dependency). |
+  | `e2e/lab-04/actions-taken-flow.spec.ts` | Playwright E2E (Desktop, Tablet, Mobile) | IT Staff records, validates (axe WCAG scan of the dialog), edits and reviews Revision History of an Action Taken; the Requester sees the same record read-only. | Requester must never see create/edit/revision controls. |
+  | `e2e/lab-04/ticket-resolution.spec.ts` | Playwright E2E (Desktop, Tablet, Mobile) | Permitted transitions per status, Resolution Gate (UI warning and server refusal), audit notes, RESOLVED to REOPENED, rejection reason dialog (axe scan), terminal states lock every control. | Gate and terminal rules are enforced by the server, not only the UI. |
+  | `e2e/lab-04/dashboards.spec.ts` | Playwright E2E (Desktop, Tablet, Mobile) | KPI cards equal the dashboard API response, drill-down links and filters, recent tickets, zero-metric accounts, role protection of both dashboards. | Each dashboard stays closed to the other role (403). |
   | `server/tests/lab-04/contract-regression.api.test.ts` | API Contract Regression (`TC-REG-09`) | Verifies legacy Lab 1–3 endpoints preserve exact original success/error schemas, while new Lab 4 endpoints strictly use nested `{ "error": { "code", "message" } }`. | Global error format replacement strictly prohibited. |
 
   ---
@@ -1687,7 +1691,7 @@
 
   This matrix maps every Functional Requirement (FR), Business Rule (BR), and Acceptance Criterion (AC) from `docs/lab-04/specification.md` to corresponding test case specifications.
 
-  > **Note on Coverage Status:** All requirements are classified as `Test Designed (Pending Implementation)`. This indicates that detailed, actionable test cases and verification procedures have been designed and mapped to authoritative requirements. It does **not** signify that test code has already been written, executed, or passed. Test suite implementation and execution take place in subsequent Sprint 4 implementation issues.
+  > **Note on Coverage Status:** The *Coverage Status* column records the design-level mapping of each requirement to test case specifications. The implemented suites that realise these cases are listed in §8, and §12.3 maps every Acceptance Criterion to the concrete test files that passed in the final release verification.
 
   | Requirement ID | Description | Covered By Test Case IDs | API / UI Reference | Coverage Status | Notes & Dependencies |
   |---|---|---|---|:---:|---|
@@ -1852,25 +1856,71 @@
 
 ## 12. Final Release Verification & Regression Results
 
-Executed at the conclusion of Lab 4 implementation:
+Measured on 2026-11-04 on branch `feat/lab4-7-release-verification` (based on `lab4-staging` at `5ac434e`, which already contains Issues 1–6), against a PostgreSQL 18 development database migrated with `prisma migrate deploy` (9 migrations).
 
 ### 12.1 Automated Test Execution Summary
 
 | Test Suite | Scope | Baseline (Labs 1–3) | Final Lab 4 Result | Status | Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Server Vitest** | Full Server Suite | 13 files, 148 tests passed | **19 files passed, 221 tests passed (0 failed)** | **PASS** | 100% pass across all 19 test files. |
-| **Client Vitest** | Full Client Suite | 11 files, 50 tests passed | **15 files passed, 70 tests passed (0 failed)** | **PASS** | 100% pass across all 15 test files. |
-| **Playwright E2E (Lab 4)** | Sprint 4 Flows | N/A (New in Lab 4) | **15 passed (0 failed)** | **PASS** | Full coverage across Desktop Chrome, Tablet iPad, Mobile Safari. |
-| **Playwright E2E (Lab 3)** | Regression Suite | 24 tests passed | **24 passed (0 failed)** | **PASS** | **Zero new regressions** against verified baseline. |
-| **Playwright E2E (Lab 2)** | Legacy Flow | 3 failed (Pre-existing) | 3 failed (Pre-existing) | **KNOWN** | Unchanged pre-existing failure: expects obsolete Lab 2 dropdown removed in Lab 3. |
-| **TypeScript / Build (Server)** | Type Check & Build | Clean compile | **0 errors (`tsc` exited 0)** | **PASS** | Production build verified. |
-| **TypeScript / Build (Client)** | Type Check & Build | Clean compile | **0 errors (`tsc && vite build` exited 0)** | **PASS** | Production bundle generated with 0 errors. |
+| **Server Vitest** | Full server suite (real database) | 13 files, 148 tests | **22 files, 353 tests passed (0 failed)** | **PASS** | Includes the Lab 1–3 suites and `server/tests/lab-04/*`. |
+| **Client Vitest** | Full client suite | 11 files, 50 tests | **18 files, 173 tests passed (0 failed)** | **PASS** | Includes `client/tests/lab-04/*`. |
+| **Playwright E2E (Lab 4)** | `e2e/lab-04` | N/A | **45 passed (0 failed)** | **PASS** | 4 specs (actions-taken-flow, ticket-resolution, dashboards, hardening) on Desktop Chrome, Tablet iPad, Mobile Safari. |
+| **Playwright E2E (Lab 3)** | `e2e/lab-03` | 24 passed | **24 passed (0 failed)** | **PASS** | No regression. |
+| **Playwright E2E (Lab 2)** | `e2e/lab-02` | 3 failed (obsolete requester dropdown) | **3 passed (0 failed)** | **PASS** | The legacy failure recorded in §1.5 no longer exists. |
+| **Playwright E2E (all)** | `e2e/lab-04 e2e/lab-02 e2e/lab-03` | — | **72 passed (0 failed)** | **PASS** | Run once after the last code change. |
+| **TypeScript / Build (Server)** | `tsc` | Clean | **0 errors** | **PASS** | |
+| **TypeScript / Build (Client)** | `tsc` and `vite build` | Clean | **0 errors, build succeeded** | **PASS** | |
 
-### 12.2 Verification Against Approved Lab 4 Decisions
-- **Resolution Gate:** Verified authoritatively on backend (`COUNT(actionsTaken) >= 1` required for `RESOLVED`, returning HTTP 400 `ACTION_TAKEN_REQUIRED`). Outstanding follow-ups do not block resolution.
-- **Ticket Status Transition Matrix:** All 9 statuses and state transitions verified across unit, API, UI, and E2E suites.
-- **Append-Only History:** Both `ActionTakenRevision` (Action Taken edits) and `InternalNote` (workflow status changes with rejection reasons) verified immutable, append-only, and deterministically ordered.
-- **Optimistic Concurrency & Safe Failure:** `expectedUpdatedAt` atomic conditional updates verified returning HTTP 409 `STALE_UPDATE` / `CONCURRENCY_CONFLICT` with zero partial records.
-- **Durable Idempotency:** Database-backed `IdempotencyRecord` table with 24-hour expiration verified surviving application restarts and returning identical replayed payloads.
-- **Attachment Storage Integrity:** Physical attachments under configured `uploads/lab-02/` verified 100% untouched and preserved in read-only mode.
+### 12.2 Migration, Seed and Recovery Rehearsal (AC-14, TC-DB-08)
 
+A Lab 3 database was rebuilt in a throw-away PostgreSQL database from the 7 migrations and the seed on `origin/main`, plus one attachment row backed by a real file. The rehearsal then applied the current migrations, ran the current seed twice and performed a backup and restore. Every check passed:
+
+| Check | Result |
+| :--- | :--- |
+| Lab 4 tables absent before the upgrade | `ActionTaken`, `ActionTakenRevision`, `IdempotencyRecord`, `RequestIdempotency` did not exist |
+| `prisma migrate deploy` | Applied cleanly; `migrate status` reports the schema up to date |
+| Existing data after the migrations | All 7 pre-existing tables (Attachment 1, Category 4, InternalNote 1, PublicComment 2, RelatedSystem 6, Ticket 4, User 10) identical in row count and content hash |
+| New tables after the migrations | Present and empty |
+| Seed run twice | No new rows on the second run; `ActionTaken` = 3 (`TKT-1001` ×2, `TKT-1004` ×1, `TKT-1002` ×0), `ActionTakenRevision` = 1, `req_empty` and `tech_empty` present |
+| Pre-existing rows after migrate and 2 seed runs | Every column unchanged except `updatedAt` (see note) |
+| `pg_dump` (custom format) then `pg_restore --clean --if-exists` into a disposable database | Every table identical in rows and content hash |
+| Attachment file on disk | SHA-256 unchanged throughout |
+
+Note: the seed upserts the Lab 3 fixtures (users and `TKT-1001`–`TKT-1004`), so a re-run re-applies their role/active flags, owner/status/priority and bumps `updatedAt`. This is the Lab 3 behaviour and was not changed; password hashes are never reset.
+
+### 12.3 Acceptance Criteria Verification
+
+| AC | Verified by |
+| :--- | :--- |
+| AC-01, AC-03, AC-06 | `server/tests/lab-04/actions-taken.api.test.ts`, `e2e/lab-04/actions-taken-flow.spec.ts` |
+| AC-02, AC-05 | `actions-taken.api.test.ts`; `client/tests/lab-04/ActionsTaken.test.tsx`; requester read-only step of `actions-taken-flow.spec.ts` |
+| AC-04, AC-19 | `actions-taken.api.test.ts`, `ActionsTaken.test.tsx`, `actions-taken-flow.spec.ts` (edit, Revision History) |
+| AC-07, AC-08, AC-09, AC-15, AC-18 | `server/tests/lab-04/ticket-workflow.api.test.ts`, `client/tests/lab-04/TicketWorkflow.test.tsx`, `e2e/lab-04/ticket-resolution.spec.ts` |
+| AC-10, AC-12, AC-13, AC-20 | `requester-dashboard.api.test.ts`, `staff-dashboard.api.test.ts`, `RequesterDashboard.test.tsx`, `StaffDashboard.test.tsx`, `e2e/lab-04/dashboards.spec.ts` |
+| AC-11 | `client/tests/lab-04/DashboardNavigation.test.tsx`, `dashboards.spec.ts` (drill-down) |
+| AC-14 | `server/tests/lab-04/migration-regression.api.test.ts` and the rehearsal in §12.2 |
+| AC-16 | Full Lab 1–3 server, client and E2E suites (§12.1) and `contract-regression.api.test.ts` |
+| AC-17 | `actions-taken.api.test.ts`, `ActionsTaken.test.tsx` |
+
+Definition of Done: all suites above pass; the schema change is additive and rehearsed against Lab 3 data; the seed is repeatable; Lab 1–3 contracts are unchanged (`contract-regression.api.test.ts`, Lab 2 and Lab 3 E2E).
+
+### 12.4 Defects Found During Final Verification (all fixed)
+
+| Defect | Found by | Fix |
+| :--- | :--- | :--- |
+| The close button of the Reject Ticket dialog had no accessible name and the dialog was not labelled (axe `button-name`). | `ticket-resolution.spec.ts` axe scan | `aria-label`, `aria-modal`, `aria-labelledby` on the dialog and a label on the reason field. |
+| A slower, older ticket fetch (React StrictMode runs the first one twice in development) could overwrite a status the user had just selected, leaving the Change button disabled. | Intermittent `ticket-resolution.spec.ts` failures, traced | Only the latest fetch updates the Staff Ticket Detail page. |
+| After a status change the success banner appeared before the refresh had finished, and the refresh then reset the status selector. | Same | The banner is shown after the refresh. |
+| The Staff Queue rendered one button per page in a non-wrapping row, so a queue of about 50 pages scrolled horizontally. | `hardening.spec.ts` overflow check once the E2E runs had created enough tickets | The page buttons wrap (`flex-wrap`). |
+| `specification.md` §9.3 described a different seed from the implemented one; this document still held figures from an earlier branch. | Release audit | Specification and this section now state the measured, implemented values. |
+
+### 12.5 Verification Against Approved Lab 4 Decisions
+- **Resolution Gate:** enforced in the server (`RESOLVED` needs at least one Action Taken; `400 ACTION_TAKEN_REQUIRED`) and checked in the browser by `ticket-resolution.spec.ts`. Outstanding follow-ups do not block resolution.
+- **Status Transition Matrix and terminal states:** verified by API, client and E2E suites; `CLOSED`, `CANCELLED` and `REJECTED` lock status, assignment, priority and Action Taken controls.
+- **Append-only history:** `ActionTakenRevision` and the status audit written as Internal Notes are never updated or deleted.
+- **Concurrency and retries:** conditional updates return `409` for a stale change; `Idempotency-Key` on ticket, comment and internal note creation and on Action Taken creation replays the stored response instead of creating a duplicate.
+- **Attachments and legacy data:** untouched by the migrations and by the backup and restore rehearsal (§12.2).
+
+### 12.6 Known Limitations
+- The E2E specs create tickets in the development database and do not delete them, so the Staff Queue grows with each run. Re-create the database or run against a disposable one when that matters.
+- Re-running the seed re-applies the Lab 3 fixtures (see the note in §12.2).
