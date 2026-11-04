@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { apiFetch, readJson } from "../api";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function Login() {
@@ -16,16 +17,16 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await apiFetch("/api/auth/login", {
         credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
       
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) {
-        throw new Error(data.error?.message || "Login failed");
+        throw new Error(data?.error?.message || "Login failed. Please try again.");
       }
 
       login(data.user);

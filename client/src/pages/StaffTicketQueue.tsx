@@ -144,7 +144,7 @@ export default function StaffTicketQueue() {
             </div>
             
             <div className="col-md-2">
-              <select className="form-select" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
+              <select className="form-select" aria-label="Filter by status" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
                 <option value="">All Statuses</option>
                 <option value="NEW">New</option>
                 <option value="OPEN">Open</option>
@@ -160,7 +160,7 @@ export default function StaffTicketQueue() {
             </div>
 
             <div className="col-md-2">
-              <select className="form-select" value={priority} onChange={e => { setPriority(e.target.value); setPage(1); }}>
+              <select className="form-select" aria-label="Filter by IT priority" value={priority} onChange={e => { setPriority(e.target.value); setPage(1); }}>
                 <option value="">All Priorities</option>
                 <option value="LOW">Low</option>
                 <option value="MEDIUM">Medium</option>
@@ -171,7 +171,7 @@ export default function StaffTicketQueue() {
             </div>
 
             <div className="col-md-2">
-              <select className="form-select" value={categoryId} onChange={e => { setCategoryId(e.target.value); setPage(1); }}>
+              <select className="form-select" aria-label="Filter by category" value={categoryId} onChange={e => { setCategoryId(e.target.value); setPage(1); }}>
                 <option value="">All Categories</option>
                 {categories.map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
@@ -180,7 +180,7 @@ export default function StaffTicketQueue() {
             </div>
             
             <div className="col-md-3">
-              <select className="form-select" value={ownerId} onChange={e => { setOwnerId(e.target.value); setPage(1); }}>
+              <select className="form-select" aria-label="Filter by owner" value={ownerId} onChange={e => { setOwnerId(e.target.value); setPage(1); }}>
                 <option value="">Any Owner</option>
                 <option value="unassigned">Unassigned</option>
                 <option value={user?.id}>My Tickets</option>
@@ -201,7 +201,7 @@ export default function StaffTicketQueue() {
             </div>
 
             <div className="col-md-3">
-              <select className="form-select" value={`${sortBy}-${sortOrder}`} onChange={e => {
+              <select className="form-select" aria-label="Sort order" value={`${sortBy}-${sortOrder}`} onChange={e => {
                 const [sb, so] = e.target.value.split("-");
                 setSortBy(sb);
                 setSortOrder(so as "asc" | "desc");

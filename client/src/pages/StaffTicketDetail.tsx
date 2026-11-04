@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { 
   getStaffTicketDetail, 
@@ -10,6 +10,7 @@ import {
   addPublicComment,
   addInternalNote
 } from "../api";
+import { createKeyTracker } from "../idempotency";
 import { useAuth } from "../contexts/AuthContext";
 import ActionsTakenSection from "../components/ActionsTakenSection";
 
@@ -57,16 +58,19 @@ export default function StaffTicketDetail() {
   const [internalNoteText, setInternalNoteText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
   const [submittingNote, setSubmittingNote] = useState(false);
+  const commentKeys = useRef(createKeyTracker()).current;
+  const noteKeys = useRef(createKeyTracker()).current;
 
   const handleAddPublicComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!publicCommentText.trim()) return;
     setSubmittingComment(true);
     try {
-      await addPublicComment(ticket.id, publicCommentText);
+      await addPublicComment(ticket.id, publicCommentText, commentKeys.keyFor(`${ticket.id}|${publicCommentText.trim()}`));
+      commentKeys.reset();
       setSuccessMsg("Public comment added successfully");
       setPublicCommentText("");
-      await fetchTicketAndAssignees();
+      await fetchTicketAndAssignees(true); // in place, so a draft in the other form is not lost
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to add public comment");
     } finally {
@@ -79,10 +83,11 @@ export default function StaffTicketDetail() {
     if (!internalNoteText.trim()) return;
     setSubmittingNote(true);
     try {
-      await addInternalNote(ticket.id, internalNoteText);
+      await addInternalNote(ticket.id, internalNoteText, noteKeys.keyFor(`${ticket.id}|${internalNoteText.trim()}`));
+      noteKeys.reset();
       setSuccessMsg("Internal note added successfully");
       setInternalNoteText("");
-      await fetchTicketAndAssignees();
+      await fetchTicketAndAssignees(true); // in place, so a draft in the other form is not lost
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to add internal note");
     } finally {
@@ -116,42 +121,62 @@ export default function StaffTicketDetail() {
     fetchTicketAndAssignees();
   }, [id]);
 
-  const handleClaim = async () => {
+  // Claim / assign / priority / status each send a write; a double click or a held Enter key must send only one.
+  // The ref blocks a second call immediately; the state disables the buttons so the user can see it is working.
+  const actingRef = useRef(false);
+  const [acting, setActing] = useState(false);
+  const runExclusive = async (action: () => Promise<void>) => {
+    if (actingRef.current) return;
+    actingRef.current = true;
+    setActing(true);
     try {
-      setErrorMsg("");
-      setSuccessMsg("");
-      await claimTicket(ticket.id);
-      setSuccessMsg("Ticket claimed successfully");
-      await fetchTicketAndAssignees(true);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Failed to claim ticket");
+      await action();
+    } finally {
+      actingRef.current = false;
+      setActing(false);
     }
   };
 
-  const handleAssign = async () => {
-    if (!assigneeId) return;
-    try {
-      setErrorMsg("");
-      setSuccessMsg("");
-      await assignTicket(ticket.id, assigneeId);
-      setSuccessMsg("Ticket assigned successfully");
-      await fetchTicketAndAssignees(true);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Failed to assign ticket");
-    }
+  const handleClaim = () =>
+    runExclusive(async () => {
+      try {
+        setErrorMsg("");
+        setSuccessMsg("");
+        await claimTicket(ticket.id);
+        setSuccessMsg("Ticket claimed successfully");
+        await fetchTicketAndAssignees(true);
+      } catch (err: any) {
+        setErrorMsg(err.message || "Failed to claim ticket");
+      }
+    });
+
+  const handleAssign = () => {
+    if (!assigneeId) return Promise.resolve();
+    return runExclusive(async () => {
+      try {
+        setErrorMsg("");
+        setSuccessMsg("");
+        await assignTicket(ticket.id, assigneeId);
+        setSuccessMsg("Ticket assigned successfully");
+        await fetchTicketAndAssignees(true);
+      } catch (err: any) {
+        setErrorMsg(err.message || "Failed to assign ticket");
+      }
+    });
   };
 
-  const handleUpdatePriority = async () => {
-    try {
-      setErrorMsg("");
-      setSuccessMsg("");
-      await updateTicketPriority(ticket.id, itPriority);
-      setSuccessMsg("Priority updated successfully");
-      await fetchTicketAndAssignees(true);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Failed to update priority");
-    }
-  };
+  const handleUpdatePriority = () =>
+    runExclusive(async () => {
+      try {
+        setErrorMsg("");
+        setSuccessMsg("");
+        await updateTicketPriority(ticket.id, itPriority);
+        setSuccessMsg("Priority updated successfully");
+        await fetchTicketAndAssignees(true);
+      } catch (err: any) {
+        setErrorMsg(err.message || "Failed to update priority");
+      }
+    });
 
   const handleUpdateStatus = async () => {
     if (newStatus === "REJECTED") {
@@ -161,28 +186,29 @@ export default function StaffTicketDetail() {
     await executeStatusUpdate(newStatus);
   };
 
-  const executeStatusUpdate = async (status: string, reason?: string) => {
-    try {
-      setErrorMsg("");
-      setSuccessMsg("");
-      await updateTicketStatus(ticket.id, status, reason, ticket.updatedAt);
-      setSuccessMsg("Status updated successfully");
-      setShowRejectModal(false);
-      setRejectionReason("");
-      await fetchTicketAndAssignees(true);
-    } catch (err: any) {
-      setShowRejectModal(false);
-      if (err.code === "ACTION_TAKEN_REQUIRED") {
-        setErrorMsg("Record at least one Action Taken before resolving this ticket.");
-      } else if (err.status === 409) {
-        // Show the latest state, then explain why the change was not applied.
+  const executeStatusUpdate = (status: string, reason?: string) =>
+    runExclusive(async () => {
+      try {
+        setErrorMsg("");
+        setSuccessMsg("");
+        await updateTicketStatus(ticket.id, status, reason, ticket.updatedAt);
+        setSuccessMsg("Status updated successfully");
+        setShowRejectModal(false);
+        setRejectionReason("");
         await fetchTicketAndAssignees(true);
-        setErrorMsg("This ticket was changed by someone else, so your status change was not applied. The latest status is shown; review it and try again.");
-      } else {
-        setErrorMsg(err.message || "Failed to update status");
+      } catch (err: any) {
+        setShowRejectModal(false);
+        if (err.code === "ACTION_TAKEN_REQUIRED") {
+          setErrorMsg("Record at least one Action Taken before resolving this ticket.");
+        } else if (err.status === 409) {
+          // Show the latest state, then explain why the change was not applied.
+          await fetchTicketAndAssignees(true);
+          setErrorMsg("This ticket was changed by someone else, so your status change was not applied. The latest status is shown; review it and try again.");
+        } else {
+          setErrorMsg(err.message || "Failed to update status");
+        }
       }
-    }
-  };
+    });
 
   const handleRejectSubmit = () => {
     if (!rejectionReason.trim()) {
@@ -397,10 +423,10 @@ export default function StaffTicketDetail() {
                       <option key={a.id} value={a.id}>{a.fullName} ({a.role})</option>
                     ))}
                   </select>
-                  <button className="btn btn-primary text-nowrap" onClick={handleAssign} disabled={isTerminal || !assigneeId || assigneeId === ticket.owner?.id}>Assign</button>
+                  <button className="btn btn-primary text-nowrap" onClick={handleAssign} disabled={acting || isTerminal || !assigneeId || assigneeId === ticket.owner?.id}>Assign</button>
                 </div>
                 {ticket.owner?.id !== user?.id && !isTerminal && (
-                  <button className="btn btn-outline-primary mt-2 w-100" onClick={handleClaim}>
+                  <button className="btn btn-outline-primary mt-2 w-100" onClick={handleClaim} disabled={acting}>
                     Claim Ticket
                   </button>
                 )}
@@ -416,7 +442,7 @@ export default function StaffTicketDetail() {
                     <option value="HIGH">HIGH</option>
                     <option value="CRITICAL">CRITICAL</option>
                   </select>
-                  <button className="btn btn-primary" onClick={handleUpdatePriority} disabled={isTerminal || itPriority === ticket.itPriority}>Update</button>
+                  <button className="btn btn-primary" onClick={handleUpdatePriority} disabled={acting || isTerminal || itPriority === ticket.itPriority}>Update</button>
                 </div>
               </div>
 
@@ -433,7 +459,7 @@ export default function StaffTicketDetail() {
                           <option key={st} value={st}>{st.replace(/_/g, " ")}</option>
                         ))}
                       </select>
-                      <button className="btn btn-warning" onClick={handleUpdateStatus} disabled={newStatus === ticket.status}>Change</button>
+                      <button className="btn btn-warning" onClick={handleUpdateStatus} disabled={acting || newStatus === ticket.status}>Change</button>
                     </div>
                     {newStatus === "RESOLVED" && actionsCount === 0 && (
                       <div className="alert alert-warning py-2 mt-2 mb-0 small" role="alert">
@@ -471,7 +497,7 @@ export default function StaffTicketDetail() {
                 </div>
                 <div className="modal-footer">
                   <button type="button" className="btn btn-secondary" onClick={() => setShowRejectModal(false)}>Cancel</button>
-                  <button type="button" className="btn btn-danger" onClick={handleRejectSubmit} disabled={!rejectionReason.trim()}>Reject Ticket</button>
+                  <button type="button" className="btn btn-danger" onClick={handleRejectSubmit} disabled={acting || !rejectionReason.trim()}>Reject Ticket</button>
                 </div>
               </div>
             </div>

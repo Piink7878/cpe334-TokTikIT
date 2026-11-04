@@ -1,15 +1,13 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Requester Ticket Flow', () => {
-  test('Complete flow: Select requester -> Create Ticket -> Search -> View Detail', async ({ page }, testInfo) => {
+  test('Complete flow: Login -> Create Ticket -> Search -> View Detail -> Attachment lifecycle', async ({ page }, testInfo) => {
     const viewName = testInfo.project.name.split(' ')[0].toLowerCase();
-    // 1. Visit the app and select a Development Requester
-    await page.goto('/');
-    await expect(page.locator('h2', { hasText: 'Select Development Requester' })).toBeVisible();
-    
-    // Select the first available requester
-    await page.waitForSelector('select');
-    await page.locator('button', { hasText: 'Continue' }).click();
+    // 1. Log in as a seeded requester (Lab 3 replaced the development requester picker with real authentication)
+    await page.goto('/login');
+    await page.fill('input[type="email"]', 'req2@toktikit.local');
+    await page.fill('input[type="password"]', 'Password123!');
+    await page.click('button[type="submit"]');
 
     // Verify we are on My Tickets
     await expect(page.locator('h2', { hasText: 'My Tickets' })).toBeVisible();

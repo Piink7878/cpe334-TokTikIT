@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { getTicket, Ticket, getPublicComments, addPublicComment, indicateProblemResolved, getActionsTaken } from "../api";
+import { createKeyTracker } from "../idempotency";
 import { AttachmentSection } from "../components/AttachmentSection";
 import ActionsTakenSection from "../components/ActionsTakenSection";
 
@@ -17,10 +18,14 @@ export const RequesterTicketDetail: React.FC = () => {
   const [activeTab, setActiveTab] = useState("attachments");
   const [newComment, setNewComment] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
+  const commentKeys = useRef(createKeyTracker()).current;
   const [actionLoading, setActionLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  // `error` means the ticket could not be loaded and replaces the page. A failed comment or action is shown inline
+  // (`actionError`) so the form and what the user typed stay available for a retry.
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
 
   const fetchTicket = async () => {
     if (!selectedRequester || !id) return;
@@ -48,14 +53,21 @@ export const RequesterTicketDetail: React.FC = () => {
     e.preventDefault();
     if (!newComment.trim() || !ticket) return;
     setSubmittingComment(true);
+    setActionError("");
     try {
-      await addPublicComment(ticket.id, newComment);
+      await addPublicComment(ticket.id, newComment, commentKeys.keyFor(`${ticket.id}|${newComment.trim()}`));
+      commentKeys.reset();
       setSuccessMsg("Comment added successfully.");
       setNewComment("");
-      const commentsRes = await getPublicComments(ticket.id);
-      setComments(commentsRes.data);
+      try {
+        const commentsRes = await getPublicComments(ticket.id);
+        setComments(commentsRes.data);
+      } catch {
+        // The comment is saved; only the list refresh failed. Say so, so the user does not post it again.
+        setActionError("Your comment was saved, but the list could not be refreshed. Reload the page to see it.");
+      }
     } catch (err: any) {
-      setError(err.message || "Failed to add comment.");
+      setActionError(err.message || "Failed to add comment.");
     } finally {
       setSubmittingComment(false);
     }
@@ -64,13 +76,14 @@ export const RequesterTicketDetail: React.FC = () => {
   const handleIndicateResolved = async () => {
     if (!ticket) return;
     setActionLoading(true);
+    setActionError("");
     try {
       await indicateProblemResolved(ticket.id);
       setSuccessMsg("Notified IT Staff that the problem appears resolved.");
       const commentsRes = await getPublicComments(ticket.id);
       setComments(commentsRes.data);
     } catch (err: any) {
-      setError(err.message || "Failed to notify IT staff.");
+      setActionError(err.message || "Failed to notify IT staff.");
     } finally {
       setActionLoading(false);
     }
@@ -126,6 +139,7 @@ export const RequesterTicketDetail: React.FC = () => {
 
   return (
     <div className="container py-4" style={{ maxWidth: '1200px' }}>
+      {actionError && <div className="alert alert-danger" role="alert">{actionError}</div>}
       {successMsg && <div className="alert alert-success alert-dismissible fade show">{successMsg}<button type="button" className="btn-close" onClick={() => setSuccessMsg("")}></button></div>}
       
       <div className="mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -226,7 +240,7 @@ export const RequesterTicketDetail: React.FC = () => {
               <button 
                 className={`nav-link ${activeTab === 'comments' ? 'active' : ''}`} 
                 onClick={() => setActiveTab('comments')}
-                style={activeTab === 'comments' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#8C9B94', backgroundColor: 'transparent', border: 'none' }}
+                style={activeTab === 'comments' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#5B6B63', backgroundColor: 'transparent', border: 'none' }}
               >
                 Public Comments ({comments.length})
               </button>
@@ -235,7 +249,7 @@ export const RequesterTicketDetail: React.FC = () => {
               <button 
                 className={`nav-link ${activeTab === 'attachments' ? 'active' : ''}`}
                 onClick={() => setActiveTab('attachments')}
-                style={activeTab === 'attachments' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#8C9B94', backgroundColor: 'transparent', border: 'none' }}
+                style={activeTab === 'attachments' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#5B6B63', backgroundColor: 'transparent', border: 'none' }}
               >
                 Attachments ({ticket.attachments ? ticket.attachments.filter(a => !a.isRemoved).length : 0})
               </button>
@@ -244,13 +258,13 @@ export const RequesterTicketDetail: React.FC = () => {
               <button
                 className={`nav-link ${activeTab === 'actions' ? 'active' : ''}`}
                 onClick={() => setActiveTab('actions')}
-                style={activeTab === 'actions' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#8C9B94', backgroundColor: 'transparent', border: 'none' }}
+                style={activeTab === 'actions' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#5B6B63', backgroundColor: 'transparent', border: 'none' }}
               >
                 Service Actions ({actionsCount})
               </button>
             </li>
             <li className="nav-item">
-              <button className="nav-link disabled" style={{ color: '#8C9B94', backgroundColor: 'transparent', border: 'none' }} disabled>
+              <button className="nav-link disabled" style={{ color: '#5B6B63', backgroundColor: 'transparent', border: 'none' }} disabled>
                 Event Log (0)
               </button>
             </li>

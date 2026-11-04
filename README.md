@@ -51,7 +51,11 @@ Edit `server/.env`:
 DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/toktickit?schema=public"
 PORT=3000
 SESSION_SECRET="your-secure-session-secret"
+# Comma-separated browser origins allowed to call the API with credentials (default: http://localhost:5173)
+CORS_ORIGIN="http://localhost:5173"
 ```
+
+`SESSION_SECRET` is required when `NODE_ENV=production`. If you open the client on another origin (for example `http://127.0.0.1:5173`), add it to `CORS_ORIGIN`.
 
 **Client** — copy (default value works for local dev):
 

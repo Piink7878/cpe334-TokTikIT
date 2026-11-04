@@ -401,6 +401,8 @@ model ActionTakenRevision {
 2. **Explicit Performer vs Assignee Separation:** `performedById` is mandatory and immutably bound to the creator's session, while `assignedToId` is nullable and references an approved active technician. This satisfies the requirement that a ticket's actions can be delegated or assigned to an approved technician while permanently preserving non-repudiable audit attribution of the user who entered the work.
 3. **Immutable Append-Only Revision History (`ActionTakenRevision`):** Modifications to an Action Taken record never discard historical data. Every successful edit atomically increments a sequential `revisionNumber` and records full JSON snapshots of `originalData` and `updatedData`, the editing technician `editedById`, and `editedAt`. The parent `ActionTaken.performedById` remains strictly unchanged, preserving original creator non-repudiation.
 
+**Additional table (Issue 6, `RequestIdempotency`):** an additive, non-destructive table (no foreign keys, no change to existing tables) that stores replay-protection records for ticket, public-comment and internal-note creation: `userId`, `endpoint`, `key`, `requestHash`, `responseStatus`, `responseBody`, `createdAt`, `expiresAt`, with a unique index on `(userId, endpoint, key)` and an index on `expiresAt`. Expired rows are purged on the next write. See `api-spec.md` §1.3.
+
 ### 9.2 Migration and Rollback/Recovery Strategy
 * **Forward Migration:** Standard Prisma migration (`npx prisma migrate dev --name add_actions_taken`). Strictly additive (`CREATE TABLE "ActionTaken"`, foreign key constraints, indexes). Existing tables remain unmodified.
 * **Tested Recovery & Rollback Procedure (Handout §5.2 Requirement):**

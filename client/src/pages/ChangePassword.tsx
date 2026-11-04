@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { apiFetch, readJson } from "../api";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function ChangePassword() {
@@ -24,16 +25,16 @@ export default function ChangePassword() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/change-password", {
+      const res = await apiFetch("/api/auth/change-password", {
         credentials: "include",
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
       });
       
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) {
-        throw new Error(data.error?.message || "Failed to update password");
+        throw new Error(data?.error?.message || "Failed to update password");
       }
 
       if (user) {

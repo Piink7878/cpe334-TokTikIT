@@ -30,7 +30,7 @@ const renderPage = () =>
     </MemoryRouter>
   );
 
-const card = (name: string) => screen.getByRole("link", { name: new RegExp(`^${name}:`) });
+const card = (name: string) => screen.getByRole("link", { name: new RegExp(`^${name} \\d`) });
 
 describe("Requester dashboard (Lab 4 Issue 5, FR-15)", () => {
   beforeEach(() => {
@@ -43,6 +43,7 @@ describe("Requester dashboard (Lab 4 Issue 5, FR-15)", () => {
     renderPage();
 
     expect(await screen.findByRole("heading", { name: "Requester Dashboard" })).toBeInTheDocument();
+    await waitFor(() => expect(card("Total Tickets")).toBeInTheDocument());
     expect(card("Total Tickets")).toHaveAttribute("href", "/my-tickets");
     expect(card("Total Tickets")).toHaveTextContent("12");
     expect(card("Active Tickets")).toHaveAttribute("href", "/my-tickets?status=NEW,OPEN,IN_PROGRESS");
@@ -100,7 +101,7 @@ describe("Requester dashboard (Lab 4 Issue 5, FR-15)", () => {
     (api.getRequesterDashboard as any).mockReturnValue(new Promise(() => {}));
     renderPage();
     expect(screen.getByLabelText("Loading metrics")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /^Total Tickets:/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^Total Tickets \d/ })).not.toBeInTheDocument();
   });
 
   it("shows an error with a working Retry when the API fails", async () => {
@@ -108,7 +109,7 @@ describe("Requester dashboard (Lab 4 Issue 5, FR-15)", () => {
     renderPage();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Unable to load dashboard metrics. Please try again.");
-    expect(screen.queryByRole("link", { name: /^Total Tickets:/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^Total Tickets \d/ })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(card("Total Tickets")).toHaveTextContent("12"));

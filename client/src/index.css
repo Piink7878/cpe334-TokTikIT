@@ -240,3 +240,85 @@ a.kpi-card:focus-visible {
 .kpi-skeleton {
   min-height: 150px;
 }
+
+/* Navigation touch targets (ui-spec 5.4: at least 44px) */
+.navbar .nav-link,
+.navbar .navbar-toggler,
+.navbar .btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+.navbar .navbar-toggler {
+  min-width: 44px;
+  justify-content: center;
+}
+@media (min-width: 992px) {
+  .navbar .navbar-toggler {
+    display: none;
+  }
+}
+
+/* Zen Green accessible variants of the Bootstrap outline buttons (contrast >= 4.5:1) */
+.btn-outline-success {
+  --bs-btn-color: var(--color-primary);
+  --bs-btn-border-color: var(--color-primary);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--color-primary);
+  --bs-btn-hover-border-color: var(--color-primary);
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: var(--color-primary-hover);
+  --bs-btn-active-border-color: var(--color-primary-hover);
+}
+.btn-outline-secondary {
+  --bs-btn-color: #495057;
+  --bs-btn-border-color: #6c757d;
+}
+.text-success {
+  color: var(--color-primary) !important;
+}
+
+/* Links and outline buttons follow Zen Green (Bootstrap's default blue fails contrast on tinted backgrounds) */
+:root {
+  --bs-link-color-rgb: 0, 107, 60;
+  --bs-link-hover-color-rgb: 0, 84, 47;
+}
+.btn-outline-primary {
+  --bs-btn-color: var(--color-primary);
+  --bs-btn-border-color: var(--color-primary);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--color-primary);
+  --bs-btn-hover-border-color: var(--color-primary);
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: var(--color-primary-hover);
+  --bs-btn-active-border-color: var(--color-primary-hover);
+}
+
+/* Touch targets on tablet and mobile (ui-spec 5.4: at least 44px) */
+@media (max-width: 991.98px) {
+  .btn-close,
+  .modal-header .btn-close {
+    box-sizing: content-box;
+    width: 16px;
+    height: 16px;
+    padding: 14px;
+  }
+  .btn,
+  .page-link,
+  .nav-tabs .nav-link {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Red outline buttons: Bootstrap's #dc3545 is below 4.5:1 on light grey panels */
+.btn-outline-danger {
+  --bs-btn-color: #B02A37;
+  --bs-btn-border-color: #B02A37;
+  --bs-btn-hover-bg: #B02A37;
+  --bs-btn-hover-border-color: #B02A37;
+  --bs-btn-active-bg: #8E1F2B;
+  --bs-btn-active-border-color: #8E1F2B;
+}
