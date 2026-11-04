@@ -214,3 +214,29 @@ body {
   width: 1.25rem;
   height: 1.25rem;
 }
+
+/* Dashboard KPI cards (Lab 4, ui-spec §2.1.4) */
+.kpi-card {
+  display: block;
+  background-color: var(--color-pale-green);
+  border: 1px solid #BCE3CE;
+  border-radius: 12px;
+  transition: box-shadow 0.2s ease-in-out, border-color 0.2s ease-in-out;
+}
+a.kpi-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 107, 60, 0.12);
+  border-color: var(--color-primary);
+}
+a.kpi-card:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.kpi-card .kpi-value {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-primary);
+}
+.kpi-skeleton {
+  min-height: 150px;
+}

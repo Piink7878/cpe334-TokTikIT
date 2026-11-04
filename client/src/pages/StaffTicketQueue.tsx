@@ -1,11 +1,21 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { getStaffTickets, getCategories, StaffTicket, StaffTicketFilters, Category } from "../api";
 import { useAuth } from "../contexts/AuthContext";
 
+// "NEW,OPEN" -> "New, Open" for a multi-value drill-down that has no single dropdown entry.
+const listLabel = (list: string) =>
+  list.split(",").map((s) => s.trim().charAt(0) + s.trim().slice(1).toLowerCase().replace(/_/g, " ")).join(", ");
+
 export default function StaffTicketQueue() {
   const { user } = useAuth();
-  
+  const [searchParams] = useSearchParams();
+  // ownerId=me (dashboard "My Active Tickets") selects the "My Tickets" dropdown entry, which holds the user's id.
+  const ownerFromUrl = () => {
+    const o = searchParams.get("ownerId") || "";
+    return o === "me" ? user?.id || "" : o;
+  };
+
   const [tickets, setTickets] = useState<StaffTicket[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   
@@ -17,12 +27,22 @@ export default function StaffTicketQueue() {
   const [limit] = useState(10);
   
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
-  const [priority, setPriority] = useState("");
+  // Dashboard drill-downs arrive as query parameters (status/itPriority may hold a comma-separated list).
+  const [status, setStatus] = useState(() => searchParams.get("status") || "");
+  const [priority, setPriority] = useState(() => searchParams.get("itPriority") || "");
   const [categoryId, setCategoryId] = useState("");
-  const [ownerId, setOwnerId] = useState("");
+  const [ownerId, setOwnerId] = useState(() => ownerFromUrl());
+  const [followUpRequired, setFollowUpRequired] = useState(() => searchParams.get("followUpRequired") === "true");
   const [sortBy, setSortBy] = useState("createdAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  useEffect(() => {
+    setStatus(searchParams.get("status") || "");
+    setPriority(searchParams.get("itPriority") || "");
+    setOwnerId(ownerFromUrl());
+    setFollowUpRequired(searchParams.get("followUpRequired") === "true");
+    setPage(1);
+  }, [searchParams]);
 
   const fetchFilters = useCallback(async () => {
     try {
@@ -49,6 +69,7 @@ export default function StaffTicketQueue() {
       if (priority) filters.itPriority = priority; // Filtering by IT priority
       if (categoryId) filters.categoryId = parseInt(categoryId, 10);
       if (ownerId) filters.ownerId = ownerId;
+      if (followUpRequired) filters.followUpRequired = true;
       
       const res = await getStaffTickets(filters);
       setTickets(res.data);
@@ -58,7 +79,7 @@ export default function StaffTicketQueue() {
     } finally {
       setLoading(false);
     }
-  }, [page, limit, search, status, priority, categoryId, ownerId, sortBy, sortOrder]);
+  }, [page, limit, search, status, priority, categoryId, ownerId, followUpRequired, sortBy, sortOrder]);
 
   useEffect(() => {
     fetchFilters();
@@ -92,11 +113,14 @@ export default function StaffTicketQueue() {
       case "WAITING_FOR_REQUESTER": return "text-bg-info";
       case "RESOLVED": return "text-bg-dark";
       case "CLOSED": return "text-bg-secondary";
+      case "REOPENED": return "text-bg-warning";
+      case "CANCELLED":
+      case "REJECTED": return "text-bg-danger";
       default: return "text-bg-light";
     }
   };
 
-  const hasActiveFilters = search.trim() !== "" || status !== "" || priority !== "" || categoryId !== "" || ownerId !== "";
+  const hasActiveFilters = search.trim() !== "" || status !== "" || priority !== "" || categoryId !== "" || ownerId !== "" || followUpRequired;
 
   return (
     <div className="container py-4">
@@ -128,6 +152,10 @@ export default function StaffTicketQueue() {
                 <option value="WAITING_FOR_REQUESTER">Waiting for Requester</option>
                 <option value="RESOLVED">Resolved</option>
                 <option value="CLOSED">Closed</option>
+                <option value="REOPENED">Reopened</option>
+                <option value="CANCELLED">Cancelled</option>
+                <option value="REJECTED">Rejected</option>
+                {status.includes(",") && <option value={status}>{listLabel(status)}</option>}
               </select>
             </div>
 
@@ -138,6 +166,7 @@ export default function StaffTicketQueue() {
                 <option value="MEDIUM">Medium</option>
                 <option value="HIGH">High</option>
                 <option value="CRITICAL">Critical</option>
+                {priority.includes(",") && <option value={priority}>{listLabel(priority)}</option>}
               </select>
             </div>
 
@@ -156,6 +185,19 @@ export default function StaffTicketQueue() {
                 <option value="unassigned">Unassigned</option>
                 <option value={user?.id}>My Tickets</option>
               </select>
+            </div>
+
+            <div className="col-md-3 d-flex align-items-center">
+              <div className="form-check">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="follow-up-filter"
+                  checked={followUpRequired}
+                  onChange={e => { setFollowUpRequired(e.target.checked); setPage(1); }}
+                />
+                <label className="form-check-label" htmlFor="follow-up-filter">Follow-up required</label>
+              </div>
             </div>
 
             <div className="col-md-3">
@@ -255,6 +297,7 @@ export default function StaffTicketQueue() {
                     setPriority("");
                     setCategoryId("");
                     setOwnerId("");
+                    setFollowUpRequired(false);
                     setPage(1);
                   }}
                 >

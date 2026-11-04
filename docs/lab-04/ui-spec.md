@@ -588,7 +588,7 @@ All interactive elements (buttons, clickable cards, tab buttons, modal close but
 
 | Component | ARIA Role / Attribute |
 |---|---|
-| Dashboard page | `<main role="main">` |
+| Dashboard page | Content inside the `<main>` landmark that `AppLayout` already provides (no second `<main>`); sections use `aria-labelledby` headings |
 | KPI card (clickable link) | `<a>` with `aria-label` describing the metric and destination |
 | Add/Edit Action Taken Modal | `role="dialog"`, `aria-modal="true"`, `aria-labelledby="modal-title-id"` |
 | Status Breakdown badge buttons | `role="button"` or `<a>` with descriptive `aria-label` |
@@ -606,7 +606,7 @@ Maps UI behaviors to Functional Requirements (FR), Business Rules (BR), and Acce
 | Requester Dashboard (`/requester-dashboard`) | Displays 4 metric KPI cards from backend | FR-13, FR-15 | BR-12, BR-13 | AC-10 |
 | Requester Dashboard — KPI Card Click | Navigates to `/my-tickets` with status filter | FR-15 | BR-12 | AC-11 |
 | Requester Dashboard — Recent & Resolved Lists | Shows recently updated tickets (single `recentTickets` list sorted by `updatedAt DESC`; attention callout for `WAITING_FOR_REQUESTER` and `RESOLVED` items) | FR-15 | BR-12 | AC-20 |
-| IT Staff Dashboard (`/staff-dashboard`) | Displays 5 metric KPI cards from backend | FR-14, FR-16 | BR-12 | AC-12 |
+| IT Staff Dashboard (`/staff-dashboard`) | Displays 4 metric KPI cards from backend, plus the status-breakdown badges | FR-14, FR-16 | BR-12 | AC-12 |
 | IT Staff Dashboard — `ticketsRequiringFollowUp` | Distinct ticket count; 1 ticket with N follow-up actions = 1 | FR-16 | BR-12 | AC-13 |
 | IT Staff Dashboard — Status Breakdown | Clickable badges for all 9 statuses incl. REJECTED | FR-16 | BR-12 | — |
 | IT Staff Dashboard — Recent Urgent & Actions Lists | Shows recent queue tickets (sorted by `updatedAt DESC`) and current-user actions | FR-16 | BR-12 | AC-20 |

@@ -27,12 +27,42 @@ export default function AppLayout() {
           
           <div className="collapse navbar-collapse">
             <ul className="navbar-nav me-auto mb-2 mb-lg-0">
-              <li className="nav-item">
-                <NavLink to="/my-tickets" className={({isActive}) => `nav-link ${isActive ? 'fw-bold' : ''}`} style={({isActive}) => ({ color: isActive ? "var(--color-primary)" : "var(--color-text-main)", fontWeight: isActive ? 700 : 500 })}>My Tickets</NavLink>
-              </li>
-              <li className="nav-item">
-                <NavLink to="/create-ticket" className={({isActive}) => `nav-link ${isActive ? 'fw-bold' : ''}`} style={({isActive}) => ({ color: isActive ? "var(--color-primary)" : "var(--color-text-main)", fontWeight: isActive ? 700 : 500 })}>Create Ticket</NavLink>
-              </li>
+              {user?.role === "REQUESTER" && (
+                <>
+                  <li className="nav-item">
+                    <NavLink to="/requester-dashboard" className={({isActive}) => `nav-link ${isActive ? 'fw-bold' : ''}`} style={({isActive}) => ({ color: isActive ? "var(--color-primary)" : "var(--color-text-main)", fontWeight: isActive ? 700 : 500 })}>Dashboard</NavLink>
+                  </li>
+                  <li className="nav-item">
+                    <NavLink to="/my-tickets" className={({isActive}) => `nav-link ${isActive ? 'fw-bold' : ''}`} style={({isActive}) => ({ color: isActive ? "var(--color-primary)" : "var(--color-text-main)", fontWeight: isActive ? 700 : 500 })}>My Tickets</NavLink>
+                  </li>
+                  <li className="nav-item">
+                    <NavLink to="/create-ticket" className={({isActive}) => `nav-link ${isActive ? 'fw-bold' : ''}`} style={({isActive}) => ({ color: isActive ? "var(--color-primary)" : "var(--color-text-main)", fontWeight: isActive ? 700 : 500 })}>Create Ticket</NavLink>
+                  </li>
+                </>
+              )}
+              {user?.role === "IT_STAFF" && (
+                <>
+                  <li className="nav-item">
+                    <NavLink to="/staff-dashboard" className={({isActive}) => `nav-link ${isActive ? 'fw-bold' : ''}`} style={({isActive}) => ({ color: isActive ? "var(--color-primary)" : "var(--color-text-main)", fontWeight: isActive ? 700 : 500 })}>Dashboard</NavLink>
+                  </li>
+                  <li className="nav-item">
+                    <NavLink to="/staff-queue" className={({isActive}) => `nav-link ${isActive ? 'fw-bold' : ''}`} style={({isActive}) => ({ color: isActive ? "var(--color-primary)" : "var(--color-text-main)", fontWeight: isActive ? 700 : 500 })}>Ticket Queue</NavLink>
+                  </li>
+                </>
+              )}
+              {user?.role === "ADMIN" && (
+                <>
+                  <li className="nav-item">
+                    <NavLink to="/staff-dashboard" className={({isActive}) => `nav-link ${isActive ? 'fw-bold' : ''}`} style={({isActive}) => ({ color: isActive ? "var(--color-primary)" : "var(--color-text-main)", fontWeight: isActive ? 700 : 500 })}>Staff Dashboard</NavLink>
+                  </li>
+                  <li className="nav-item">
+                    <NavLink to="/staff-queue" className={({isActive}) => `nav-link ${isActive ? 'fw-bold' : ''}`} style={({isActive}) => ({ color: isActive ? "var(--color-primary)" : "var(--color-text-main)", fontWeight: isActive ? 700 : 500 })}>Ticket Queue</NavLink>
+                  </li>
+                  <li className="nav-item">
+                    <NavLink to="/user-management" className={({isActive}) => `nav-link ${isActive ? 'fw-bold' : ''}`} style={({isActive}) => ({ color: isActive ? "var(--color-primary)" : "var(--color-text-main)", fontWeight: isActive ? 700 : 500 })}>User Management</NavLink>
+                  </li>
+                </>
+              )}
               <li className="nav-item">
                 <NavLink to="/health" className={({isActive}) => `nav-link ${isActive ? 'fw-bold' : ''}`} style={({isActive}) => ({ color: isActive ? "var(--color-primary)" : "var(--color-text-muted)" })}>Health</NavLink>
               </li>

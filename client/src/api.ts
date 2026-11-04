@@ -248,7 +248,8 @@ export interface StaffTicketFilters {
   requestedPriority?: string;
   itPriority?: string;
   status?: string;
-  ownerId?: string | 'unassigned';
+  ownerId?: string | 'unassigned' | 'me';
+  followUpRequired?: boolean;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
   page?: number;
@@ -606,5 +607,59 @@ export async function updateActionTaken(
     body: JSON.stringify(data)
   });
   if (!res.ok) throw await toApiError(res, "Failed to update action taken");
+  return res.json();
+}
+
+// Lab 4: Dashboards (FR-13, FR-14)
+export interface RequesterDashboardData {
+  totalTickets: number;
+  activeTickets: number;
+  waitingForRequesterTickets: number;
+  resolvedOrClosedTickets: number;
+  recentTickets: Array<{
+    id: number;
+    ticketNumber: string;
+    title: string;
+    currentStatus: string;
+    itPriority: string;
+    updatedAt: string;
+  }>;
+}
+
+export interface StaffDashboardData {
+  unassignedTickets: number;
+  myActiveTickets: number;
+  ticketsRequiringFollowUp: number;
+  criticalOrHighPriorityTickets: number;
+  statusBreakdown: Record<string, number>;
+  recentTickets: Array<{
+    id: number;
+    ticketNumber: string;
+    title: string;
+    currentStatus: string;
+    itPriority: string;
+    ownerId: string | null;
+    updatedAt: string;
+  }>;
+  currentUserActions: Array<{
+    id: number;
+    ticketId: number;
+    ticketNumber: string;
+    description: string;
+    result: string;
+    actionDateTime: string;
+    followUpRequired: boolean;
+  }>;
+}
+
+export async function getRequesterDashboard(): Promise<{ data: RequesterDashboardData }> {
+  const res = await fetch(`${API_URL}/api/dashboard/requester`, { credentials: "include" });
+  if (!res.ok) throw await toApiError(res, "Failed to load requester dashboard");
+  return res.json();
+}
+
+export async function getStaffDashboard(): Promise<{ data: StaffDashboardData }> {
+  const res = await fetch(`${API_URL}/api/dashboard/staff`, { credentials: "include" });
+  if (!res.ok) throw await toApiError(res, "Failed to load staff dashboard");
   return res.json();
 }

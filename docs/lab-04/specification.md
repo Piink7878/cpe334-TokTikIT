@@ -293,7 +293,7 @@ All transitions listed above are enabled. No transition is conditional on future
 #### Drill-Down Navigation (Requester):
 * Clicking **Total Tickets** $\rightarrow$ `/my-tickets` (all filters reset).
 * Clicking **Active Tickets** $\rightarrow$ `/my-tickets?status=NEW,OPEN,IN_PROGRESS`.
-* Clicking **Waiting for Requester** $\rightarrow$ `/my-tickets?status=WAITING_FOR_REQUESTER`.
+* Clicking **Waiting for Me** (`waitingForRequesterTickets`) $\rightarrow$ `/my-tickets?status=WAITING_FOR_REQUESTER`.
 * Clicking **Resolved / Closed** $\rightarrow$ `/my-tickets?status=RESOLVED,CLOSED`.
 * Clicking any item in **Recent Tickets** $\rightarrow$ `/tickets/:id` (direct ticket detail view).
 
@@ -429,8 +429,8 @@ model ActionTakenRevision {
   * `TKT-1001` (`IN_PROGRESS`): Add **one** Action Taken performed by `staff1`, assigned to `staff1` (`"Inspected email daemon logs; found memory leak; scheduled process restart"` with `followUpRequired: true`, `followUpNote: "Verify heap allocation after restart"`).
   * `TKT-1004` (`RESOLVED`): Add **at least two** Action Taken records performed by `staff1` (one describing the core-switch reboot and faulty patch-cord replacement, with `result: "Router online; latency normal"`, `followUpRequired: false`; and a second distinct intervention with its own description/result and `followUpRequired: false`). This provides explicit zero-, one-, and multiple-action seed scenarios.
 * **Zero Dashboard Metrics Seed Accounts (Handout §5.3 Requirement):**
-  * Seed a dedicated test requester `req_empty@toktik.it` with **zero tickets** to verify 0 metrics and empty recent list.
-  * Seed a dedicated test staff member `tech_empty@toktik.it` with **zero assigned tickets and zero actions** to verify 0 active metrics and empty lists.
+  * Seed a dedicated test requester `req_empty@toktikit.local` with **zero tickets** to verify 0 metrics and empty recent list.
+  * Seed a dedicated test staff member `tech_empty@toktikit.local` with **zero assigned tickets and zero actions** to verify 0 active metrics and empty lists.
 * Seeder utilizes check-before-insert (`count` check or upsert) to remain safe for repeated runs.
 
 ---
@@ -476,7 +476,7 @@ model ActionTakenRevision {
 * **AC-08 (Invalid Status Transition Rejected):** Given a ticket in `NEW` status, when an IT Staff member attempts to transition the status directly to `RESOLVED`, then the server rejects the request with HTTP 400 Bad Request and status remains `NEW`.
 * **AC-09 (Terminal Status Immutability):** Given a ticket in `CLOSED`, `CANCELLED`, or `REJECTED` status, when any mutation is attempted on status, assignment, or priority, then the server returns HTTP 400 Bad Request.
 * **AC-10 (Requester Dashboard Metric Accuracy):** Given an authenticated Requester, when they request `GET /api/dashboard/requester`, then the returned metrics accurately reflect the count of tickets created by that user matching the active, waiting, and resolved definitions.
-* **AC-11 (Requester Dashboard Drill-Down):** Given a Requester clicking the "Waiting for Requester" metric card, then the UI navigates to `/my-tickets?status=WAITING_FOR_REQUESTER` with the ticket list appropriately filtered.
+* **AC-11 (Requester Dashboard Drill-Down):** Given a Requester clicking the "Waiting for Me" metric card, then the UI navigates to `/my-tickets?status=WAITING_FOR_REQUESTER` with the ticket list appropriately filtered.
 * **AC-12 (IT Staff Dashboard Metric Accuracy):** Given an authenticated IT Staff member, when they request `GET /api/dashboard/staff`, then the returned metrics accurately reflect the global unassigned, personal active, follow-up required, and priority counts.
 * **AC-13 (IT Staff Dashboard Follow-Up Metric Distinct Count):** Given an unresolved ticket with multiple Action Taken records marked `followUpRequired = true`, when the IT Staff dashboard metrics are fetched, then `ticketsRequiringFollowUp` increments by exactly one for that ticket.
 * **AC-14 (Non-Destructive Migration Verification):** Given an existing database containing Lab 1–3 seeded tickets (`TKT-1001`–`TKT-1004`) and attachments, when the Lab 4 migration is applied, then all legacy tickets, relationships, and attachments remain intact and queryable.

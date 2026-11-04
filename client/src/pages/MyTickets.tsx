@@ -1,23 +1,35 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { getTickets, getCategories, Category, Ticket, TicketFilters, PaginatedResponse } from "../api";
 import { useAuth } from "../contexts/AuthContext";
+
+// "NEW,OPEN" -> "New, Open" for a multi-status drill-down that has no single dropdown entry.
+const statusListLabel = (list: string) =>
+  list.split(',').map(s => s.trim().charAt(0) + s.trim().slice(1).toLowerCase().replace(/_/g, ' ')).join(', ');
 
 export default function MyTickets() {
   const { user } = useAuth();
   const selectedRequester = user;
+  const [searchParams] = useSearchParams();
   
   const [categories, setCategories] = useState<Category[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
-  const [filters, setFilters] = useState<TicketFilters>({
+  // The dashboard drill-downs arrive as ?status=A,B (one or several statuses).
+  const [filters, setFilters] = useState<TicketFilters>(() => ({
     page: 1,
     pageSize: 8,
     sortBy: 'createdAt',
-    sortOrder: 'desc'
-  });
+    sortOrder: 'desc',
+    status: searchParams.get('status') || undefined
+  }));
+
+  useEffect(() => {
+    const urlStatus = searchParams.get('status') || undefined;
+    setFilters(prev => (prev.status === urlStatus ? prev : { ...prev, status: urlStatus, page: 1 }));
+  }, [searchParams]);
   
   const [pagination, setPagination] = useState<PaginatedResponse<Ticket>['pagination']>({
     page: 1,
@@ -191,11 +203,17 @@ export default function MyTickets() {
               <select className="form-select" name="status" value={filters.status || ''} onChange={handleFilterChange} aria-label="Status">
                 <option value="">All Statuses</option>
                 <option value="NEW">New</option>
-                <option value="IN_PROGRESS">In Progress</option>
                 <option value="OPEN">Open</option>
-                <option value="PENDING">Pending</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="WAITING_FOR_REQUESTER">Waiting for Requester</option>
                 <option value="RESOLVED">Resolved</option>
                 <option value="CLOSED">Closed</option>
+                <option value="REOPENED">Reopened</option>
+                <option value="CANCELLED">Cancelled</option>
+                <option value="REJECTED">Rejected</option>
+                {filters.status && filters.status.includes(',') && (
+                  <option value={filters.status}>{statusListLabel(filters.status)}</option>
+                )}
               </select>
             </div>
 
