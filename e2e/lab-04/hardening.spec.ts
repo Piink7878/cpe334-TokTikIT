@@ -180,4 +180,74 @@ test.describe('Hardening sweep (Lab 4 Issue 6)', () => {
     await page.getByRole('button', { name: 'Logout' }).click();
     await expect(page).toHaveURL(/\/login/);
   });
+
+  // The server saves the request but the response never reaches the browser (timeout). The user submits again.
+  // The retry carries the same Idempotency-Key, so nothing is created twice.
+  async function loseFirstResponse(page: Page, urlPart: string) {
+    let lost = false;
+    await page.route(`**${urlPart}`, async (route) => {
+      if (route.request().method() !== 'POST' || lost) return route.continue();
+      lost = true;
+      await route.fetch(); // the server processes the request and commits it
+      await route.abort('timedout'); // ...but the browser never sees the answer
+    });
+  }
+
+  test('a lost response on ticket creation does not create a duplicate when the user retries', async ({ page }) => {
+    await login(page, ACCOUNTS.requester);
+    await page.goto('/create-ticket');
+    await loseFirstResponse(page, '/api/tickets');
+
+    const summary = `Retry safety ticket ${Date.now()}`;
+    await page.getByLabel(/Category/).selectOption({ index: 1 });
+    await page.getByLabel(/Related System/).selectOption({ index: 1 });
+    await page.getByLabel(/Ticket Summary/).fill(summary);
+    await page.getByLabel(/Description/).fill('The first response was lost, so the form is submitted a second time.');
+
+    await page.getByRole('button', { name: /submit ticket/i }).click();
+    await expect(page.getByText(/Unable to reach the server/)).toBeVisible();
+    await expect(page.getByLabel(/Ticket Summary/)).toHaveValue(summary); // nothing was lost from the form
+
+    await page.getByRole('button', { name: /submit ticket/i }).click();
+    await expect(page.getByRole('heading', { name: 'Ticket Created Successfully' })).toBeVisible();
+
+    const list = await (await page.request.get(`/api/tickets?search=${encodeURIComponent(summary)}`)).json();
+    expect(list.pagination.totalItems).toBe(1);
+  });
+
+  test('a lost response on a comment or an internal note does not duplicate it when retried', async ({ page }) => {
+    // A ticket owned by the requester to comment on.
+    await login(page, ACCOUNTS.requester);
+    const ticketId = await createTicket(page);
+
+    // Requester comment
+    const comment = `Retry safety comment ${Date.now()}`;
+    await page.goto(`/tickets/${ticketId}`);
+    await page.getByRole('button', { name: /Public Comments/ }).click();
+    await loseFirstResponse(page, `/api/tickets/${ticketId}/comments`);
+    await page.getByPlaceholder('Type your message to IT staff...').fill(comment);
+    await page.getByRole('button', { name: 'Post Comment' }).click();
+    await expect(page.getByText(/Unable to reach the server/)).toBeVisible();
+    await expect(page.getByPlaceholder('Type your message to IT staff...')).toHaveValue(comment);
+    await page.getByRole('button', { name: 'Post Comment' }).click();
+    await expect(page.getByText('Comment added successfully.')).toBeVisible();
+    const comments = await (await page.request.get(`/api/tickets/${ticketId}/comments`)).json();
+    expect(comments.data.filter((c: any) => c.content === comment)).toHaveLength(1);
+
+    // Staff internal note
+    await page.context().clearCookies();
+    await page.unroute('**/*');
+    await login(page, ACCOUNTS.staff);
+    const note = `Retry safety note ${Date.now()}`;
+    await page.goto(`/staff/tickets/${ticketId}`);
+    await loseFirstResponse(page, `/api/tickets/${ticketId}/internal-notes`);
+    await page.getByPlaceholder('Write an internal operational note...').fill(note);
+    await page.getByRole('button', { name: 'Save Internal Note' }).click();
+    await expect(page.getByText(/Unable to reach the server/)).toBeVisible();
+    await expect(page.getByPlaceholder('Write an internal operational note...')).toHaveValue(note);
+    await page.getByRole('button', { name: 'Save Internal Note' }).click();
+    await expect(page.getByText('Internal note added successfully')).toBeVisible();
+    const notes = await (await page.request.get(`/api/tickets/${ticketId}/internal-notes`)).json();
+    expect(notes.data.filter((n: any) => n.content === note)).toHaveLength(1);
+  });
 });
