@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { getCategories, getRelatedSystems, createTicket, Category, RelatedSystem } from "../api";
+import { createKeyTracker } from "../idempotency";
 
 export default function CreateTicket() {
   const { user } = useAuth();
@@ -20,6 +21,8 @@ export default function CreateTicket() {
   });
   
   const [files, setFiles] = useState<File[]>([]);
+  // One Idempotency-Key per logical submission: resubmitting the same content after a lost response is a retry.
+  const keyTracker = useRef(createKeyTracker()).current;
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -127,7 +130,12 @@ export default function CreateTicket() {
     });
 
     try {
-      const response = await createTicket(data);
+      const signature = JSON.stringify([
+        formData.categoryId, formData.relatedSystemId, formData.requestedPriority, formData.summary.trim(), formData.description.trim(),
+        files.map((f) => [f.name, f.size, f.lastModified])
+      ]);
+      const response = await createTicket(data, keyTracker.keyFor(signature));
+      keyTracker.reset();
       setSuccessTicketNumber(response.data.ticketNumber);
     } catch (err: any) {
       setErrorMsg(err.message || "An unexpected error occurred while creating the ticket.");

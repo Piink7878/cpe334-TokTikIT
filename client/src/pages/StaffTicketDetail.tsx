@@ -10,6 +10,7 @@ import {
   addPublicComment,
   addInternalNote
 } from "../api";
+import { createKeyTracker } from "../idempotency";
 import { useAuth } from "../contexts/AuthContext";
 import ActionsTakenSection from "../components/ActionsTakenSection";
 
@@ -57,16 +58,19 @@ export default function StaffTicketDetail() {
   const [internalNoteText, setInternalNoteText] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
   const [submittingNote, setSubmittingNote] = useState(false);
+  const commentKeys = useRef(createKeyTracker()).current;
+  const noteKeys = useRef(createKeyTracker()).current;
 
   const handleAddPublicComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!publicCommentText.trim()) return;
     setSubmittingComment(true);
     try {
-      await addPublicComment(ticket.id, publicCommentText);
+      await addPublicComment(ticket.id, publicCommentText, commentKeys.keyFor(`${ticket.id}|${publicCommentText.trim()}`));
+      commentKeys.reset();
       setSuccessMsg("Public comment added successfully");
       setPublicCommentText("");
-      await fetchTicketAndAssignees();
+      await fetchTicketAndAssignees(true); // in place, so a draft in the other form is not lost
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to add public comment");
     } finally {
@@ -79,10 +83,11 @@ export default function StaffTicketDetail() {
     if (!internalNoteText.trim()) return;
     setSubmittingNote(true);
     try {
-      await addInternalNote(ticket.id, internalNoteText);
+      await addInternalNote(ticket.id, internalNoteText, noteKeys.keyFor(`${ticket.id}|${internalNoteText.trim()}`));
+      noteKeys.reset();
       setSuccessMsg("Internal note added successfully");
       setInternalNoteText("");
-      await fetchTicketAndAssignees();
+      await fetchTicketAndAssignees(true); // in place, so a draft in the other form is not lost
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to add internal note");
     } finally {

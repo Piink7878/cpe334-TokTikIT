@@ -147,11 +147,14 @@ export async function getCategories() {
   return res.json();
 }
 
-export async function createTicket(formData: FormData) {
+// Optional Idempotency-Key header: a retry with the same key never creates a second record (see ./idempotency).
+const idempotencyHeaders = (idempotencyKey?: string): Record<string, string> => (idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
+
+export async function createTicket(formData: FormData, idempotencyKey?: string) {
   const res = await apiFetch(`${API_URL}/api/tickets`, {
     credentials: "include",
     method: "POST",
-    headers: {},
+    headers: idempotencyHeaders(idempotencyKey),
     body: formData
   });
 
@@ -419,10 +422,10 @@ export async function getPublicComments(ticketId: number) {
   return res.json();
 }
 
-export async function addPublicComment(ticketId: number, content: string) {
+export async function addPublicComment(ticketId: number, content: string, idempotencyKey?: string) {
   const res = await apiFetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...idempotencyHeaders(idempotencyKey) },
     credentials: "include",
     body: JSON.stringify({ content })
   });
@@ -433,10 +436,10 @@ export async function addPublicComment(ticketId: number, content: string) {
   return res.json();
 }
 
-export async function addInternalNote(ticketId: number, content: string) {
+export async function addInternalNote(ticketId: number, content: string, idempotencyKey?: string) {
   const res = await apiFetch(`${API_URL}/api/tickets/${ticketId}/internal-notes`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...idempotencyHeaders(idempotencyKey) },
     credentials: "include",
     body: JSON.stringify({ content })
   });
