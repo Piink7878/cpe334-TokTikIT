@@ -226,7 +226,7 @@ export const RequesterTicketDetail: React.FC = () => {
               <button 
                 className={`nav-link ${activeTab === 'comments' ? 'active' : ''}`} 
                 onClick={() => setActiveTab('comments')}
-                style={activeTab === 'comments' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#8C9B94', backgroundColor: 'transparent', border: 'none' }}
+                style={activeTab === 'comments' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#5B6B63', backgroundColor: 'transparent', border: 'none' }}
               >
                 Public Comments ({comments.length})
               </button>
@@ -235,7 +235,7 @@ export const RequesterTicketDetail: React.FC = () => {
               <button 
                 className={`nav-link ${activeTab === 'attachments' ? 'active' : ''}`}
                 onClick={() => setActiveTab('attachments')}
-                style={activeTab === 'attachments' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#8C9B94', backgroundColor: 'transparent', border: 'none' }}
+                style={activeTab === 'attachments' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#5B6B63', backgroundColor: 'transparent', border: 'none' }}
               >
                 Attachments ({ticket.attachments ? ticket.attachments.filter(a => !a.isRemoved).length : 0})
               </button>
@@ -244,13 +244,13 @@ export const RequesterTicketDetail: React.FC = () => {
               <button
                 className={`nav-link ${activeTab === 'actions' ? 'active' : ''}`}
                 onClick={() => setActiveTab('actions')}
-                style={activeTab === 'actions' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#8C9B94', backgroundColor: 'transparent', border: 'none' }}
+                style={activeTab === 'actions' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#5B6B63', backgroundColor: 'transparent', border: 'none' }}
               >
                 Service Actions ({actionsCount})
               </button>
             </li>
             <li className="nav-item">
-              <button className="nav-link disabled" style={{ color: '#8C9B94', backgroundColor: 'transparent', border: 'none' }} disabled>
+              <button className="nav-link disabled" style={{ color: '#5B6B63', backgroundColor: 'transparent', border: 'none' }} disabled>
                 Event Log (0)
               </button>
             </li>

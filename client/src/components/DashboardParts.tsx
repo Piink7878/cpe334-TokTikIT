@@ -10,15 +10,15 @@ interface KpiCardProps {
   to: string;
 }
 
-// The whole card is the link (ui-spec §2.1.4); the label is the accessible name used by tests and screen readers.
+// The whole card is the link (ui-spec §2.1.4); its accessible name is its visible text (title, value, caption).
 export function KpiCard({ title, value, caption, to }: KpiCardProps) {
   return (
     <div className="col-12 col-sm-6 col-lg-3">
-      <Link to={to} className="card text-decoration-none h-100 kpi-card" aria-label={`${title}: ${value}. ${caption}`}>
+      <Link to={to} className="card text-decoration-none h-100 kpi-card">
         <div className="card-body p-4">
           <div className="text-muted fw-semibold mb-2" style={{ fontSize: 14 }}>{title}</div>
           <div className="kpi-value mb-2">{value}</div>
-          <div className="text-muted" style={{ fontSize: 13 }}>{caption} &rarr;</div>
+          <div className="text-muted" style={{ fontSize: 13 }}>{caption} <span aria-hidden="true">&rarr;</span></div>
         </div>
       </Link>
     </div>

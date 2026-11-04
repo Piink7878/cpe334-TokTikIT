@@ -46,7 +46,7 @@ const renderPage = () =>
     </MemoryRouter>
   );
 
-const card = (name: string) => screen.getByRole("link", { name: new RegExp(`^${name}:`) });
+const card = (name: string) => screen.getByRole("link", { name: new RegExp(`^${name} \\d`) });
 
 describe("IT Staff dashboard (Lab 4 Issue 5, FR-16)", () => {
   beforeEach(() => {
@@ -59,6 +59,7 @@ describe("IT Staff dashboard (Lab 4 Issue 5, FR-16)", () => {
     renderPage();
 
     expect(await screen.findByRole("heading", { name: "IT Staff Dashboard" })).toBeInTheDocument();
+    await waitFor(() => expect(card("Unassigned Tickets")).toBeInTheDocument());
     expect(card("Unassigned Tickets")).toHaveAttribute("href", "/staff-queue?ownerId=unassigned&status=NEW,OPEN");
     expect(card("Unassigned Tickets")).toHaveTextContent("5");
     expect(card("My Active Tickets")).toHaveAttribute("href", "/staff-queue?ownerId=me&status=OPEN,IN_PROGRESS,WAITING_FOR_REQUESTER,REOPENED");

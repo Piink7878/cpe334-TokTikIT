@@ -183,12 +183,12 @@ export default function CreateTicket() {
           {/* Read-Only System Row */}
           <div className="row g-4 mb-4">
             <div className="col-md-6">
-              <label className="form-label d-block mb-1 text-muted fw-semibold" style={{ fontSize: 14 }}>Ticket Date</label>
-              <input type="text" className="form-control" value={currentDate} disabled style={{ backgroundColor: "var(--color-surface-muted)", color: "var(--color-text-muted)" }} />
+              <label htmlFor="ticket-date" className="form-label d-block mb-1 text-muted fw-semibold" style={{ fontSize: 14 }}>Ticket Date</label>
+              <input id="ticket-date" type="text" className="form-control" value={currentDate} disabled style={{ backgroundColor: "var(--color-surface-muted)", color: "var(--color-text-muted)" }} />
             </div>
             <div className="col-md-6">
-              <label className="form-label d-block mb-1 text-muted fw-semibold" style={{ fontSize: 14 }}>Requester</label>
-              <input type="text" className="form-control" value={selectedRequester?.fullName || ""} disabled style={{ backgroundColor: "var(--color-surface-muted)", color: "var(--color-text-muted)" }} />
+              <label htmlFor="requester-name" className="form-label d-block mb-1 text-muted fw-semibold" style={{ fontSize: 14 }}>Requester</label>
+              <input id="requester-name" type="text" className="form-control" value={selectedRequester?.fullName || ""} disabled style={{ backgroundColor: "var(--color-surface-muted)", color: "var(--color-text-muted)" }} />
             </div>
           </div>
 
@@ -197,10 +197,10 @@ export default function CreateTicket() {
           {/* Group Classification Fields */}
           <div className="row g-4 mb-4">
             <div className="col-md-6">
-              <label className="form-label d-block mb-1 fw-semibold" style={{ fontSize: 14, color: "var(--color-text-main)" }}>
+              <label htmlFor="categoryId" className="form-label d-block mb-1 fw-semibold" style={{ fontSize: 14, color: "var(--color-text-main)" }}>
                 Category <span style={{ color: "var(--color-danger)" }}>*</span>
               </label>
-              <select 
+              <select id="categoryId" 
                 className={`form-select ${fieldErrors.categoryId ? "is-invalid" : ""}`}
                 name="categoryId"
                 value={formData.categoryId}
@@ -215,10 +215,10 @@ export default function CreateTicket() {
             </div>
 
             <div className="col-md-6">
-              <label className="form-label d-block mb-1 fw-semibold" style={{ fontSize: 14, color: "var(--color-text-main)" }}>
+              <label htmlFor="relatedSystemId" className="form-label d-block mb-1 fw-semibold" style={{ fontSize: 14, color: "var(--color-text-main)" }}>
                 Related System <span style={{ color: "var(--color-danger)" }}>*</span>
               </label>
-              <select 
+              <select id="relatedSystemId" 
                 className={`form-select ${fieldErrors.relatedSystemId ? "is-invalid" : ""}`}
                 name="relatedSystemId"
                 value={formData.relatedSystemId}
@@ -235,10 +235,10 @@ export default function CreateTicket() {
 
           <div className="row g-4 mb-4">
             <div className="col-md-6">
-              <label className="form-label d-block mb-1 fw-semibold" style={{ fontSize: 14, color: "var(--color-text-main)" }}>
+              <label htmlFor="requestedPriority" className="form-label d-block mb-1 fw-semibold" style={{ fontSize: 14, color: "var(--color-text-main)" }}>
                 Requested Priority <span style={{ color: "var(--color-danger)" }}>*</span>
               </label>
-              <select 
+              <select id="requestedPriority" 
                 className="form-select"
                 name="requestedPriority"
                 value={formData.requestedPriority}
@@ -255,10 +255,10 @@ export default function CreateTicket() {
 
           {/* Main Content Fields */}
           <div className="mb-4">
-            <label className="form-label d-block mb-1 fw-semibold" style={{ fontSize: 14, color: "var(--color-text-main)" }}>
+            <label htmlFor="summary" className="form-label d-block mb-1 fw-semibold" style={{ fontSize: 14, color: "var(--color-text-main)" }}>
               Ticket Summary <span style={{ color: "var(--color-danger)" }}>*</span>
             </label>
-            <input 
+            <input id="summary" 
               type="text" 
               className={`form-control ${fieldErrors.summary ? "is-invalid" : ""}`}
               name="summary"
@@ -273,10 +273,10 @@ export default function CreateTicket() {
           </div>
 
           <div className="mb-4">
-            <label className="form-label d-block mb-1 fw-semibold" style={{ fontSize: 14, color: "var(--color-text-main)" }}>
+            <label htmlFor="description" className="form-label d-block mb-1 fw-semibold" style={{ fontSize: 14, color: "var(--color-text-main)" }}>
               Description <span style={{ color: "var(--color-danger)" }}>*</span>
             </label>
-            <textarea 
+            <textarea id="description" 
               className={`form-control ${fieldErrors.description ? "is-invalid" : ""}`}
               name="description"
               rows={5}
@@ -291,10 +291,10 @@ export default function CreateTicket() {
 
           {/* Attachments */}
           <div className="mb-5 p-4 rounded" style={{ backgroundColor: "var(--color-bg-page)", border: "1px dashed var(--color-border-input)" }}>
-            <label className="form-label d-block mb-2 fw-semibold" style={{ fontSize: 14, color: "var(--color-text-main)" }}>
+            <label htmlFor="attachments" className="form-label d-block mb-2 fw-semibold" style={{ fontSize: 14, color: "var(--color-text-main)" }}>
               Attachments (Optional)
             </label>
-            <input 
+            <input id="attachments" 
               type="file" 
               className="form-control mb-2" 
               multiple 
