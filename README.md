@@ -32,8 +32,10 @@ Full-stack: React + Express + PostgreSQL + Prisma.
 git clone https://github.com/Piink7878/cpe334-TokTikIT.git
 cd cpe334-TokTikIT
 
+npm install                 # repository root: Playwright + axe-core for the end-to-end tests
 npm --prefix server install
 npm --prefix client install
+npx playwright install      # one-time download of the Chromium / WebKit browsers used by the E2E tests
 ```
 
 ### 2. Configure Environment Variables
@@ -102,19 +104,6 @@ npm run prisma:seed
 
 The seed is safe to run repeatedly: it never duplicates rows. Re-running it restores the seeded accounts' role / active flags and the owner, status and IT priority of the four seeded tickets (`TKT-1001`..`TKT-1004`) to their seed values; it does not touch other data and never resets passwords.
 
----|---|---|---|
-| **Administrator** | `admin@toktikit.local` | Active | `false` |
-| **IT Staff** | `staff1@toktikit.local` | Active | `false` |
-| **IT Staff** | `staff2@toktikit.local` | Active | `false` |
-| **IT Staff** | `staff3@toktikit.local` | Active | `false` |
-| **IT Staff** | `staff.inactive@toktikit.local` | Inactive | `false` |
-| **Requester** | `req1@toktikit.local` | Active | `false` |
-| **Requester** | `req2@toktikit.local` | Active | `false` |
-| **Requester** | `req3@toktikit.local` | Active | `false` |
-| **Requester** | `req4@toktikit.local` | Active | `false` |
-| **Requester** | `req.inactive@toktikit.local` | Inactive | `false` |
-| **First-Login User** | `firstlogin@toktikit.local` | Active | `mustChangePassword: true` |
-
 ---
 
 ## Running Locally
@@ -164,11 +153,38 @@ npm --prefix client test
 
 ```bash
 # Starts (or reuses) the API on :3000 and the client on :5173
-npx playwright test e2e/lab-04      # Lab 4 flows + hardening sweep
-npx playwright test e2e/lab-02 e2e/lab-03   # Lab 2-3 regression
+npx playwright test e2e/lab-04      # Lab 4 flows + hardening sweep (15 tests x 3 projects = 45)
+npx playwright test e2e/lab-02 e2e/lab-03   # Lab 2-3 regression (9 tests x 3 projects = 27)
+
+# Everything at once (72 tests across Desktop Chrome, Tablet iPad and Mobile Safari)
+npx playwright test e2e/lab-02 e2e/lab-03 e2e/lab-04
 ```
 
+The E2E specs create tickets in the database named by `server/.env` and do not delete them, so the Staff Queue grows with every run; use a disposable database when that matters. Running them also rewrites the tracked Lab 2 screenshots under `artifacts/lab-02/` (run `git checkout -- artifacts/lab-02` before committing).
+
+Latest full run (5 Nov 2026, branch `feat/lab4-7-release-verification`): server 22 files / 353 tests, client 18 files / 173 tests, E2E 72 tests, all passing.
+
 Test files and traceability: [`docs/lab-04/tests.md`](docs/lab-04/tests.md).
+
+---
+
+## Lab 4 Demonstration Guide
+
+After the migration and seed above, start the API and the client and sign in with the seeded accounts (password `Password123!`):
+
+| Step | Account | Where | What to see |
+|---|---|---|---|
+| 1 | `staff2@toktikit.local` (IT Staff) | **Dashboard** (`/staff-dashboard`) | Unassigned / My Active / Follow-Up Required / Critical-High cards, status breakdown, recent queue tickets, my recent Actions Taken. Every card opens the Ticket Queue with the same filter. |
+| 2 | `staff2@toktikit.local` | **Ticket Queue** -> `TKT-1001` | **Service Actions** area: list, `+ Add Action Taken`, Edit (revision history), validation (Description and Result required, Follow-Up Note required when Follow-Up is ticked), assignee list (active IT Staff and Administrators only). |
+| 3 | `staff2@toktikit.local` | Ticket Detail -> Operations Panel | Status Transition offers only permitted next statuses; `RESOLVED` is refused (and warned about) until the ticket has at least one Action Taken (Resolution Gate). |
+| 4 | `req2@toktikit.local` (Requester) | **Dashboard** (`/requester-dashboard`) and Ticket Detail -> **Service Actions** tab | Only this requester's counts and recent tickets; Actions are read-only. |
+| 5 | `tech_empty@toktikit.local`, `req_empty@toktikit.local` | Dashboards | Zero-metric empty states. |
+| 6 | `req2@toktikit.local` | `/staff-dashboard` | `403 Forbidden` screen (the API also returns 403). |
+| 7 | `admin@toktikit.local` | **User Management**, **Dashboard** | Administrator reuses the IT Staff dashboard and manages accounts. |
+
+Health check: `GET http://localhost:3000/api/health` returns `{"status":"ok","service":"TokTickIT API"}`.
+
+Lab 4 screenshots (desktop, tablet and mobile widths, plus loading / empty / forbidden / failure / validation / conflict states) are kept in [`artifacts/lab-04/screenshots/`](artifacts/lab-04/screenshots/) in the folders `staff-dashboard/`, `requester-dashboard/` and `actions-taken/`. Loading and failure states are produced with Playwright route fixtures (the file names say `-fixture`).
 
 ---
 
@@ -254,7 +270,8 @@ cpe334-TokTikIT/
 │   └── lab-04/      # specification, api-spec, ui-spec, tests, ai-use, reviewer
 ├── artifacts/
 │   ├── lab-03/      # screenshots (authentication, staff-queue, staff-ticket-detail, user-management)
-│   └── lab-04/      # screenshots (staff-dashboard, requester-dashboard, actions-taken)
+│   └── lab-04/
+│       └── screenshots/   # staff-dashboard/, requester-dashboard/, actions-taken/ (desktop, tablet, mobile + state captures)
 └── e2e/             # Playwright E2E suites (lab-02, lab-03, lab-04)
 ```
 
