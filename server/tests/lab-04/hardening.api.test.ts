@@ -245,7 +245,8 @@ describe("Application hardening (Lab 4 Issue 6)", () => {
         const res = await req;
         if (res.status >= 500) crashes.push(`${label} -> ${res.status}`);
       };
-      for (const id of ["abc", "99999999999", "-1", "1.5", "%00"]) {
+      // "0.5" (not "1.5"): the legacy id parser reads "1.5" as ticket 1, and this sweep must never change a real ticket.
+      for (const id of ["abc", "99999999999", "-1", "0.5", "%00"]) {
         await check(`GET ticket ${id}`, request(app).get(`/api/tickets/${id}`).set("Cookie", cookies.requester));
         await check(`GET staff ticket ${id}`, request(app).get(`/api/staff/tickets/${id}`).set("Cookie", cookies.staff));
         await check(`GET actions ${id}`, request(app).get(`/api/tickets/${id}/actions-taken`).set("Cookie", cookies.staff));

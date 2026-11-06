@@ -567,7 +567,7 @@ The frontend displays **all and only** the permitted next statuses for the Ticke
 
 ### 5.4 Touch Targets
 
-All interactive elements (buttons, clickable cards, tab buttons, modal close buttons) must maintain a minimum touch target size of **44 x 44px** (`specification.md §12 DoD point 5`). On phone widths (< 768px) `index.css` enforces `min-height: 44px` on text inputs, drop-downs, textareas, check-box rows, the brand link, breadcrumb links and ticket-number links; desktop layout is unchanged. Guarded by TC-A11Y-06 (probe of every visible control at 390px).
+All interactive elements (buttons, clickable cards, tab buttons, modal close buttons) must maintain a minimum touch target size of **44 x 44px** (`specification.md §12 DoD point 5`). On phone widths (< 768px) `index.css` enforces a 44px minimum on text inputs, drop-downs, textareas, check-box rows (the labelled row is the target), the brand and navigation links, breadcrumb links, ticket-number links in the mobile card list and the pagination buttons (`min-width` and `min-height`); desktop layout is unchanged. Links inside a sentence are inline links and are exempt (WCAG 2.5.8). Guarded by TC-A11Y-06, a probe of every visible button, link, field and drop-down at 390px.
 
 ### 5.5 Keyboard Navigation
 

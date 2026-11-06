@@ -349,6 +349,11 @@ a.kpi-card:focus-visible {
 
 /* Touch targets on phones (ui-spec 5.4: at least 44px for every control) */
 @media (max-width: 767.98px) {
+  .page-link,
+  .btn-group > .btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
   .form-control,
   .form-select,
   textarea.form-control {
@@ -369,6 +374,8 @@ a.kpi-card:focus-visible {
   .navbar-brand,
   .list-group-item a:not(.btn),
   .breadcrumb a,
+  .navbar .nav-link,
+  .ticket-mobile-header a,
   .touch-link {
     display: inline-flex;
     align-items: center;

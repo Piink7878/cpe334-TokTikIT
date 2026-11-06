@@ -1556,7 +1556,7 @@
   #### TC-A11Y-06: Touch Targets on Phone Width
   * **Related Requirements:** specification §12 DoD point 5, ui-spec §5.4
   * **Related API/UI:** Every Lab 4 screen per role at 390px
-  * **Test Objective:** Every visible text field, drop-down, textarea, check-box row, brand link, breadcrumb link and ticket-number link is at least 44px high; buttons and card links are at least 44px.
+  * **Test Objective:** Every visible button, link, text field, drop-down and textarea is at least 44 x 44px (a check-box is measured by its labelled row; a link inside a sentence is exempt as an inline link). This includes the navigation links, the ticket-number links of the mobile card list and the pagination buttons.
   * **Test Level:** E2E (Mobile Safari) — `audit()` in `e2e/lab-04/hardening.spec.ts`
   * **Priority:** High
 
@@ -1966,7 +1966,7 @@
 
 ## 12. Final Release Verification & Regression Results
 
-First measured on 2026-11-04 on branch `feat/lab4-7-release-verification` (based on `lab4-staging` at `5ac434e`, which already contains Issues 1–6). Re-measured on 2026-11-06 on `main` plus the review fixes (terminal-ticket rule, accessibility and responsive polish) against a PostgreSQL 18 development database migrated with `prisma migrate deploy` (9 migrations). The table shows the 2026-11-06 figures.
+First measured on 2026-11-04 on branch `feat/lab4-7-release-verification` (based on `lab4-staging` at `5ac434e`, which already contains Issues 1–6). Re-measured on 2026-11-06 on `main` plus the review fixes (terminal-ticket rule, accessibility and responsive polish) against a freshly created PostgreSQL 18 database migrated with `prisma migrate deploy` (9 migrations) and seeded. The table shows the 2026-11-06 figures.
 
 ### 12.1 Automated Test Execution Summary
 
@@ -2030,6 +2030,7 @@ Definition of Done: all suites above pass; the schema change is additive and reh
 | Phone-width inputs, drop-downs, breadcrumb and ticket links were shorter than 44px. | Release review | `min-height: 44px` rules below 768px; guarded by TC-A11Y-06. |
 | A disabled, empty `Event Log (0)` tab on the Requester Ticket Detail. | Release review | Tab removed (ui-spec §3.1.1). |
 | Success banners were not announced and their close buttons had no name. | Keyboard / accessibility-tree check | `role="status"` for success, `role="alert"` for errors, `aria-label="Dismiss"`. |
+| The hostile-path-parameter sweep in `hardening.api.test.ts` sent `PATCH .../1.5/status`; the legacy id parser reads `1.5` as ticket 1, so on a freshly seeded database the sweep changed the seeded `TKT-1001` and its clean-up then failed on a foreign key. | Test run on a fresh database | The sweep uses `0.5`, which matches no ticket. The legacy id parser itself is unchanged (Lab 1–3 behaviour). |
 | `specification.md` §9.3 described a different seed from the implemented one; this document still held figures from an earlier branch. | Release audit | Specification and this section now state the measured, implemented values. |
 
 ### 12.5 Verification Against Approved Lab 4 Decisions

@@ -78,15 +78,21 @@ async function audit(page: Page, label: string, problems: string[]) {
   const isNarrow = width < 992;
   if (isNarrow) for (const t of tooSmall) problems.push(`${label}: touch target below 44px: ${t}`);
 
-  // Phones: every form field, the brand link and the ticket links of lists are touch targets too (ui-spec 5.4, TC-UI-07).
+  // Phones: every control and link is a touch target, at least 44 x 44px (ui-spec 5.4, TC-A11Y-06).
   if (width < 768) {
     const fieldsTooSmall = await page.evaluate(() => {
       const out: string[] = [];
-      const selector = 'input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea, .navbar-brand, .list-group-item a:not(.btn), .breadcrumb a, .touch-link';
+      // Every control and link, measured in both directions. A check-box or radio is measured by its labelled row, which is what is tapped.
+      const selector = 'button, a[href], select, input:not([type="hidden"]), textarea';
       for (const el of Array.from(document.querySelectorAll<HTMLElement>(selector))) {
-        const box = el.getBoundingClientRect();
-        if (box.width === 0 || box.height === 0) continue;
-        if (box.height < 43.5) out.push(`${el.tagName.toLowerCase()} "${(el.innerText || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim().slice(0, 24)}" ${Math.round(box.height)}px`);
+        const isChoice = el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio');
+        // A link inside a sentence is an inline link, which WCAG 2.5.8 exempts from the target-size rule.
+        const inSentence = el instanceof HTMLAnchorElement && Array.from(el.parentElement?.childNodes ?? []).some((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim().length > 10);
+        if (inSentence) continue;
+        const target = isChoice ? ((el.closest('.form-check, label') as HTMLElement | null) ?? el) : el;
+        const box = target.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0 || getComputedStyle(el).visibility === 'hidden') continue;
+        if (box.height < 43.5 || box.width < 43.5) out.push(`${el.tagName.toLowerCase()} "${(el.innerText || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim().slice(0, 24)}" ${Math.round(box.width)}x${Math.round(box.height)}px`);
       }
       return out;
     });
