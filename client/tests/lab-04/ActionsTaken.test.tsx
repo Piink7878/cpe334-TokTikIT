@@ -844,12 +844,15 @@ describe("Ticket detail pages integration", () => {
       expect(screen.queryByRole("button", { name: /Add Action Taken|^Edit/i })).not.toBeInTheDocument();
     });
 
-    it("keeps the default tab, and keeps Event Log disabled", async () => {
+    it("keeps the default tab, and offers no placeholder Event Log tab (every tab is usable)", async () => {
       (api.getActionsTaken as any).mockResolvedValue({ data: [] });
       renderRequesterPage();
 
       await screen.findByRole("button", { name: "Service Actions (0)" });
-      expect(screen.getByRole("button", { name: /Event Log/ })).toBeDisabled();
+      expect(screen.queryByText(/Event Log/)).not.toBeInTheDocument();
+      for (const tab of screen.getAllByRole("button", { name: /Public Comments|Attachments|Service Actions/ })) {
+        expect(tab).toBeEnabled();
+      }
       expect(screen.getByRole("button", { name: /Attachments/ })).toHaveClass("active");
     });
 

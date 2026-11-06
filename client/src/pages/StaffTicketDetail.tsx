@@ -237,7 +237,7 @@ export default function StaffTicketDetail() {
   if (errorMsg && !ticket) {
     return (
       <div className="container py-5 text-center">
-        <div className="alert alert-danger">{errorMsg}</div>
+        <div className="alert alert-danger" role="alert">{errorMsg}</div>
         <Link to="/staff-queue" className="btn btn-outline-primary">Back to Queue</Link>
       </div>
     );
@@ -266,8 +266,8 @@ export default function StaffTicketDetail() {
 
   return (
     <div className="container py-5">
-      {successMsg && <div className="alert alert-success alert-dismissible fade show">{successMsg}<button type="button" className="btn-close" onClick={() => setSuccessMsg("")}></button></div>}
-      {errorMsg && <div className="alert alert-danger alert-dismissible fade show">{errorMsg}<button type="button" className="btn-close" onClick={() => setErrorMsg("")}></button></div>}
+      {successMsg && <div className="alert alert-success alert-dismissible fade show" role="status">{successMsg}<button type="button" className="btn-close" aria-label="Dismiss" onClick={() => setSuccessMsg("")}></button></div>}
+      {errorMsg && <div className="alert alert-danger alert-dismissible fade show" role="alert">{errorMsg}<button type="button" className="btn-close" aria-label="Dismiss" onClick={() => setErrorMsg("")}></button></div>}
       
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2>{ticket.ticketNumber} <span className={`badge ms-2 fs-6 ${STATUS_BADGE_COLORS[ticket.status]}`}>{ticket.status.replace(/_/g, " ")}</span></h2>
@@ -275,7 +275,7 @@ export default function StaffTicketDetail() {
       </div>
 
       <div className="row">
-        <div className="col-md-8">
+        <div className="col-md-7 col-lg-8">
           <div className="card shadow-sm mb-4">
             <div className="card-body">
               <h4 className="card-title">{ticket.summary}</h4>
@@ -310,7 +310,7 @@ export default function StaffTicketDetail() {
                     ) : (
                       <div key={`note-${item.id}`} className="border rounded p-3 bg-light" style={{ borderColor: "var(--color-primary) !important", borderLeft: "4px solid var(--color-primary)" }}>
                         <div className="d-flex justify-content-between align-items-center mb-2">
-                          <strong className="text-primary"><i className="bi bi-journal-text me-1"></i> {item.author.fullName} <span className="badge bg-primary ms-2">Internal Note</span></strong>
+                          <strong style={{ color: "var(--color-info)" }}><i className="bi bi-journal-text me-1"></i> {item.author.fullName} <span className="badge bg-primary ms-2">Internal Note</span></strong>
                           <span className="text-muted small">{new Date(item.createdAt).toLocaleString()}</span>
                         </div>
                         <div style={{ whiteSpace: "pre-wrap" }}>{item.content}</div>
@@ -391,7 +391,7 @@ export default function StaffTicketDetail() {
           </div>
         </div>
 
-        <div className="col-md-4">
+        <div className="col-md-5 col-lg-4">
           <div className="card shadow-sm mb-4">
             <div className="card-header bg-light">
               <h5 className="mb-0">Requester Details</h5>
@@ -416,7 +416,7 @@ export default function StaffTicketDetail() {
                   <div className="mb-2 text-muted">Unassigned</div>
                 )}
                 
-                <div className="d-flex gap-2">
+                <div className="ops-row">
                   <select 
                     id="assignee-select"
                     className="form-select" 
@@ -424,7 +424,7 @@ export default function StaffTicketDetail() {
                     onChange={e => setAssigneeId(e.target.value)}
                     disabled={isTerminal}
                   >
-                    <option value="">-- Select Assignee --</option>
+                    <option value="">Select assignee</option>
                     {assignees.map(a => (
                       <option key={a.id} value={a.id}>{a.fullName} ({a.role})</option>
                     ))}
@@ -441,7 +441,7 @@ export default function StaffTicketDetail() {
               <div className="mb-4">
                 <label className="form-label fw-bold" htmlFor="priority-select">IT Priority</label>
                 <div className="mb-2">Requested: <span className={`badge ${PRIORITY_COLORS[ticket.requestedPriority]}`}>{ticket.requestedPriority}</span></div>
-                <div className="d-flex gap-2">
+                <div className="ops-row">
                   <select id="priority-select" className="form-select" value={itPriority} onChange={e => setItPriority(e.target.value)} disabled={isTerminal}>
                     <option value="LOW">LOW</option>
                     <option value="MEDIUM">MEDIUM</option>
@@ -458,7 +458,7 @@ export default function StaffTicketDetail() {
                   <div className="alert alert-secondary py-2">No further transitions allowed from {ticket.status}.</div>
                 ) : (
                   <>
-                    <div className="d-flex gap-2">
+                    <div className="ops-row">
                       <select id="status-select" className="form-select" value={newStatus} onChange={e => setNewStatus(e.target.value)}>
                         <option value={ticket.status} disabled>{ticket.status.replace(/_/g, " ")}</option>
                         {permittedNext.map(st => (

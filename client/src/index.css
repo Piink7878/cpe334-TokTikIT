@@ -322,3 +322,65 @@ a.kpi-card:focus-visible {
   --bs-btn-active-bg: #8E1F2B;
   --bs-btn-active-border-color: #8E1F2B;
 }
+
+/* Operations Panel rows: when the sidebar is narrow (tablet) the select takes a full line and the button wraps below,
+   so option labels such as "RESOLVED" are never truncated */
+.ops-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.ops-row .form-select {
+  flex: 1 1 11rem;
+  min-width: 11rem;
+}
+/* Between 768px and 991px the side column is only ~230px wide: the drop-down gets its own line so a full name such as
+   "IT Staff Two (IT_STAFF)" is not cut off, and the button sits below it. */
+@media (max-width: 991.98px) {
+  .ops-row .form-select {
+    flex-basis: 100%;
+  }
+}
+
+/* Long names and e-mail addresses wrap inside their table cell instead of widening the table */
+.cell-wrap {
+  overflow-wrap: anywhere;
+}
+
+/* Touch targets on phones (ui-spec 5.4: at least 44px for every control) */
+@media (max-width: 767.98px) {
+  .form-control,
+  .form-select,
+  textarea.form-control {
+    min-height: 44px;
+  }
+  .form-check {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .form-check .form-check-input {
+    float: none;
+    margin: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+  .navbar-brand,
+  .list-group-item a:not(.btn),
+  .breadcrumb a,
+  .touch-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+}
+
+/* User Management on phones: tighter cell padding so the five columns fit without sideways scrolling */
+@media (max-width: 575.98px) {
+  .user-table th,
+  .user-table td {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+}

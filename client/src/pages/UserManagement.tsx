@@ -176,7 +176,7 @@ export default function UserManagement() {
       {/* Users Table */}
       <div className="card shadow-sm border-0 overflow-hidden">
         <div className="table-responsive">
-          <table className="table table-hover mb-0 align-middle">
+          <table className="table table-hover mb-0 align-middle user-table">
             <thead className="table-light">
               <tr>
                 <th className="px-4 py-3">Name</th>
@@ -203,8 +203,8 @@ export default function UserManagement() {
               ) : (
                 users.map(u => (
                   <tr key={u.id} className={u.isActive ? "" : "table-secondary"}>
-                    <td className="px-4 fw-medium">{u.fullName} {u.id === currentUser?.id && <span className="badge text-bg-info ms-2">You</span>}</td>
-                    <td className="text-muted">{u.email}</td>
+                    <td className="px-4 fw-medium cell-wrap">{u.fullName} {u.id === currentUser?.id && <span className="badge text-bg-info ms-2">You</span>}</td>
+                    <td className="text-muted cell-wrap">{u.email}</td>
                     <td>
                       <span className={`badge ${u.role === 'ADMIN' ? 'bg-danger' : u.role === 'IT_STAFF' ? 'bg-warning text-dark' : 'bg-primary'}`}>
                         {u.role.replace('_', ' ')}

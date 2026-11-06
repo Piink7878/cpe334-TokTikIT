@@ -1265,7 +1265,7 @@
   * **Expected Result:** The controlled migration failure leaves no partial schema/data changes in the disposable failure database; restoration completes cleanly in the isolated recovery database; all Lab 1–3 schema tables and data rows are intact against the pre-migration baseline; the active `toktikit_dev` development database is unaffected.
   * **Test Level:** Integration / Database / Recovery
   * **Priority:** High
-  * **Test Execution Status:** **Test Designed — Execution Pending Evidence** *(This test case is fully designed and documented. It must NOT be marked as passed until actual execution logs and database integrity assertions have been recorded and reviewed.)*
+  * **Test Execution Status:** **Executed — Pass** *(Run as a manual rehearsal on a throw-away database: backup, `pg_restore --clean --if-exists` into a disposable database, per-table row counts and content hashes identical, attachment file SHA-256 unchanged. The recorded results are in §12.2; this case is not an automated test.)*
 
   ---
 
@@ -1512,6 +1512,71 @@
   * **Test Level:** UI Style / Accessibility
   * **Priority:** Medium
 
+
+  #### TC-A11Y-01: Keyboard Reach, Focus Ring and Activation of Dashboard Cards
+  * **Related Requirements:** ui-spec §5.5, TC-STY-02
+  * **Related API/UI:** IT Staff Dashboard
+  * **Test Objective:** A keyboard-only user can reach a KPI card, sees a visible focus indicator, and opens the filtered queue with Enter.
+  * **Steps:** Log in as IT Staff, open the dashboard, press Tab until "Unassigned Tickets" has focus, check the computed outline/box-shadow, press Enter.
+  * **Expected Result:** The card receives focus, a focus outline is drawn, and the URL becomes `/staff-queue?ownerId=unassigned&status=NEW,OPEN`.
+  * **Test Level:** E2E (Desktop Chrome) — `e2e/lab-04/keyboard.spec.ts`
+  * **Priority:** High
+
+  #### TC-A11Y-02: Add Action Dialog Is Operable and Trapped by Keyboard
+  * **Related Requirements:** ui-spec §5.5
+  * **Related API/UI:** Staff Ticket Detail, "Record Action Taken" dialog
+  * **Test Objective:** The dialog opens with Enter, keeps Tab and Shift+Tab inside it, closes with Escape and returns focus to the button that opened it.
+  * **Steps:** Focus "+ Add the first Action Taken", press Enter, press Tab 24 times and Shift+Tab 6 times checking that focus stays inside the dialog, press Escape.
+  * **Expected Result:** `role="dialog"` with `aria-modal="true"`; focus never leaves; after Escape the dialog is gone and focus is on the opener.
+  * **Test Level:** E2E (Desktop Chrome) — `e2e/lab-04/keyboard.spec.ts`
+  * **Priority:** High
+
+  #### TC-A11Y-03: Form Fields Expose Names, Required State and Errors
+  * **Related Requirements:** ui-spec §5.6
+  * **Related API/UI:** "Record Action Taken" dialog
+  * **Test Objective:** Every field has an accessible name; required fields are marked; an invalid submit sets `aria-invalid`, links the message with `aria-describedby` and moves focus to the first invalid field.
+  * **Test Level:** E2E (Desktop Chrome) — `e2e/lab-04/keyboard.spec.ts`
+  * **Expected Result:** Labels found by accessible name; `aria-required="true"` on Description and Result; error text "Description is required." referenced by the field.
+  * **Priority:** High
+
+  #### TC-A11Y-04: Status Change by Keyboard Is Announced
+  * **Related Requirements:** ui-spec §5.6, §5.8
+  * **Related API/UI:** Staff Ticket Detail Operations Panel
+  * **Test Objective:** The status control works with the keyboard (type-ahead, Tab to "Change", Enter) and the success banner is a `role="status"` live region whose close button is named "Dismiss".
+  * **Test Level:** E2E (Desktop Chrome) — `e2e/lab-04/keyboard.spec.ts`
+  * **Priority:** Medium
+
+  #### TC-A11Y-05: Landmarks, Headings and Card Names
+  * **Related Requirements:** ui-spec §5.8
+  * **Related API/UI:** IT Staff Dashboard
+  * **Test Objective:** The page content is inside `main`, has one level-1 heading, a "Queue Status Breakdown" heading, four KPI links with their metric names and destinations, and status badges that carry the status as text.
+  * **Test Level:** E2E (Desktop Chrome) — `e2e/lab-04/keyboard.spec.ts`
+  * **Priority:** Medium
+
+  #### TC-A11Y-06: Touch Targets on Phone Width
+  * **Related Requirements:** specification §12 DoD point 5, ui-spec §5.4
+  * **Related API/UI:** Every Lab 4 screen per role at 390px
+  * **Test Objective:** Every visible text field, drop-down, textarea, check-box row, brand link, breadcrumb link and ticket-number link is at least 44px high; buttons and card links are at least 44px.
+  * **Test Level:** E2E (Mobile Safari) — `audit()` in `e2e/lab-04/hardening.spec.ts`
+  * **Priority:** High
+
+  #### TC-A11Y-07: Contrast With Real Content (Internal Note Present)
+  * **Related Requirements:** ui-spec §5.7, TC-STY-03
+  * **Related API/UI:** Staff Ticket Detail with an Internal Note and a Public Comment, Staff Queue, dashboards, Requester screens
+  * **Test Objective:** axe-core (WCAG 2 A/AA, 2.1 A/AA) reports no violation. The scan runs on a ticket that already has a note and a comment because an empty ticket hid a 4.26:1 author-name contrast failure.
+  * **Test Level:** E2E (all three viewports) — `e2e/lab-04/hardening.spec.ts`
+  * **Priority:** High
+
+  #### TC-RESP-06: No Clipped Content at Tablet and Phone Width
+  * **Related Requirements:** ui-spec §5.1, §5.3.1
+  * **Related API/UI:** Every Lab 4 screen per role at 820px and 390px
+  * **Test Objective:** No `.card` or `.table-responsive` has `scrollWidth > clientWidth`, no page scrolls horizontally, and the selected text of every drop-down fits its control (measured with canvas `measureText`). The Staff Ticket Detail scan uses a claimed ticket so the Assignment drop-down holds a full name.
+  * **Test Level:** E2E (Tablet iPad, Mobile Safari) — `audit()` in `e2e/lab-04/hardening.spec.ts`
+  * **Priority:** High
+
+  #### Manual screen-reader checklist (not automated, not performed in this environment)
+  A person using NVDA (Windows) or VoiceOver (Safari) should confirm: the dashboard headings and four card names are announced with their counts; the Add Action dialog announces its title and moves focus in; the Description error is read when Record Action is pressed with an empty field; the status success banner is announced after Change. TC-A11Y-01 to TC-A11Y-05 assert the roles, names and states a screen reader reads, but no screen-reader session was run, so this checklist remains open.
+
   ---
 
   ### 3.10 Performance-Smoke Tests
@@ -1718,6 +1783,7 @@
   | `server/tests/lab-04/performance-smoke.api.test.ts` | Performance-Smoke (`TC-PRF-01`–`TC-PRF-03`) | Dashboards ≤ 300 ms (mean and p95 over 10 calls), Actions Taken list/create ≤ 200 ms, status transition ≤ 250 ms. | Local database, warm connection. |
   | `client/tests/lab-04/Hardening.test.tsx` | Client Hardening | Mobile menu toggle, logout when the session is gone, plain-language network failures, double-click protection on staff actions, dialog error display and inert background. | Draft/typed data preserved after failures. |
   | `e2e/lab-04/hardening.spec.ts` | Playwright E2E (Desktop, Tablet, Mobile) | Per role and screen: no console errors, no failed API calls, no unknown links, no placeholder text, no horizontal overflow, touch targets ≥ 44 px on narrow screens, axe WCAG A/AA scan (including the user-management dialogs), reachable navigation; plus a simulated lost response (the server saves, the browser never receives the answer) for ticket creation, a requester comment and a staff internal note, each retried by the user and created exactly once. | `@axe-core/playwright` (dev dependency). |
+  | `e2e/lab-04/keyboard.spec.ts` | Playwright E2E (Desktop Chrome) | `TC-A11Y-01`–`TC-A11Y-05`, `TC-STY-01`: keyboard-only walk of the dashboard cards, the Add Action dialog (focus trap, Escape, focus return), a status change by keyboard with a live-region banner, accessible names/roles/states, Zen Green tokens. | Runs on Chromium only (WebKit's default Tab stops differ). It checks what a screen reader reads; it is not a screen-reader session. |
   | `e2e/lab-04/actions-taken-flow.spec.ts` | Playwright E2E (Desktop, Tablet, Mobile) | IT Staff records, validates (axe WCAG scan of the dialog), edits and reviews Revision History of an Action Taken; the Requester sees the same record read-only. | Requester must never see create/edit/revision controls. |
   | `e2e/lab-04/ticket-resolution.spec.ts` | Playwright E2E (Desktop, Tablet, Mobile) | Permitted transitions per status, Resolution Gate (UI warning and server refusal), audit notes, RESOLVED to REOPENED, rejection reason dialog (axe scan), terminal states lock every control. | Gate and terminal rules are enforced by the server, not only the UI. |
   | `e2e/lab-04/dashboards.spec.ts` | Playwright E2E (Desktop, Tablet, Mobile) | KPI cards equal the dashboard API response, drill-down links and filters, recent tickets, zero-metric accounts, role protection of both dashboards. | Each dashboard stays closed to the other role (403). |
@@ -1729,72 +1795,78 @@
 
   This matrix maps every Functional Requirement (FR), Business Rule (BR), and Acceptance Criterion (AC) from `docs/lab-04/specification.md` to corresponding test case specifications.
 
-  > **Note on Coverage Status:** The *Coverage Status* column records the design-level mapping of each requirement to test case specifications. The implemented suites that realise these cases are listed in §8, and §12.3 maps every Acceptance Criterion to the concrete test files that passed in the final release verification.
+  > **How to read the result columns:** *Automated test file(s)* lists the suites that run the cases in *Covered By Test Case IDs* (`s/` = `server/tests/lab-04/`, `c/` = `client/tests/lab-04/`, `e/` = `e2e/lab-04/`). The suites are matched to cases by test family; §12.3 gives the suite-level proof for each Acceptance Criterion. *Final result* is the result of the full run recorded in §12.1 (2026-11-06): **Pass** means every automated suite listed passed with 0 failures. A row that depends on a recorded manual step says so.
 
-  | Requirement ID | Description | Covered By Test Case IDs | API / UI Reference | Coverage Status | Notes & Dependencies |
-  |---|---|---|---|:---:|---|
-  | **FR-01** | Record Action Taken by IT Staff / Admin | TC-ACT-01, TC-ACT-02, TC-UI-05 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Full create coverage |
-  | **FR-02** | Automatic Performed By session attribution | TC-ACT-01, TC-ACT-03, TC-ACT-18 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Server derives `req.user.id` |
-  | **FR-03** | Capture Action Taken fields | TC-ACT-01, TC-ACT-05, TC-ACT-06, TC-ACT-07 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Standard fields validated |
-  | **FR-04** | Update Action Taken & Append-only Revision History | TC-ACT-08, TC-ACT-08B, TC-ACT-08C, TC-ACT-08D, TC-ACT-09, TC-ACT-10, TC-ACT-18, TC-DB-01B, TC-UI-06 | `PATCH /api/actions-taken/:actionId` | Test Designed (Pending Implementation) | Full update coverage & ActionTakenRevision append-only history |
-  | **FR-05** | Collaborative action recording by any IT Staff | TC-ACT-04 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Non-owner staff permitted |
-  | **FR-06** | Requester view Actions Taken on own tickets | TC-ACT-11, TC-UI-04 | `GET /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Read-only Service Actions tab |
-  | **FR-07** | Requester blocked from create/update | TC-RBAC-01, TC-RBAC-02 | `POST` and `PATCH` Actions Taken endpoints | Test Designed (Pending Implementation) | HTTP 403 for Requester create/update; deletion is globally unavailable under BR-05 and tested separately by TC-RBAC-03 (404/405, no record deletion) |
-  | **FR-08** | Enforce status transition matrix & Resolution Gate on backend | TC-TRN-01, TC-TRN-05, TC-TRN-06, TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | State machine & Resolution Gate |
-  | **FR-09** | Transition ticket to RESOLVED | TC-TRN-01, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | From permitted predecessors |
-  | **FR-10** | Transition RESOLVED to CLOSED or REOPENED | TC-TRN-02, TC-TRN-03, TC-TRN-04 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | Reopened & terminal rules |
-  | **FR-11** | Terminal states immutability | TC-TRN-07, TC-TRN-08, TC-TRN-09 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | CLOSED, CANCELLED, REJECTED |
-  | **FR-12** | Automatic audit log note on status transition | TC-TRN-01, TC-TRN-10, TC-TRN-12, TC-TRN-17 | `InternalNote` generation | Test Designed (Pending Implementation) | InternalNote created |
-  | **FR-13** | Dedicated Requester Dashboard endpoint | TC-DASH-REQ-01, TC-DASH-REQ-02, TC-DASH-REQ-09, TC-RBAC-06 | `GET /api/dashboard/requester` | Test Designed (Pending Implementation) | Backend aggregate `COUNT` & empty state |
-  | **FR-14** | Dedicated IT Staff Dashboard endpoint | TC-DASH-STF-01, TC-DASH-STF-02, TC-DASH-STF-11, TC-DASH-STF-13, TC-RBAC-07 | `GET /api/dashboard/staff` | Test Designed (Pending Implementation) | Backend aggregate `COUNT` & empty state |
-  | **FR-15** | Requester Dashboard view, drill-down & recent items | TC-DASH-REQ-04, TC-DASH-REQ-05, TC-DASH-REQ-06, TC-DASH-REQ-07, TC-DASH-REQ-08, TC-DASH-REQ-09, TC-UI-02 | `/requester-dashboard` -> `/my-tickets` | Test Designed (Pending Implementation) | Requires multi-status filter support; `recentTickets` via `updatedAt DESC` |
-  | **FR-16** | IT Staff Dashboard view & drill-down | TC-DASH-STF-06, TC-DASH-STF-07, TC-DASH-STF-08, TC-DASH-STF-09, TC-DASH-STF-10, TC-UI-03 | `/staff-dashboard` -> `/staff-queue` | Test Designed (Pending Implementation) | Requires `ownerId=me`, followUp, priority filter support |
-  | **FR-17** | Server-side database metric calculation | TC-DASH-REQ-01, TC-DASH-STF-01, TC-PRF-01 | Dashboard endpoints | Test Designed (Pending Implementation) | No bulk ticket payloads |
-  | **FR-18** | Preserve pre-existing Lab 1–3 data & recovery | TC-DB-05, TC-DB-06, TC-DB-07, TC-DB-08 | Prisma migration, backup & restore | Test Designed (Pending Implementation) | Non-destructive schema & attachment preservation verified |
-  | **FR-19** | Maintain Lab 1–3 APIs without regression | TC-REG-01 through TC-REG-09 | All preserved endpoints | Test Designed (Pending Implementation) | Zero regression suite & error contract assertions |
-  | **FR-20** | IT Staff Permission to Assign ActionTaken to Technician | TC-ACT-15, TC-ACT-16, TC-ACT-17 | Actions Taken endpoints | Test Designed (Pending Implementation) | Assignee selection via `GET /api/staff/assignees` |
-  | **FR-21** | Actions Taken Assignee Validation (active, correct role) | TC-ACT-15, TC-ACT-16, TC-ACT-17, TC-ACT-18, TC-UI-05, TC-UI-06 | Actions Taken endpoints & modals | Test Designed (Pending Implementation) | Active IT Staff assignee validation |
-  | **FR-22** | Backend Resolution Gate Enforcement | TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | Team-approved Business Rule; HTTP 400 ACTION_TAKEN_REQUIRED |
-  | **FR-23** | Dashboard Empty State Support | TC-DASH-REQ-09, TC-DASH-STF-13 | Dashboard endpoints & UI | Test Designed (Pending Implementation) | Zero metrics & empty arrays |
-  | **FR-24** | Form Data Retention on Failure | TC-ACT-14, TC-ACT-19, TC-UI-05, TC-UI-06 | Action modals & client state | Test Designed (Pending Implementation) | Form inputs preserved across recoverable errors (HTTP 400, 409, 500) |
-  | **FR-25** | Duplicate Submission Prevention & Safe Retry | TC-ACT-19, TC-ACT-20, TC-ACT-20B, TC-UI-05, TC-UI-06 | Action modals & `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Disabled button in-flight & Idempotency-Key retry handling |
-  | **BR-01** | Actions Taken Collaboration & Assignee Rules | TC-ACT-04, TC-ACT-12, TC-ACT-15, TC-ACT-16, TC-ACT-17, TC-ACT-18 | Actions Taken API | Test Designed (Pending Implementation) | Eligible active IT Staff / Admin |
-  | **BR-02** | Authenticated Attribution | TC-ACT-01, TC-ACT-03, TC-ACT-10, TC-ACT-18 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Server session identity; performedById permanently immutable |
-  | **BR-03** | Requester Action Prohibition | TC-RBAC-01, TC-RBAC-02, TC-UI-04 | Actions Taken API | Test Designed (Pending Implementation) | Read-only; 403 on create/update |
-  | **BR-04** | Action Taken Field Validation | TC-ACT-05, TC-ACT-06, TC-ACT-09 | Actions Taken API | Test Designed (Pending Implementation) | Mandatory note if follow-up |
-  | **BR-05** | Non-Deletability & Append-only Audit History | TC-RBAC-03, TC-ACT-08B, TC-ACT-08C, TC-ACT-08D, TC-DB-01B, TC-DB-03, TC-DB-04 | DB constraints & API routes | Test Designed (Pending Implementation) | Restrict constraint active; ActionTakenRevision immutable and undeletable |
-  | **BR-06** | Standard Lifecycle Statuses (8 statuses) | TC-TRN-01 to TC-TRN-04, TC-DASH-STF-05 | State machine & Dashboards | Test Designed (Pending Implementation) | Standard handout statuses |
-  | **BR-07** | Existing REJECTED Compatibility | TC-TRN-09, TC-TRN-10, TC-TRN-11, TC-DASH-STF-05 | Rejection transition & statusBreakdown | Test Designed (Pending Implementation) | Preserves Lab 3 behavior |
-  | **BR-08** | Terminal States Immutability | TC-TRN-07, TC-TRN-08, TC-TRN-09 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | CLOSED, CANCELLED, REJECTED |
-  | **BR-09** | Reopened Ticket Workflow | TC-TRN-03, TC-TRN-04 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | Reactivates in queue |
-  | **BR-10** | Backend Resolution Gate Enforcement | TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | Team-approved Business Rule: COUNT >= 1 required; followUpRequired does not block resolution |
-  | **BR-11** | Requester Problem Resolution Indication | TC-TRN-14 | `POST /api/tickets/:id/indicate-resolved` | Test Designed (Pending Implementation) | Appends comment, keeps status |
-  | **BR-12** | Backend Metric Aggregation | TC-DASH-REQ-01, TC-DASH-STF-01, TC-DASH-STF-03, TC-DASH-STF-04, TC-DASH-REQ-08, TC-DASH-STF-12 | Dashboard queries | Test Designed (Pending Implementation) | SQL COUNT queries & recent lists |
-  | **BR-13** | Requester Metric Isolation | TC-DASH-REQ-01, TC-DASH-REQ-03 | `GET /api/dashboard/requester` | Test Designed (Pending Implementation) | Scoped to `requesterId` |
-  | **BR-14** | Concurrency Safeguards & Form Resilience | TC-TRN-15, TC-ACT-14, TC-ACT-19, TC-ACT-20, TC-ACT-20B, TC-ACT-21 | Status API & Action Modals | Test Designed (Pending Implementation) | HTTP 409 Conflict & safe retry |
-  | **BR-15** | Non-Enumeration on Resource Access | TC-RBAC-04 | Ticket details & actions taken | Test Designed (Pending Implementation) | HTTP 404 Not Found |
-  | **BR-16** | Administrator Governance & Dashboard Scope | TC-DASH-STF-11 | `GET /api/dashboard/staff` | Test Designed (Pending Implementation) | Reuses staff dashboard with Admin governance banner |
-  | **BR-17** | API Error Contract & Compatibility | TC-REG-09 | All API endpoints | Test Designed (Pending Implementation) | Preserves Lab 1–3 error shapes; new Lab 4 APIs use nested `{ "error": { "code", "message" } }` |
-  | **AC-01** | Record Action Taken (201 Created) | TC-ACT-01, TC-ACT-06, TC-ACT-15 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Tested with valid/invalid data & assignee |
-  | **AC-02** | Requester Blocked from Recording Action | TC-RBAC-01 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | HTTP 403 Forbidden |
-  | **AC-03** | Technician Identity Spoof Prevention | TC-ACT-03, TC-ACT-18 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Client payload ignored; performedById immutable |
-  | **AC-04** | Update Action Taken & Append Revision | TC-ACT-08, TC-ACT-08B, TC-ACT-08C, TC-ACT-08D, TC-ACT-09, TC-ACT-10, TC-UI-06 | `PATCH /api/actions-taken/:actionId` | Test Designed (Pending Implementation) | Editable fields updated; ActionTakenRevision appended; performedById immutable |
-  | **AC-05** | Requester Read-Only Service Actions | TC-ACT-11, TC-UI-04 | UI & `GET /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Read-only tab rendered |
-  | **AC-06** | Collaborative Action Recording | TC-ACT-04 | `POST /api/tickets/:id/actions-taken` | Test Designed (Pending Implementation) | Non-owner staff succeeds |
-  | **AC-07** | Valid Status Transition to RESOLVED | TC-TRN-01, TC-TRN-17 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | Status & audit note verified |
-  | **AC-08** | Invalid Status Transition Rejected | TC-TRN-06 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | HTTP 400 Bad Request |
-  | **AC-09** | Terminal Status Immutability | TC-TRN-07, TC-TRN-08, TC-TRN-09 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | HTTP 400 on terminal mutation |
-  | **AC-10** | Requester Dashboard Metric Accuracy | TC-DASH-REQ-01, TC-DASH-REQ-02, TC-DASH-REQ-03, TC-DASH-REQ-09 | `GET /api/dashboard/requester` | Test Designed (Pending Implementation) | Exact scopes & clean account tested |
-  | **AC-11** | Requester Dashboard Drill-Down | TC-DASH-REQ-04, TC-DASH-REQ-05, TC-DASH-REQ-06, TC-DASH-REQ-07 | UI Requester Dashboard | Test Designed (Pending Implementation) | Filter routing tested |
-  | **AC-12** | IT Staff Dashboard Metric Accuracy | TC-DASH-STF-01, TC-DASH-STF-02, TC-DASH-STF-04, TC-DASH-STF-05, TC-DASH-STF-13 | `GET /api/dashboard/staff` | Test Designed (Pending Implementation) | Queue metrics & clean account verified |
-  | **AC-13** | IT Staff Follow-Up Distinct Ticket Count | TC-DASH-STF-03 | `GET /api/dashboard/staff` | Test Designed (Pending Implementation) | Distinct ticket counting verified |
-  | **AC-14** | Non-Destructive Migration Verification | TC-DB-05, TC-DB-06 | Database verification | Test Designed (Pending Implementation) | Seeded tickets preserved |
-  | **AC-15** | Concurrency Protection on Ticket Status | TC-TRN-15 | Status transition API | Test Designed (Pending Implementation) | Race condition returns 409 |
-  | **AC-16** | Lab 1–3 Regression Suite Integrity | TC-REG-01 through TC-REG-09 | All existing test files | Test Designed (Pending Implementation) | 0 failures across all suites & error contract verified |
-  | **AC-17** | Inactive and Unauthorized Assignee Rejection | TC-ACT-15, TC-ACT-16, TC-ACT-17 | `POST` and `PATCH` Actions Taken endpoints | Test Designed (Pending Implementation) | Inactive assignee and invalid role rejection |
-  | **AC-18** | Backend Resolution Gate Enforcement | TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | Test Designed (Pending Implementation) | Team-approved Business Rule: HTTP 400 `ACTION_TAKEN_REQUIRED` when 0 actions; HTTP 200 when >= 1 action exists, even with open followUp |
-  | **AC-19** | Form Resilience & Duplicate Submission Prevention | TC-ACT-14, TC-ACT-19, TC-ACT-20, TC-ACT-20B, TC-UI-05, TC-UI-06 | Action modals | Test Designed (Pending Implementation) | Input preserved on failure, button disabled in-flight |
-  | **AC-20** | Dashboard Recent Information & Zero Metrics | TC-DASH-REQ-08, TC-DASH-REQ-09, TC-DASH-STF-12, TC-DASH-STF-13 | Dashboard endpoints & UI | Test Designed (Pending Implementation) | Populated lists (sorted `updatedAt DESC`) & zero state for both dashboards |
+  | Requirement ID | Description | Covered By Test Case IDs | API / UI Reference | Automated test file(s) | Final result | Notes & Dependencies |
+  |---|---|---|---|---|:---:|---|
+  | **FR-01** | Record Action Taken by IT Staff / Admin | TC-ACT-01, TC-ACT-02, TC-UI-05 | `POST /api/tickets/:id/actions-taken` | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/StaffDashboard.test.tsx`<br>`c/Hardening.test.tsx`<br>`e/hardening.spec.ts`<br>`e/keyboard.spec.ts` | Pass | Full create coverage |
+  | **FR-02** | Automatic Performed By session attribution | TC-ACT-01, TC-ACT-03, TC-ACT-18 | `POST /api/tickets/:id/actions-taken` | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts` | Pass | Server derives `req.user.id` |
+  | **FR-03** | Capture Action Taken fields | TC-ACT-01, TC-ACT-05, TC-ACT-06, TC-ACT-07 | `POST /api/tickets/:id/actions-taken` | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts` | Pass | Standard fields validated |
+  | **FR-04** | Update Action Taken & Append-only Revision History | TC-ACT-08, TC-ACT-08B, TC-ACT-08C, TC-ACT-08D, TC-ACT-09, TC-ACT-10, TC-ACT-18, TC-DB-01B, TC-UI-06 | `PATCH /api/actions-taken/:actionId` | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts`<br>`s/migration-regression.api.test.ts`<br>migration rehearsal (§12.2)<br>`c/RequesterDashboard.test.tsx`<br>`c/StaffDashboard.test.tsx`<br>`c/Hardening.test.tsx`<br>`e/hardening.spec.ts`<br>`e/keyboard.spec.ts` | Pass | Full update coverage & ActionTakenRevision append-only history |
+  | **FR-05** | Collaborative action recording by any IT Staff | TC-ACT-04 | `POST /api/tickets/:id/actions-taken` | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts` | Pass | Non-owner staff permitted |
+  | **FR-06** | Requester view Actions Taken on own tickets | TC-ACT-11, TC-UI-04 | `GET /api/tickets/:id/actions-taken` | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/StaffDashboard.test.tsx`<br>`c/Hardening.test.tsx`<br>`e/hardening.spec.ts`<br>`e/keyboard.spec.ts` | Pass | Read-only Service Actions tab |
+  | **FR-07** | Requester blocked from create/update | TC-RBAC-01, TC-RBAC-02 | `POST` and `PATCH` Actions Taken endpoints | `s/actions-taken.api.test.ts`<br>`s/ticket-workflow.api.test.ts`<br>`s/requester-dashboard.api.test.ts`<br>`s/staff-dashboard.api.test.ts`<br>`s/hardening.api.test.ts` | Pass | HTTP 403 for Requester create/update; deletion is globally unavailable under BR-05 and tested separately by TC-RBAC-03 (404/405, no record deletion) |
+  | **FR-08** | Enforce status transition matrix & Resolution Gate on backend | TC-TRN-01, TC-TRN-05, TC-TRN-06, TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts` | Pass | State machine & Resolution Gate |
+  | **FR-09** | Transition ticket to RESOLVED | TC-TRN-01, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts` | Pass | From permitted predecessors |
+  | **FR-10** | Transition RESOLVED to CLOSED or REOPENED | TC-TRN-02, TC-TRN-03, TC-TRN-04 | `PATCH /api/staff/tickets/:id/status` | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts` | Pass | Reopened & terminal rules |
+  | **FR-11** | Terminal states immutability | TC-TRN-07, TC-TRN-08, TC-TRN-09, TC-ACT-22, TC-ACT-23, TC-ACT-24 | `PATCH /api/staff/tickets/:id/status` | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts`<br>`s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx` | Pass | CLOSED, CANCELLED, REJECTED |
+  | **FR-12** | Automatic audit log note on status transition | TC-TRN-01, TC-TRN-10, TC-TRN-12, TC-TRN-17 | `InternalNote` generation | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts` | Pass | InternalNote created |
+  | **FR-13** | Dedicated Requester Dashboard endpoint | TC-DASH-REQ-01, TC-DASH-REQ-02, TC-DASH-REQ-09, TC-RBAC-06 | `GET /api/dashboard/requester` | `s/requester-dashboard.api.test.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts`<br>`s/actions-taken.api.test.ts`<br>`s/ticket-workflow.api.test.ts`<br>`s/staff-dashboard.api.test.ts`<br>`s/hardening.api.test.ts` | Pass | Backend aggregate `COUNT` & empty state |
+  | **FR-14** | Dedicated IT Staff Dashboard endpoint | TC-DASH-STF-01, TC-DASH-STF-02, TC-DASH-STF-11, TC-DASH-STF-13, TC-RBAC-07 | `GET /api/dashboard/staff` | `s/staff-dashboard.api.test.ts`<br>`c/StaffDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts`<br>`s/actions-taken.api.test.ts`<br>`s/ticket-workflow.api.test.ts`<br>`s/requester-dashboard.api.test.ts`<br>`s/hardening.api.test.ts` | Pass | Backend aggregate `COUNT` & empty state |
+  | **FR-15** | Requester Dashboard view, drill-down & recent items | TC-DASH-REQ-04, TC-DASH-REQ-05, TC-DASH-REQ-06, TC-DASH-REQ-07, TC-DASH-REQ-08, TC-DASH-REQ-09, TC-UI-02 | `/requester-dashboard` -> `/my-tickets` | `s/requester-dashboard.api.test.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts`<br>`c/ActionsTaken.test.tsx`<br>`c/StaffDashboard.test.tsx`<br>`c/Hardening.test.tsx`<br>`e/hardening.spec.ts`<br>`e/keyboard.spec.ts` | Pass | Requires multi-status filter support; `recentTickets` via `updatedAt DESC` |
+  | **FR-16** | IT Staff Dashboard view & drill-down | TC-DASH-STF-06, TC-DASH-STF-07, TC-DASH-STF-08, TC-DASH-STF-09, TC-DASH-STF-10, TC-UI-03 | `/staff-dashboard` -> `/staff-queue` | `s/staff-dashboard.api.test.ts`<br>`c/StaffDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts`<br>`c/ActionsTaken.test.tsx`<br>`c/RequesterDashboard.test.tsx`<br>`c/Hardening.test.tsx`<br>`e/hardening.spec.ts`<br>`e/keyboard.spec.ts` | Pass | Requires `ownerId=me`, followUp, priority filter support |
+  | **FR-17** | Server-side database metric calculation | TC-DASH-REQ-01, TC-DASH-STF-01, TC-PRF-01 | Dashboard endpoints | `s/requester-dashboard.api.test.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts`<br>`s/staff-dashboard.api.test.ts`<br>`c/StaffDashboard.test.tsx`<br>`s/performance-smoke.api.test.ts` | Pass | No bulk ticket payloads |
+  | **FR-18** | Preserve pre-existing Lab 1–3 data & recovery | TC-DB-05, TC-DB-06, TC-DB-07, TC-DB-08 | Prisma migration, backup & restore | `s/migration-regression.api.test.ts`<br>`s/actions-taken.api.test.ts`<br>migration rehearsal (§12.2) | Pass (+ manual rehearsal) | Non-destructive schema & attachment preservation verified |
+  | **FR-19** | Maintain Lab 1–3 APIs without regression | TC-REG-01 through TC-REG-09 | All preserved endpoints | `server/tests/lab-01..03/*`<br>`client/tests/lab-02..03/*`<br>`e2e/lab-02..03/*`<br>`s/contract-regression.api.test.ts` | Pass | Zero regression suite & error contract assertions |
+  | **FR-20** | IT Staff Permission to Assign ActionTaken to Technician | TC-ACT-15, TC-ACT-16, TC-ACT-17 | Actions Taken endpoints | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts` | Pass | Assignee selection via `GET /api/staff/assignees` |
+  | **FR-21** | Actions Taken Assignee Validation (active, correct role) | TC-ACT-15, TC-ACT-16, TC-ACT-17, TC-ACT-18, TC-UI-05, TC-UI-06 | Actions Taken endpoints & modals | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/StaffDashboard.test.tsx`<br>`c/Hardening.test.tsx`<br>`e/hardening.spec.ts`<br>`e/keyboard.spec.ts` | Pass | Active IT Staff assignee validation |
+  | **FR-22** | Backend Resolution Gate Enforcement | TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts` | Pass | Team-approved Business Rule; HTTP 400 ACTION_TAKEN_REQUIRED |
+  | **FR-23** | Dashboard Empty State Support | TC-DASH-REQ-09, TC-DASH-STF-13 | Dashboard endpoints & UI | `s/requester-dashboard.api.test.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts`<br>`s/staff-dashboard.api.test.ts`<br>`c/StaffDashboard.test.tsx` | Pass | Zero metrics & empty arrays |
+  | **FR-24** | Form Data Retention on Failure | TC-ACT-14, TC-ACT-19, TC-UI-05, TC-UI-06 | Action modals & client state | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/StaffDashboard.test.tsx`<br>`c/Hardening.test.tsx`<br>`e/hardening.spec.ts`<br>`e/keyboard.spec.ts` | Pass | Form inputs preserved across recoverable errors (HTTP 400, 409, 500) |
+  | **FR-25** | Duplicate Submission Prevention & Safe Retry | TC-ACT-19, TC-ACT-20, TC-ACT-20B, TC-UI-05, TC-UI-06 | Action modals & `POST /api/tickets/:id/actions-taken` | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/StaffDashboard.test.tsx`<br>`c/Hardening.test.tsx`<br>`e/hardening.spec.ts`<br>`e/keyboard.spec.ts` | Pass | Disabled button in-flight & Idempotency-Key retry handling |
+  | **BR-01** | Actions Taken Collaboration & Assignee Rules | TC-ACT-04, TC-ACT-12, TC-ACT-15, TC-ACT-16, TC-ACT-17, TC-ACT-18 | Actions Taken API | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts` | Pass | Eligible active IT Staff / Admin |
+  | **BR-02** | Authenticated Attribution | TC-ACT-01, TC-ACT-03, TC-ACT-10, TC-ACT-18 | `POST /api/tickets/:id/actions-taken` | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts` | Pass | Server session identity; performedById permanently immutable |
+  | **BR-03** | Requester Action Prohibition | TC-RBAC-01, TC-RBAC-02, TC-UI-04 | Actions Taken API | `s/actions-taken.api.test.ts`<br>`s/ticket-workflow.api.test.ts`<br>`s/requester-dashboard.api.test.ts`<br>`s/staff-dashboard.api.test.ts`<br>`s/hardening.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`c/RequesterDashboard.test.tsx`<br>`c/StaffDashboard.test.tsx`<br>`c/Hardening.test.tsx`<br>`e/hardening.spec.ts`<br>`e/keyboard.spec.ts` | Pass | Read-only; 403 on create/update |
+  | **BR-04** | Action Taken Field Validation | TC-ACT-05, TC-ACT-06, TC-ACT-09 | Actions Taken API | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts` | Pass | Mandatory note if follow-up |
+  | **BR-05** | Non-Deletability & Append-only Audit History | TC-RBAC-03, TC-ACT-08B, TC-ACT-08C, TC-ACT-08D, TC-DB-01B, TC-DB-03, TC-DB-04 | DB constraints & API routes | `s/actions-taken.api.test.ts`<br>`s/ticket-workflow.api.test.ts`<br>`s/requester-dashboard.api.test.ts`<br>`s/staff-dashboard.api.test.ts`<br>`s/hardening.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts`<br>`s/migration-regression.api.test.ts`<br>migration rehearsal (§12.2) | Pass | Restrict constraint active; ActionTakenRevision immutable and undeletable |
+  | **BR-06** | Standard Lifecycle Statuses (8 statuses) | TC-TRN-01 to TC-TRN-04, TC-DASH-STF-05 | State machine & Dashboards | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts`<br>`s/staff-dashboard.api.test.ts`<br>`c/StaffDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts` | Pass | Standard handout statuses |
+  | **BR-07** | Existing REJECTED Compatibility | TC-TRN-09, TC-TRN-10, TC-TRN-11, TC-DASH-STF-05 | Rejection transition & statusBreakdown | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts`<br>`s/staff-dashboard.api.test.ts`<br>`c/StaffDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts` | Pass | Preserves Lab 3 behavior |
+  | **BR-08** | Terminal States Immutability | TC-TRN-07, TC-TRN-08, TC-TRN-09, TC-ACT-22, TC-ACT-23, TC-ACT-24 | `PATCH /api/staff/tickets/:id/status` | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts`<br>`s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx` | Pass | CLOSED, CANCELLED, REJECTED |
+  | **BR-09** | Reopened Ticket Workflow | TC-TRN-03, TC-TRN-04 | `PATCH /api/staff/tickets/:id/status` | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts` | Pass | Reactivates in queue |
+  | **BR-10** | Backend Resolution Gate Enforcement | TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts` | Pass | Team-approved Business Rule: COUNT >= 1 required; followUpRequired does not block resolution |
+  | **BR-11** | Requester Problem Resolution Indication | TC-TRN-14 | `POST /api/tickets/:id/indicate-resolved` | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts` | Pass | Appends comment, keeps status |
+  | **BR-12** | Backend Metric Aggregation | TC-DASH-REQ-01, TC-DASH-STF-01, TC-DASH-STF-03, TC-DASH-STF-04, TC-DASH-REQ-08, TC-DASH-STF-12 | Dashboard queries | `s/requester-dashboard.api.test.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts`<br>`s/staff-dashboard.api.test.ts`<br>`c/StaffDashboard.test.tsx` | Pass | SQL COUNT queries & recent lists |
+  | **BR-13** | Requester Metric Isolation | TC-DASH-REQ-01, TC-DASH-REQ-03 | `GET /api/dashboard/requester` | `s/requester-dashboard.api.test.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts` | Pass | Scoped to `requesterId` |
+  | **BR-14** | Concurrency Safeguards & Form Resilience | TC-TRN-15, TC-ACT-14, TC-ACT-19, TC-ACT-20, TC-ACT-20B, TC-ACT-21 | Status API & Action Modals | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts`<br>`s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts` | Pass | HTTP 409 Conflict & safe retry |
+  | **BR-15** | Non-Enumeration on Resource Access | TC-RBAC-04 | Ticket details & actions taken | `s/actions-taken.api.test.ts`<br>`s/ticket-workflow.api.test.ts`<br>`s/requester-dashboard.api.test.ts`<br>`s/staff-dashboard.api.test.ts`<br>`s/hardening.api.test.ts` | Pass | HTTP 404 Not Found |
+  | **BR-16** | Administrator Governance & Dashboard Scope | TC-DASH-STF-11 | `GET /api/dashboard/staff` | `s/staff-dashboard.api.test.ts`<br>`c/StaffDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts` | Pass | Reuses staff dashboard with Admin governance banner |
+  | **BR-17** | API Error Contract & Compatibility | TC-REG-09 | All API endpoints | `server/tests/lab-01..03/*`<br>`client/tests/lab-02..03/*`<br>`e2e/lab-02..03/*`<br>`s/contract-regression.api.test.ts` | Pass | Preserves Lab 1–3 error shapes; new Lab 4 APIs use nested `{ "error": { "code", "message" } }` |
+  | **AC-01** | Record Action Taken (201 Created) | TC-ACT-01, TC-ACT-06, TC-ACT-15 | `POST /api/tickets/:id/actions-taken` | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts` | Pass | Tested with valid/invalid data & assignee |
+  | **AC-02** | Requester Blocked from Recording Action | TC-RBAC-01 | `POST /api/tickets/:id/actions-taken` | `s/actions-taken.api.test.ts`<br>`s/ticket-workflow.api.test.ts`<br>`s/requester-dashboard.api.test.ts`<br>`s/staff-dashboard.api.test.ts`<br>`s/hardening.api.test.ts` | Pass | HTTP 403 Forbidden |
+  | **AC-03** | Technician Identity Spoof Prevention | TC-ACT-03, TC-ACT-18 | `POST /api/tickets/:id/actions-taken` | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts` | Pass | Client payload ignored; performedById immutable |
+  | **AC-04** | Update Action Taken & Append Revision | TC-ACT-08, TC-ACT-08B, TC-ACT-08C, TC-ACT-08D, TC-ACT-09, TC-ACT-10, TC-UI-06 | `PATCH /api/actions-taken/:actionId` | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/StaffDashboard.test.tsx`<br>`c/Hardening.test.tsx`<br>`e/hardening.spec.ts`<br>`e/keyboard.spec.ts` | Pass | Editable fields updated; ActionTakenRevision appended; performedById immutable |
+  | **AC-05** | Requester Read-Only Service Actions | TC-ACT-11, TC-UI-04 | UI & `GET /api/tickets/:id/actions-taken` | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/StaffDashboard.test.tsx`<br>`c/Hardening.test.tsx`<br>`e/hardening.spec.ts`<br>`e/keyboard.spec.ts` | Pass | Read-only tab rendered |
+  | **AC-06** | Collaborative Action Recording | TC-ACT-04 | `POST /api/tickets/:id/actions-taken` | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts` | Pass | Non-owner staff succeeds |
+  | **AC-07** | Valid Status Transition to RESOLVED | TC-TRN-01, TC-TRN-17 | `PATCH /api/staff/tickets/:id/status` | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts` | Pass | Status & audit note verified |
+  | **AC-08** | Invalid Status Transition Rejected | TC-TRN-06 | `PATCH /api/staff/tickets/:id/status` | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts` | Pass | HTTP 400 Bad Request |
+  | **AC-09** | Terminal Status Immutability | TC-TRN-07, TC-TRN-08, TC-TRN-09, TC-ACT-22, TC-ACT-23, TC-ACT-24 | `PATCH /api/staff/tickets/:id/status` | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts`<br>`s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx` | Pass | HTTP 400 on terminal mutation |
+  | **AC-10** | Requester Dashboard Metric Accuracy | TC-DASH-REQ-01, TC-DASH-REQ-02, TC-DASH-REQ-03, TC-DASH-REQ-09 | `GET /api/dashboard/requester` | `s/requester-dashboard.api.test.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts` | Pass | Exact scopes & clean account tested |
+  | **AC-11** | Requester Dashboard Drill-Down | TC-DASH-REQ-04, TC-DASH-REQ-05, TC-DASH-REQ-06, TC-DASH-REQ-07 | UI Requester Dashboard | `s/requester-dashboard.api.test.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts` | Pass | Filter routing tested |
+  | **AC-12** | IT Staff Dashboard Metric Accuracy | TC-DASH-STF-01, TC-DASH-STF-02, TC-DASH-STF-04, TC-DASH-STF-05, TC-DASH-STF-13 | `GET /api/dashboard/staff` | `s/staff-dashboard.api.test.ts`<br>`c/StaffDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts` | Pass | Queue metrics & clean account verified |
+  | **AC-13** | IT Staff Follow-Up Distinct Ticket Count | TC-DASH-STF-03 | `GET /api/dashboard/staff` | `s/staff-dashboard.api.test.ts`<br>`c/StaffDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts` | Pass | Distinct ticket counting verified |
+  | **AC-14** | Non-Destructive Migration Verification | TC-DB-05, TC-DB-06 | Database verification | `s/migration-regression.api.test.ts`<br>`s/actions-taken.api.test.ts`<br>migration rehearsal (§12.2) | Pass (+ manual rehearsal) | Seeded tickets preserved |
+  | **AC-15** | Concurrency Protection on Ticket Status | TC-TRN-15 | Status transition API | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts` | Pass | Race condition returns 409 |
+  | **AC-16** | Lab 1–3 Regression Suite Integrity | TC-REG-01 through TC-REG-09 | All existing test files | `server/tests/lab-01..03/*`<br>`client/tests/lab-02..03/*`<br>`e2e/lab-02..03/*`<br>`s/contract-regression.api.test.ts` | Pass | 0 failures across all suites & error contract verified |
+  | **AC-17** | Inactive and Unauthorized Assignee Rejection | TC-ACT-15, TC-ACT-16, TC-ACT-17 | `POST` and `PATCH` Actions Taken endpoints | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts` | Pass | Inactive assignee and invalid role rejection |
+  | **AC-18** | Backend Resolution Gate Enforcement | TC-TRN-16, TC-TRN-17, TC-TRN-18 | `PATCH /api/staff/tickets/:id/status` | `s/ticket-workflow.api.test.ts`<br>`c/TicketWorkflow.test.tsx`<br>`e/ticket-resolution.spec.ts` | Pass | Team-approved Business Rule: HTTP 400 `ACTION_TAKEN_REQUIRED` when 0 actions; HTTP 200 when >= 1 action exists, even with open followUp |
+  | **AC-19** | Form Resilience & Duplicate Submission Prevention | TC-ACT-14, TC-ACT-19, TC-ACT-20, TC-ACT-20B, TC-UI-05, TC-UI-06 | Action modals | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/actions-taken-flow.spec.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/StaffDashboard.test.tsx`<br>`c/Hardening.test.tsx`<br>`e/hardening.spec.ts`<br>`e/keyboard.spec.ts` | Pass | Input preserved on failure, button disabled in-flight |
+  | **AC-20** | Dashboard Recent Information & Zero Metrics | TC-DASH-REQ-08, TC-DASH-REQ-09, TC-DASH-STF-12, TC-DASH-STF-13 | Dashboard endpoints & UI | `s/requester-dashboard.api.test.ts`<br>`c/RequesterDashboard.test.tsx`<br>`c/DashboardNavigation.test.tsx`<br>`e/dashboards.spec.ts`<br>`s/staff-dashboard.api.test.ts`<br>`c/StaffDashboard.test.tsx` | Pass | Populated lists (sorted `updatedAt DESC`) & zero state for both dashboards |
+  | **AC-21** | Terminal Ticket Accepts No Action Taken Create or Edit | TC-ACT-22, TC-ACT-23, TC-ACT-24 | `POST /api/tickets/:id/actions-taken`, `PATCH /api/actions-taken/:actionId` | `s/actions-taken.api.test.ts`<br>`c/ActionsTaken.test.tsx`<br>`e/ticket-resolution.spec.ts` | Pass | HTTP 400 `TICKET_TERMINAL` for CLOSED, CANCELLED and REJECTED; GET still allowed; a retry of an earlier create still replays its stored 201 |
+  | **UI-A11Y** | Review-driven quality requirement: keyboard operation, accessible names/roles/states, live regions | TC-A11Y-01 – TC-A11Y-05, TC-UI-07 | ui-spec §5.5, §5.6, §5.8 | `e/keyboard.spec.ts`<br>`e/hardening.spec.ts` | Pass (automated); screen-reader session not performed | Manual checklist below TC-RESP-06 stays open |
+  | **UI-TOUCH** | Touch targets ≥ 44px on phone width | TC-A11Y-06, TC-UI-07 | ui-spec §5.4 | `e/hardening.spec.ts` | Pass | Probe runs on every screen per role |
+  | **UI-CONTRAST** | WCAG AA contrast with real content | TC-A11Y-07, TC-STY-03 | ui-spec §5.7 | `e/hardening.spec.ts` | Pass | axe scan includes a ticket with a note and a comment |
+  | **UI-RESP** | No clipped content at 820px and 390px | TC-RESP-06, TC-UI-02, TC-UI-03 | ui-spec §5.1, §5.3.1 | `e/hardening.spec.ts` | Pass | Mutation check: reverting the layout fix makes the tablet scan fail |
+  | **UI-STYLE** | Zen Green tokens and visible focus ring | TC-STY-01, TC-STY-02 | ui-spec §5.7 | `e/keyboard.spec.ts` | Pass | Typography is inspected, not asserted |
 
   ---
 
@@ -1894,18 +1966,18 @@
 
 ## 12. Final Release Verification & Regression Results
 
-Measured on 2026-11-04 on branch `feat/lab4-7-release-verification` (based on `lab4-staging` at `5ac434e`, which already contains Issues 1–6), against a PostgreSQL 18 development database migrated with `prisma migrate deploy` (9 migrations).
+First measured on 2026-11-04 on branch `feat/lab4-7-release-verification` (based on `lab4-staging` at `5ac434e`, which already contains Issues 1–6). Re-measured on 2026-11-06 on `main` plus the review fixes (terminal-ticket rule, accessibility and responsive polish) against a PostgreSQL 18 development database migrated with `prisma migrate deploy` (9 migrations). The table shows the 2026-11-06 figures.
 
 ### 12.1 Automated Test Execution Summary
 
 | Test Suite | Scope | Baseline (Labs 1–3) | Final Lab 4 Result | Status | Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Server Vitest** | Full server suite (real database) | 13 files, 148 tests | **22 files, 353 tests passed (0 failed)** | **PASS** | Includes the Lab 1–3 suites and `server/tests/lab-04/*`. |
-| **Client Vitest** | Full client suite | 11 files, 50 tests | **18 files, 173 tests passed (0 failed)** | **PASS** | Includes `client/tests/lab-04/*`. |
-| **Playwright E2E (Lab 4)** | `e2e/lab-04` | N/A | **45 passed (0 failed)** | **PASS** | 4 specs (actions-taken-flow, ticket-resolution, dashboards, hardening) on Desktop Chrome, Tablet iPad, Mobile Safari. |
+| **Server Vitest** | Full server suite (real database) | 13 files, 148 tests | **22 files, 363 tests passed (0 failed)** | **PASS** | Includes the Lab 1–3 suites and `server/tests/lab-04/*`. |
+| **Client Vitest** | Full client suite | 11 files, 50 tests | **18 files, 174 tests passed (0 failed)** | **PASS** | Includes `client/tests/lab-04/*`. |
+| **Playwright E2E (Lab 4)** | `e2e/lab-04` | N/A | **51 passed, 12 skipped by design (0 failed)** | **PASS** | 5 specs (actions-taken-flow, ticket-resolution, dashboards, hardening, keyboard). `keyboard.spec.ts` runs on Desktop Chrome only, so its 12 Tablet and Mobile runs are skipped; the other specs run on Desktop Chrome, Tablet iPad and Mobile Safari. |
 | **Playwright E2E (Lab 3)** | `e2e/lab-03` | 24 passed | **24 passed (0 failed)** | **PASS** | No regression. |
 | **Playwright E2E (Lab 2)** | `e2e/lab-02` | 3 failed (obsolete requester dropdown) | **3 passed (0 failed)** | **PASS** | The legacy failure recorded in §1.5 no longer exists. |
-| **Playwright E2E (all)** | `e2e/lab-04 e2e/lab-02 e2e/lab-03` | — | **72 passed (0 failed)** | **PASS** | Run once after the last code change. |
+| **Playwright E2E (all)** | `e2e/lab-04 e2e/lab-02 e2e/lab-03` | — | **78 passed, 12 skipped by design (0 failed)** | **PASS** | Run after the last code change. |
 | **TypeScript / Build (Server)** | `tsc` | Clean | **0 errors** | **PASS** | |
 | **TypeScript / Build (Client)** | `tsc` and `vite build` | Clean | **0 errors, build succeeded** | **PASS** | |
 
@@ -1939,6 +2011,7 @@ Note: the seed upserts the Lab 3 fixtures (users and `TKT-1001`–`TKT-1004`), s
 | AC-14 | `server/tests/lab-04/migration-regression.api.test.ts` and the rehearsal in §12.2 |
 | AC-16 | Full Lab 1–3 server, client and E2E suites (§12.1) and `contract-regression.api.test.ts` |
 | AC-17 | `actions-taken.api.test.ts`, `ActionsTaken.test.tsx` |
+| AC-21 | `actions-taken.api.test.ts` (create/edit refused for CLOSED, CANCELLED, REJECTED; replay after close; REOPENED still allowed), `ActionsTaken.test.tsx`, `ticket-resolution.spec.ts` |
 
 Definition of Done: all suites above pass; the schema change is additive and rehearsed against Lab 3 data; the seed is repeatable; Lab 1–3 contracts are unchanged (`contract-regression.api.test.ts`, Lab 2 and Lab 3 E2E).
 
@@ -1950,6 +2023,13 @@ Definition of Done: all suites above pass; the schema change is additive and reh
 | A slower, older ticket fetch (React StrictMode runs the first one twice in development) could overwrite a status the user had just selected, leaving the Change button disabled. | Intermittent `ticket-resolution.spec.ts` failures, traced | Only the latest fetch updates the Staff Ticket Detail page. |
 | After a status change the success banner appeared before the refresh had finished, and the refresh then reset the status selector. | Same | The banner is shown after the refresh. |
 | The Staff Queue rendered one button per page in a non-wrapping row, so a queue of about 50 pages scrolled horizontally. | `hardening.spec.ts` overflow check once the E2E runs had created enough tickets | The page buttons wrap (`flex-wrap`). |
+| The Definition of Done listed BR-01 to BR-16 although the specification defines BR-17 (API error contract). | Release review | DoD now covers BR-01 to BR-17 and names `contract-regression.api.test.ts` as the BR-17 proof. |
+| The Action Taken endpoints accepted a create or edit on a CLOSED, CANCELLED or REJECTED Ticket although the UI disabled the controls (BR-08 was enforced only in the browser for this feature). | Release review | `POST` and `PATCH` return `400 TICKET_TERMINAL` (row-locked in the write transaction); a retry of an earlier create still replays its stored `201`; GET stays allowed (AC-21, TC-ACT-22 to TC-ACT-24). |
+| Internal Note author names and ticket numbers used Bootstrap `text-primary` (4.26:1 on `#F8F9FA`, below WCAG AA); the earlier axe scan ran on a Ticket without notes and missed it. | Release review | Use `var(--color-info)`; the axe scan now runs on a Ticket that has a note and a comment (TC-A11Y-07). |
+| At 820px tables and filter rows clipped text, the Assignment drop-down cut a full name, and a 20,000-character user name widened the User Management table. | Release review | Table-to-card switch at `lg`, `col-md-5` side column and wrapping `.ops-row`, `.cell-wrap`; guarded by TC-RESP-06 (reverting the side-column fix made the scan fail). |
+| Phone-width inputs, drop-downs, breadcrumb and ticket links were shorter than 44px. | Release review | `min-height: 44px` rules below 768px; guarded by TC-A11Y-06. |
+| A disabled, empty `Event Log (0)` tab on the Requester Ticket Detail. | Release review | Tab removed (ui-spec §3.1.1). |
+| Success banners were not announced and their close buttons had no name. | Keyboard / accessibility-tree check | `role="status"` for success, `role="alert"` for errors, `aria-label="Dismiss"`. |
 | `specification.md` §9.3 described a different seed from the implemented one; this document still held figures from an earlier branch. | Release audit | Specification and this section now state the measured, implemented values. |
 
 ### 12.5 Verification Against Approved Lab 4 Decisions
@@ -1960,5 +2040,6 @@ Definition of Done: all suites above pass; the schema change is additive and reh
 - **Attachments and legacy data:** untouched by the migrations and by the backup and restore rehearsal (§12.2).
 
 ### 12.6 Known Limitations
+- No screen-reader session (NVDA, Narrator or VoiceOver) was run. Keyboard operation and the accessibility tree (names, roles, states, live regions) are asserted automatically by `keyboard.spec.ts`; the manual checklist after TC-RESP-06 stays open.
 - The E2E specs create tickets in the development database and do not delete them, so the Staff Queue grows with each run. Re-create the database or run against a disposable one when that matters.
 - Re-running the seed re-applies the Lab 3 fixtures (see the note in §12.2).
