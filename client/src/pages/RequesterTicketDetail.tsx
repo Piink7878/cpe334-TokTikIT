@@ -108,7 +108,7 @@ export const RequesterTicketDetail: React.FC = () => {
   if (error || !ticket) {
     return (
       <div className="container py-4">
-        <div className="alert alert-danger" style={{ backgroundColor: '#FDF2F2', color: '#D32F2F', borderColor: '#D32F2F' }}>
+        <div className="alert alert-danger" role="alert" style={{ backgroundColor: '#FDF2F2', color: '#D32F2F', borderColor: '#D32F2F' }}>
           {error || "Ticket not found"}
         </div>
         <button className="btn btn-secondary" onClick={() => navigate('/my-tickets')} style={{ backgroundColor: '#FFFFFF', borderColor: '#0B7A46', color: '#0B7A46' }}>
@@ -140,7 +140,7 @@ export const RequesterTicketDetail: React.FC = () => {
   return (
     <div className="container py-4" style={{ maxWidth: '1200px' }}>
       {actionError && <div className="alert alert-danger" role="alert">{actionError}</div>}
-      {successMsg && <div className="alert alert-success alert-dismissible fade show">{successMsg}<button type="button" className="btn-close" onClick={() => setSuccessMsg("")}></button></div>}
+      {successMsg && <div className="alert alert-success alert-dismissible fade show" role="status">{successMsg}<button type="button" className="btn-close" aria-label="Dismiss" onClick={() => setSuccessMsg("")}></button></div>}
       
       <div className="mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
@@ -261,11 +261,6 @@ export const RequesterTicketDetail: React.FC = () => {
                 style={activeTab === 'actions' ? { color: '#0B7A46', fontWeight: 600, borderBottom: '2px solid #0B7A46', borderTop: 'none', borderLeft: 'none', borderRight: 'none', backgroundColor: 'transparent' } : { color: '#5B6B63', backgroundColor: 'transparent', border: 'none' }}
               >
                 Service Actions ({actionsCount})
-              </button>
-            </li>
-            <li className="nav-item">
-              <button className="nav-link disabled" style={{ color: '#5B6B63', backgroundColor: 'transparent', border: 'none' }} disabled>
-                Event Log (0)
               </button>
             </li>
           </ul>

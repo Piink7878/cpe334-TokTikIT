@@ -131,7 +131,7 @@ export default function StaffTicketQueue() {
       <div className="card shadow-sm mb-4">
         <div className="card-body">
           <form onSubmit={handleSearch} className="row g-3">
-            <div className="col-md-3">
+            <div className="col-md-6 col-lg-3">
               <label htmlFor="search" className="form-label visually-hidden">Search</label>
               <input 
                 type="text" 
@@ -143,7 +143,7 @@ export default function StaffTicketQueue() {
               />
             </div>
             
-            <div className="col-md-2">
+            <div className="col-md-6 col-lg-2">
               <select className="form-select" aria-label="Filter by status" value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
                 <option value="">All Statuses</option>
                 <option value="NEW">New</option>
@@ -159,7 +159,7 @@ export default function StaffTicketQueue() {
               </select>
             </div>
 
-            <div className="col-md-2">
+            <div className="col-md-6 col-lg-2">
               <select className="form-select" aria-label="Filter by IT priority" value={priority} onChange={e => { setPriority(e.target.value); setPage(1); }}>
                 <option value="">All Priorities</option>
                 <option value="LOW">Low</option>
@@ -170,7 +170,7 @@ export default function StaffTicketQueue() {
               </select>
             </div>
 
-            <div className="col-md-2">
+            <div className="col-md-6 col-lg-2">
               <select className="form-select" aria-label="Filter by category" value={categoryId} onChange={e => { setCategoryId(e.target.value); setPage(1); }}>
                 <option value="">All Categories</option>
                 {categories.map(c => (
@@ -179,7 +179,7 @@ export default function StaffTicketQueue() {
               </select>
             </div>
             
-            <div className="col-md-3">
+            <div className="col-md-6 col-lg-3">
               <select className="form-select" aria-label="Filter by owner" value={ownerId} onChange={e => { setOwnerId(e.target.value); setPage(1); }}>
                 <option value="">Any Owner</option>
                 <option value="unassigned">Unassigned</option>
@@ -187,7 +187,7 @@ export default function StaffTicketQueue() {
               </select>
             </div>
 
-            <div className="col-md-3 d-flex align-items-center">
+            <div className="col-md-6 col-lg-3 d-flex align-items-center">
               <div className="form-check">
                 <input
                   className="form-check-input"
@@ -200,7 +200,7 @@ export default function StaffTicketQueue() {
               </div>
             </div>
 
-            <div className="col-md-3">
+            <div className="col-md-6 col-lg-3">
               <select className="form-select" aria-label="Sort order" value={`${sortBy}-${sortOrder}`} onChange={e => {
                 const [sb, so] = e.target.value.split("-");
                 setSortBy(sb);
@@ -216,7 +216,7 @@ export default function StaffTicketQueue() {
               </select>
             </div>
 
-            <div className="col-md-2">
+            <div className="col-md-6 col-lg-2">
               <button type="submit" className="btn btn-primary w-100">Search</button>
             </div>
           </form>
@@ -231,7 +231,7 @@ export default function StaffTicketQueue() {
 
       {loading ? (
         <div className="card shadow-sm">
-          <div className="table-responsive d-none d-md-block">
+          <div className="table-responsive d-none d-lg-block">
             <table className="table table-hover mb-0 align-middle">
               <thead className="table-light">
                 <tr>
@@ -263,7 +263,7 @@ export default function StaffTicketQueue() {
               </tbody>
             </table>
           </div>
-          <div className="d-block d-md-none">
+          <div className="d-block d-lg-none">
             <ul className="list-group list-group-flush">
               {[...Array(3)].map((_, i) => (
                 <li key={i} className="list-group-item p-3">
@@ -311,7 +311,7 @@ export default function StaffTicketQueue() {
         </div>
       ) : (
         <div className="card shadow-sm">
-          <div className="table-responsive d-none d-md-block">
+          <div className="table-responsive d-none d-lg-block">
             <table className="table table-hover mb-0 align-middle">
               <thead className="table-light">
                 <tr>
@@ -349,12 +349,12 @@ export default function StaffTicketQueue() {
           </div>
           
           {/* Mobile view */}
-          <div className="d-block d-md-none">
+          <div className="d-block d-lg-none">
             <ul className="list-group list-group-flush">
               {tickets.map(ticket => (
                 <li key={ticket.id} className="list-group-item p-3">
                   <div className="d-flex justify-content-between align-items-center mb-2">
-                    <strong className="text-primary">{ticket.ticketNumber}</strong>
+                    <strong style={{ color: "var(--color-info)" }}>{ticket.ticketNumber}</strong>
                     <span className={`badge ${getStatusBadgeClass(ticket.status)}`}>{ticket.status.replace(/_/g, ' ')}</span>
                   </div>
                   <div className="mb-2 text-truncate" style={{ maxWidth: "100%" }}>

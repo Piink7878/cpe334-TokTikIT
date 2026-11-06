@@ -162,7 +162,7 @@ export default function MyTickets() {
       <div className="card mb-4" style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border-subtle)', borderRadius: '8px' }}>
         <div className="card-body p-3">
           <div className="row g-3">
-            <div className="col-12 col-md-3">
+            <div className="col-12 col-lg-3">
               <div className="input-group">
                 <span className="input-group-text bg-white border-end-0 text-muted">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
@@ -180,7 +180,7 @@ export default function MyTickets() {
               </div>
             </div>
             
-            <div className="col-12 col-sm-6 col-md-2">
+            <div className="col-12 col-sm-6 col-lg-2">
               <select className="form-select" name="categoryId" value={filters.categoryId || ''} onChange={handleFilterChange} aria-label="Category">
                 <option value="">All Categories</option>
                 {categories.map(c => (
@@ -189,7 +189,7 @@ export default function MyTickets() {
               </select>
             </div>
             
-            <div className="col-12 col-sm-6 col-md-2">
+            <div className="col-12 col-sm-6 col-lg-2">
               <select className="form-select" name="requestedPriority" value={filters.requestedPriority || ''} onChange={handleFilterChange} aria-label="Requested Priority">
                 <option value="">All Req. Priority</option>
                 <option value="LOW">Low</option>
@@ -199,7 +199,7 @@ export default function MyTickets() {
               </select>
             </div>
             
-            <div className="col-12 col-sm-6 col-md-2">
+            <div className="col-12 col-sm-6 col-lg-2">
               <select className="form-select" name="status" value={filters.status || ''} onChange={handleFilterChange} aria-label="Status">
                 <option value="">All Statuses</option>
                 <option value="NEW">New</option>
@@ -217,7 +217,7 @@ export default function MyTickets() {
               </select>
             </div>
 
-            <div className="col-12 col-sm-6 col-md-2">
+            <div className="col-12 col-sm-6 col-lg-2">
               <select className="form-select" name="sort" value={`${filters.sortBy}-${filters.sortOrder}`} onChange={handleFilterChange} aria-label="Sort By">
                 <option value="createdAt-desc">Newest First</option>
                 <option value="createdAt-asc">Oldest First</option>

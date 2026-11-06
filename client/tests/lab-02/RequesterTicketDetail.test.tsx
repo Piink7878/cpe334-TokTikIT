@@ -74,7 +74,7 @@ describe('RequesterTicketDetail Component', () => {
     expect(screen.getByText('John Doe')).toBeInTheDocument();
   });
 
-  it('keeps the Event Log tab disabled (out of scope)', async () => {
+  it('has no placeholder Event Log tab (removed in Lab 4; every tab is usable)', async () => {
     (api.getTicket as any).mockResolvedValueOnce({ data: mockTicket });
     (api.getPublicComments as any).mockResolvedValue({ data: [] });
     renderComponent();
@@ -83,12 +83,11 @@ describe('RequesterTicketDetail Component', () => {
       expect(screen.getByText(/Public Comments/)).toBeInTheDocument();
     });
 
-    // Lab 4 (ui-spec.md §3.1): the Service Actions tab is now active; Event Log stays out of scope.
+    // Lab 4 (ui-spec.md §3.1): the Service Actions tab is active and the unfinished Event Log placeholder was removed.
     const serviceActionsTab = screen.getByText(/Service Actions/);
     expect(serviceActionsTab).toBeEnabled();
 
-    const eventLogTab = screen.getByText(/Event Log/);
-    expect(eventLogTab).toBeDisabled();
+    expect(screen.queryByText(/Event Log/)).not.toBeInTheDocument();
   });
 
   it('shows error if ticket is not found', async () => {

@@ -74,8 +74,47 @@ async function audit(page: Page, label: string, problems: string[]) {
     }
     return out;
   });
-  const isNarrow = (page.viewportSize()?.width ?? 1280) < 992;
+  const width = page.viewportSize()?.width ?? 1280;
+  const isNarrow = width < 992;
   if (isNarrow) for (const t of tooSmall) problems.push(`${label}: touch target below 44px: ${t}`);
+
+  // Phones: every form field, the brand link and the ticket links of lists are touch targets too (ui-spec 5.4, TC-UI-07).
+  if (width < 768) {
+    const fieldsTooSmall = await page.evaluate(() => {
+      const out: string[] = [];
+      const selector = 'input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea, .navbar-brand, .list-group-item a:not(.btn), .breadcrumb a, .touch-link';
+      for (const el of Array.from(document.querySelectorAll<HTMLElement>(selector))) {
+        const box = el.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) continue;
+        if (box.height < 43.5) out.push(`${el.tagName.toLowerCase()} "${(el.innerText || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').trim().slice(0, 24)}" ${Math.round(box.height)}px`);
+      }
+      return out;
+    });
+    for (const t of fieldsTooSmall) problems.push(`${label}: form field or link below 44px: ${t}`);
+  }
+
+  // Tablets and phones: nothing may be clipped inside its card or table container, and no drop-down label may be cut off (TC-UI-02, TC-UI-07).
+  if (isNarrow) {
+    const clipped = await page.evaluate(() => {
+      const out: string[] = [];
+      for (const el of Array.from(document.querySelectorAll<HTMLElement>('.card, .table-responsive'))) {
+        if (el.getBoundingClientRect().width === 0) continue;
+        if (el.scrollWidth > el.clientWidth + 1) out.push(`${el.className.toString().slice(0, 40)} content ${el.scrollWidth}px wider than its ${el.clientWidth}px box`);
+      }
+      const canvas = document.createElement('canvas').getContext('2d')!;
+      for (const sel of Array.from(document.querySelectorAll<HTMLSelectElement>('select'))) {
+        const box = sel.getBoundingClientRect();
+        if (box.width === 0) continue;
+        const style = getComputedStyle(sel);
+        canvas.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+        const text = sel.selectedOptions[0]?.text ?? '';
+        const room = sel.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 4;
+        if (canvas.measureText(text).width > room) out.push(`drop-down "${text}" is truncated (needs ${Math.round(canvas.measureText(text).width)}px, has ${Math.round(room)}px)`);
+      }
+      return out;
+    });
+    for (const c of clipped) problems.push(`${label}: clipped content: ${c}`);
+  }
 
   const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   for (const v of axe.violations) problems.push(`${label}: axe ${v.id} (${v.impact}) x${v.nodes.length} - ${v.nodes[0].target.join(' ')}`);
@@ -122,6 +161,15 @@ test.describe('Hardening sweep (Lab 4 Issue 6)', () => {
     const ticketId = await createTicket(page);
     await page.context().clearCookies();
     await login(page, ACCOUNTS.staff);
+    // Internal Notes and public comments must exist so that the Ticket Detail scan covers their colours (a note's author
+    // name once failed WCAG contrast, and a scan of an empty Ticket could not see it).
+    const note = await page.request.post(`/api/tickets/${ticketId}/internal-notes`, { data: { content: 'Hardening e2e internal note' } });
+    expect(note.status()).toBe(201);
+    const comment = await page.request.post(`/api/tickets/${ticketId}/comments`, { data: { content: 'Hardening e2e public comment' } });
+    expect(comment.status()).toBe(201);
+    // Claim the Ticket so the Assignment drop-down shows a real name ("IT Staff Two (IT_STAFF)"), which is its longest content.
+    const claim = await page.request.patch(`/api/staff/tickets/${ticketId}/claim`, { data: {} });
+    expect(claim.status()).toBe(200);
     for (const route of ['/staff-dashboard', '/staff-queue', `/staff/tickets/${ticketId}`, '/staff-queue?ownerId=me&status=OPEN,IN_PROGRESS']) {
       await page.goto(route);
       await audit(page, route, problems);

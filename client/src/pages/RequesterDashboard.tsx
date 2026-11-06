@@ -87,7 +87,7 @@ export default function RequesterDashboard() {
             </div>
           ) : (
             <>
-              <div className="table-responsive d-none d-md-block">
+              <div className="table-responsive d-none d-lg-block">
                 <table className="table table-hover align-middle mb-0">
                   <thead className="table-light text-muted" style={{ fontSize: 13 }}>
                     <tr>
@@ -118,7 +118,7 @@ export default function RequesterDashboard() {
                 </table>
               </div>
 
-              <ul className="list-group list-group-flush d-md-none">
+              <ul className="list-group list-group-flush d-lg-none">
                 {recent.map((t) => (
                   <li key={t.id} className="list-group-item p-3">
                     <div className="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-1">

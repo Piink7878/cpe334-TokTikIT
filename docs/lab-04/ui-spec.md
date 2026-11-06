@@ -269,11 +269,11 @@ Rendered below Status Breakdown in a two-column responsive grid:
 #### 3.1.1 Tab Header
 
 ```
-[Public Comments (n)] [Attachments (n)] [Service Actions (n)] [Event Log (0)]
+[Public Comments (n)] [Attachments (n)] [Service Actions (n)]
 ```
 
 - Tab label: `Service Actions (n)` where `n` is the count of loaded records.
-- The "Event Log" tab remains disabled (no backend endpoint exists in Lab 4).
+- The Lab 2 placeholder `Event Log (0)` tab was removed after Lab 4 review: it had no backend endpoint and no behaviour, so a permanently disabled tab only confused users and assistive technology. Every remaining tab is usable.
 - Default active tab on page load: no change to existing Lab 3 behavior (currently defaults to "attachments"); preserving existing behavior to safeguard regression tests (see UI-Q2 in §8).
 
 #### 3.1.2 Service Actions List (Read-Only)
@@ -541,7 +541,7 @@ The frontend displays **all and only** the permitted next statuses for the Ticke
 | Breakpoint | Width | Layout Rules |
 |---|---|---|
 | **Desktop** | > 1024px | Side-by-side layouts, full data tables, persistent top nav |
-| **Tablet** | 768px – 1024px | Fluid widths, minor column hiding, narrower sidebars remain visible |
+| **Tablet** | 768px – 1024px | Fluid widths; wide data tables and multi-column forms use the card/stacked layout (switch at Bootstrap `lg`, 992px) so no text is clipped at 820px |
 | **Mobile** | < 768px | Stacked layouts, table to cards, hamburger nav, full-screen modals |
 
 ### 5.2 Dashboard Responsive Rules
@@ -557,9 +557,17 @@ The frontend displays **all and only** the permitted next statuses for the Ticke
 - **Mobile:** Cards stack vertically. Modal forms take up full screen height.
 - **Add/Edit Modal on Mobile:** Full-screen modal (`modal-fullscreen-sm-down`). Textareas expand to fill available height.
 
+### 5.3.1 Tablet and Narrow-Width Rules (added after review)
+
+- The Staff Queue table and the Requester Dashboard recent-tickets table are shown from `lg` (992px) up; below that the existing card list is used. At 820px a seven-column table does not fit without clipping.
+- Staff Queue and My Tickets filter fields use `col-md-6 col-lg-N` so field labels and select text are not truncated at tablet width.
+- Staff Ticket Detail: the side column is `col-md-5` between 768px and 991px (`col-lg-4` above) so a drop-down can show a full name such as "IT Staff Two (IT_STAFF)" without truncation; in that range each Operations Panel drop-down also takes its own line with its button below (`.ops-row`, `flex-basis: 100%` under 992px). Above 992px the select and button share a line (select min-width 11rem).
+- Long unbroken user-supplied text in tables wraps (`overflow-wrap: anywhere`, `.cell-wrap`) instead of widening the table.
+- Automated guard: `e2e/lab-04/hardening.spec.ts` fails when a `.card` / `.table-responsive` has `scrollWidth > clientWidth` or a drop-down's selected text is wider than the control, at 820px and 390px (TC-RESP-06).
+
 ### 5.4 Touch Targets
 
-All interactive elements (buttons, clickable cards, tab buttons, modal close buttons) must maintain a minimum touch target size of **44 x 44px** (`specification.md §12 DoD point 5`).
+All interactive elements (buttons, clickable cards, tab buttons, modal close buttons) must maintain a minimum touch target size of **44 x 44px** (`specification.md §12 DoD point 5`). On phone widths (< 768px) `index.css` enforces `min-height: 44px` on text inputs, drop-downs, textareas, check-box rows, the brand link, breadcrumb links and ticket-number links; desktop layout is unchanged. Guarded by TC-A11Y-06 (probe of every visible control at 390px).
 
 ### 5.5 Keyboard Navigation
 
@@ -583,6 +591,7 @@ All interactive elements (buttons, clickable cards, tab buttons, modal close but
 - Error states use `var(--color-danger)` (`#D32F2F`) on a light background (`var(--color-danger-bg): #FDF2F2`).
 - Warning states use `var(--color-warning)` (`#B45309`) on `var(--color-warning-bg): #FEF3C7`.
 - Do not rely on color alone to communicate state (use icons or labels alongside color).
+- Author names and ticket numbers that were Bootstrap `text-primary` (`#0D6EFD`, 4.26:1 on `#F8F9FA`, below the WCAG AA 4.5:1 minimum) use `var(--color-info)` (`#1D4ED8`, above 6:1). Checked by an axe scan of the Staff Ticket Detail with an Internal Note present (TC-A11Y-07).
 
 ### 5.8 ARIA Roles for Key Components
 
@@ -590,6 +599,7 @@ All interactive elements (buttons, clickable cards, tab buttons, modal close but
 |---|---|
 | Dashboard page | Content inside the `<main>` landmark that `AppLayout` already provides (no second `<main>`); sections use `aria-labelledby` headings |
 | KPI card (clickable link) | `<a>` with `aria-label` describing the metric and destination |
+| Success / error banners (Staff and Requester Ticket Detail) | Success: `role="status"`; error: `role="alert"`; the close button has `aria-label="Dismiss"` |
 | Add/Edit Action Taken Modal | `role="dialog"`, `aria-modal="true"`, `aria-labelledby="modal-title-id"` |
 | Status Breakdown badge buttons | `role="button"` or `<a>` with descriptive `aria-label` |
 | Inline form errors | `role="alert"` |

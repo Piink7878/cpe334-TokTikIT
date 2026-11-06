@@ -138,14 +138,14 @@ The server tests use the database in `server/.env`; they create and clean up the
 # Lab 4 only
 npx --prefix server vitest run tests/lab-04
 
-# Full server suite, including the Lab 1-3 regressions (22 files, 353 tests)
+# Full server suite, including the Lab 1-3 regressions (22 files, 363 tests)
 npm --prefix server test
 ```
 
 **Frontend component & page tests (Vitest + React Testing Library):**
 
 ```bash
-# Full client suite (18 files, 173 tests)
+# Full client suite (18 files, 174 tests)
 npm --prefix client test
 ```
 
@@ -153,16 +153,16 @@ npm --prefix client test
 
 ```bash
 # Starts (or reuses) the API on :3000 and the client on :5173
-npx playwright test e2e/lab-04      # Lab 4 flows + hardening sweep (15 tests x 3 projects = 45)
+npx playwright test e2e/lab-04      # Lab 4 flows, hardening sweep and keyboard checks (51 pass; the 6 keyboard tests run on Desktop Chrome only, so 12 runs are skipped by design)
 npx playwright test e2e/lab-02 e2e/lab-03   # Lab 2-3 regression (9 tests x 3 projects = 27)
 
-# Everything at once (72 tests across Desktop Chrome, Tablet iPad and Mobile Safari)
+# Everything at once (78 pass and 12 are skipped by design, across Desktop Chrome, Tablet iPad and Mobile Safari)
 npx playwright test e2e/lab-02 e2e/lab-03 e2e/lab-04
 ```
 
 The E2E specs create tickets in the database named by `server/.env` and do not delete them, so the Staff Queue grows with every run; use a disposable database when that matters. Running them also rewrites the tracked Lab 2 screenshots under `artifacts/lab-02/` (run `git checkout -- artifacts/lab-02` before committing).
 
-Latest full run (5 Nov 2026, branch `feat/lab4-7-release-verification`): server 22 files / 353 tests, client 18 files / 173 tests, E2E 72 tests, all passing.
+Latest full run (6 Nov 2026, `main` plus the review fixes): server 22 files / 363 tests, client 18 files / 174 tests, E2E 78 passed and 12 skipped by design, 0 failed. An axe scan, a touch-target probe (44 px on phone widths), a clipped-content check (820 px and 390 px) and a keyboard walk are part of the E2E suite; no screen-reader (NVDA / VoiceOver) session was run.
 
 Test files and traceability: [`docs/lab-04/tests.md`](docs/lab-04/tests.md).
 
