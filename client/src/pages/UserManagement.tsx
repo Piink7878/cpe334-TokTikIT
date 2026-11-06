@@ -17,6 +17,7 @@ export default function UserManagement() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const modalOpen = showCreateModal || showEditModal || showResetModal;
 
   const [selectedUser, setSelectedUser] = useState<any>(null);
 
@@ -122,6 +123,8 @@ export default function UserManagement() {
 
   return (
     <div className="container py-4">
+      {/* While a dialog is open the page behind it is inert: not focusable, not read by assistive technology. */}
+      <div {...(modalOpen ? ({ inert: "" } as object) : {})}>
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
         <h2><i className="bi bi-people-fill me-2" style={{ color: "var(--color-primary)" }}></i>User Management</h2>
         <button className="btn btn-primary shadow-sm" onClick={openCreateModal}>
@@ -129,7 +132,7 @@ export default function UserManagement() {
         </button>
       </div>
 
-      {errorMsg && (
+      {errorMsg && !modalOpen && (
         <div className="alert alert-danger alert-dismissible fade show" role="alert">
           {errorMsg}
           <button type="button" className="btn-close" onClick={() => setErrorMsg("")} aria-label="Close"></button>
@@ -159,7 +162,7 @@ export default function UserManagement() {
               </div>
             </div>
             <div className="col-12 col-md-4">
-              <select className="form-select" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
+              <select className="form-select" aria-label="Filter by role" value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
                 <option value="">All Roles</option>
                 <option value="REQUESTER">Requester</option>
                 <option value="IT_STAFF">IT Staff</option>
@@ -200,7 +203,7 @@ export default function UserManagement() {
               ) : (
                 users.map(u => (
                   <tr key={u.id} className={u.isActive ? "" : "table-secondary"}>
-                    <td className="px-4 fw-medium">{u.fullName} {u.id === currentUser?.id && <span className="badge bg-info ms-2">You</span>}</td>
+                    <td className="px-4 fw-medium">{u.fullName} {u.id === currentUser?.id && <span className="badge text-bg-info ms-2">You</span>}</td>
                     <td className="text-muted">{u.email}</td>
                     <td>
                       <span className={`badge ${u.role === 'ADMIN' ? 'bg-danger' : u.role === 'IT_STAFF' ? 'bg-warning text-dark' : 'bg-primary'}`}>
@@ -227,38 +230,41 @@ export default function UserManagement() {
         </div>
       </div>
 
+      </div>
+
       {/* Create Modal */}
       {showCreateModal && (
         <>
           <div className="modal-backdrop fade show"></div>
-          <div className="modal fade show d-block" tabIndex={-1} role="dialog">
+          <div className="modal fade show d-block" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="create-user-title">
             <div className="modal-dialog modal-dialog-centered" role="document">
               <div className="modal-content border-0 shadow">
                 <form onSubmit={handleCreateSubmit}>
                   <div className="modal-header bg-primary text-white border-0">
-                    <h5 className="modal-title"><i className="bi bi-person-plus me-2"></i>Create New User</h5>
-                    <button type="button" className="btn-close btn-close-white" onClick={() => setShowCreateModal(false)}></button>
+                    <h5 className="modal-title" id="create-user-title"><i className="bi bi-person-plus me-2"></i>Create New User</h5>
+                    <button type="button" aria-label="Close" className="btn-close btn-close-white" onClick={() => setShowCreateModal(false)}></button>
                   </div>
                   <div className="modal-body p-4">
+                    {errorMsg && <div className="alert alert-danger" role="alert">{errorMsg}</div>}
                     <div className="mb-3">
-                      <label className="form-label fw-bold">Full Name</label>
-                      <input type="text" className="form-control" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
+                      <label htmlFor="create-name" className="form-label fw-bold">Full Name</label>
+                      <input id="create-name" type="text" className="form-control" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
                     </div>
                     <div className="mb-3">
-                      <label className="form-label fw-bold">Email Address</label>
-                      <input type="email" className="form-control" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} required />
+                      <label htmlFor="create-email" className="form-label fw-bold">Email Address</label>
+                      <input id="create-email" type="email" className="form-control" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} required />
                     </div>
                     <div className="mb-3">
-                      <label className="form-label fw-bold">Role</label>
-                      <select className="form-select" value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })}>
+                      <label htmlFor="create-role" className="form-label fw-bold">Role</label>
+                      <select id="create-role" className="form-select" value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })}>
                         <option value="REQUESTER">REQUESTER</option>
                         <option value="IT_STAFF">IT_STAFF</option>
                         <option value="ADMIN">ADMIN</option>
                       </select>
                     </div>
                     <div className="mb-3">
-                      <label className="form-label fw-bold">Initial Password</label>
-                      <input type="password" className="form-control" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required minLength={8} />
+                      <label htmlFor="create-password" className="form-label fw-bold">Initial Password</label>
+                      <input id="create-password" type="password" className="form-control" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required minLength={8} />
                       <div className="form-text">User will be required to change this upon first login.</div>
                     </div>
                   </div>
@@ -279,26 +285,27 @@ export default function UserManagement() {
       {showEditModal && selectedUser && (
         <>
           <div className="modal-backdrop fade show"></div>
-          <div className="modal fade show d-block" tabIndex={-1} role="dialog">
+          <div className="modal fade show d-block" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="edit-user-title">
             <div className="modal-dialog modal-dialog-centered" role="document">
               <div className="modal-content border-0 shadow">
                 <form onSubmit={handleEditSubmit}>
                   <div className="modal-header bg-light border-bottom">
-                    <h5 className="modal-title"><i className="bi bi-pencil-square me-2"></i>Edit User</h5>
-                    <button type="button" className="btn-close" onClick={() => setShowEditModal(false)}></button>
+                    <h5 className="modal-title" id="edit-user-title"><i className="bi bi-pencil-square me-2"></i>Edit User</h5>
+                    <button type="button" aria-label="Close" className="btn-close" onClick={() => setShowEditModal(false)}></button>
                   </div>
                   <div className="modal-body p-4">
+                    {errorMsg && <div className="alert alert-danger" role="alert">{errorMsg}</div>}
                     <div className="mb-3">
-                      <label className="form-label fw-bold">Full Name</label>
-                      <input type="text" className="form-control" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
+                      <label htmlFor="edit-name" className="form-label fw-bold">Full Name</label>
+                      <input id="edit-name" type="text" className="form-control" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
                     </div>
                     <div className="mb-3">
-                      <label className="form-label fw-bold">Email Address</label>
-                      <input type="email" className="form-control" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} required />
+                      <label htmlFor="edit-email" className="form-label fw-bold">Email Address</label>
+                      <input id="edit-email" type="email" className="form-control" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} required />
                     </div>
                     <div className="mb-3">
-                      <label className="form-label fw-bold">Role</label>
-                      <select className="form-select" value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })}>
+                      <label htmlFor="edit-role" className="form-label fw-bold">Role</label>
+                      <select id="edit-role" className="form-select" value={formData.role} onChange={e => setFormData({ ...formData, role: e.target.value })}>
                         <option value="REQUESTER">REQUESTER</option>
                         <option value="IT_STAFF">IT_STAFF</option>
                         <option value="ADMIN">ADMIN</option>
@@ -350,25 +357,26 @@ export default function UserManagement() {
       {showResetModal && selectedUser && (
         <>
           <div className="modal-backdrop fade show" style={{ zIndex: 1060 }}></div>
-          <div className="modal fade show d-block" tabIndex={-1} role="dialog" style={{ zIndex: 1061 }}>
+          <div className="modal fade show d-block" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="reset-password-title" style={{ zIndex: 1061 }}>
             <div className="modal-dialog modal-dialog-centered" role="document">
               <div className="modal-content border-0 shadow">
                 <form onSubmit={handleResetPassword}>
                   <div className="modal-header bg-danger text-white border-0">
-                    <h5 className="modal-title"><i className="bi bi-key-fill me-2"></i>Reset Password</h5>
-                    <button type="button" className="btn-close btn-close-white" onClick={() => {
+                    <h5 className="modal-title" id="reset-password-title"><i className="bi bi-key-fill me-2"></i>Reset Password</h5>
+                    <button type="button" aria-label="Close" className="btn-close btn-close-white" onClick={() => {
                       setShowResetModal(false);
                       setShowEditModal(true);
                     }}></button>
                   </div>
                   <div className="modal-body p-4">
+                    {errorMsg && <div className="alert alert-danger" role="alert">{errorMsg}</div>}
                     <div className="alert alert-warning">
                       <i className="bi bi-exclamation-triangle-fill me-2"></i>
                       You are setting a new initial password for <strong>{selectedUser.fullName}</strong>. They will be forced to change this password on their next login.
                     </div>
                     <div className="mb-3">
-                      <label className="form-label fw-bold">New Initial Password</label>
-                      <input type="password" className="form-control" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required minLength={8} />
+                      <label htmlFor="reset-password" className="form-label fw-bold">New Initial Password</label>
+                      <input id="reset-password" type="password" className="form-control" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} required minLength={8} />
                     </div>
                   </div>
                   <div className="modal-footer border-0 pt-0">

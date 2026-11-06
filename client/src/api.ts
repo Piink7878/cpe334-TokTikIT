@@ -7,6 +7,26 @@ export interface Category {
   isActive: boolean;
 }
 
+export const NETWORK_ERROR_MESSAGE = "Unable to reach the server. Check your connection and try again.";
+
+// fetch that reports a network failure in plain words instead of the browser's "Failed to fetch".
+export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch {
+    throw new Error(NETWORK_ERROR_MESSAGE);
+  }
+}
+
+// Reads a JSON body; an empty or non-JSON body (e.g. a proxy error page) yields null instead of throwing.
+export async function readJson(res: Response): Promise<any> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export interface TicketFilters {
   search?: string;
   categoryId?: number;
@@ -98,7 +118,7 @@ export async function checkSystem(): Promise<SystemStatus> {
 }
 
 export async function getRequesters() {
-  const res = await fetch(`${API_URL}/api/requesters`, { credentials: "include" });
+  const res = await apiFetch(`${API_URL}/api/requesters`, { credentials: "include" });
   if (!res.ok) {
     throw new Error("Failed to fetch requesters");
   }
@@ -111,7 +131,7 @@ export interface RelatedSystem {
 }
 
 export async function getRelatedSystems() {
-  const res = await fetch(`${API_URL}/api/related-systems`, { credentials: "include" });
+  const res = await apiFetch(`${API_URL}/api/related-systems`, { credentials: "include" });
   if (!res.ok) {
     throw new Error("Failed to fetch related systems");
   }
@@ -119,7 +139,7 @@ export async function getRelatedSystems() {
 }
 
 export async function getCategories() {
-  const res = await fetch(`${API_URL}/api/categories`);
+  const res = await apiFetch(`${API_URL}/api/categories`);
   if (!res.ok) {
     throw new Error("Failed to fetch categories");
   }
@@ -127,11 +147,14 @@ export async function getCategories() {
   return res.json();
 }
 
-export async function createTicket(formData: FormData) {
-  const res = await fetch(`${API_URL}/api/tickets`, {
+// Optional Idempotency-Key header: a retry with the same key never creates a second record (see ./idempotency).
+const idempotencyHeaders = (idempotencyKey?: string): Record<string, string> => (idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {});
+
+export async function createTicket(formData: FormData, idempotencyKey?: string) {
+  const res = await apiFetch(`${API_URL}/api/tickets`, {
     credentials: "include",
     method: "POST",
-    headers: {},
+    headers: idempotencyHeaders(idempotencyKey),
     body: formData
   });
 
@@ -155,7 +178,7 @@ export async function getTickets(filters?: TicketFilters): Promise<PaginatedResp
   const queryString = params.toString();
   const url = `${API_URL}/api/tickets${queryString ? `?${queryString}` : ''}`;
 
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     credentials: "include",
     method: 'GET',
     headers: { 'Content-Type': 'application/json' }
@@ -170,7 +193,7 @@ export async function getTickets(filters?: TicketFilters): Promise<PaginatedResp
 }
 
 export async function getTicket(ticketId: number): Promise<{ data: Ticket }> {
-  const res = await fetch(`${API_URL}/api/tickets/${ticketId}`, {
+  const res = await apiFetch(`${API_URL}/api/tickets/${ticketId}`, {
     credentials: "include",
     method: 'GET',
     headers: { 'Content-Type': 'application/json' }
@@ -188,7 +211,7 @@ export async function uploadAttachment(ticketId: number, file: File) {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/attachments`, {
+  const res = await apiFetch(`${API_URL}/api/tickets/${ticketId}/attachments`, {
     credentials: "include",
     method: "POST",
     headers: {},
@@ -204,7 +227,7 @@ export async function uploadAttachment(ticketId: number, file: File) {
 }
 
 export async function removeAttachment(attachmentId: number, reason: string) {
-  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}`, {
+  const res = await apiFetch(`${API_URL}/api/attachments/${attachmentId}`, {
     credentials: "include",
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
@@ -220,7 +243,7 @@ export async function removeAttachment(attachmentId: number, reason: string) {
 }
 
 export async function downloadAttachment(attachmentId: number, originalFilename: string) {
-  const res = await fetch(`${API_URL}/api/attachments/${attachmentId}/download`, {
+  const res = await apiFetch(`${API_URL}/api/attachments/${attachmentId}/download`, {
     method: "GET",
     headers: {}
   });
@@ -248,7 +271,8 @@ export interface StaffTicketFilters {
   requestedPriority?: string;
   itPriority?: string;
   status?: string;
-  ownerId?: string | 'unassigned';
+  ownerId?: string | 'unassigned' | 'me';
+  followUpRequired?: boolean;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
   page?: number;
@@ -282,7 +306,7 @@ export async function getStaffTickets(filters?: StaffTicketFilters): Promise<Pag
   const queryString = params.toString();
   const url = `${API_URL}/api/staff/tickets${queryString ? `?${queryString}` : ''}`;
 
-  const res = await fetch(url, {
+  const res = await apiFetch(url, {
     credentials: "include",
     method: 'GET',
     headers: { 'Content-Type': 'application/json' }
@@ -297,7 +321,7 @@ export async function getStaffTickets(filters?: StaffTicketFilters): Promise<Pag
 }
 
 export async function getStaffAssignees() {
-  const res = await fetch(`${API_URL}/api/staff/assignees`, {
+  const res = await apiFetch(`${API_URL}/api/staff/assignees`, {
     credentials: "include",
     method: 'GET',
     headers: { 'Content-Type': 'application/json' }
@@ -312,7 +336,7 @@ export async function getStaffAssignees() {
 }
 
 export async function getStaffTicketDetail(ticketId: number) {
-  const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}`, {
+  const res = await apiFetch(`${API_URL}/api/staff/tickets/${ticketId}`, {
     credentials: "include",
     method: 'GET',
     headers: { 'Content-Type': 'application/json' }
@@ -327,7 +351,7 @@ export async function getStaffTicketDetail(ticketId: number) {
 }
 
 export async function claimTicket(ticketId: number) {
-  const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}/claim`, {
+  const res = await apiFetch(`${API_URL}/api/staff/tickets/${ticketId}/claim`, {
     credentials: "include",
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' }
@@ -342,7 +366,7 @@ export async function claimTicket(ticketId: number) {
 }
 
 export async function assignTicket(ticketId: number, assigneeId: string) {
-  const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}/assign`, {
+  const res = await apiFetch(`${API_URL}/api/staff/tickets/${ticketId}/assign`, {
     credentials: "include",
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -358,7 +382,7 @@ export async function assignTicket(ticketId: number, assigneeId: string) {
 }
 
 export async function updateTicketPriority(ticketId: number, itPriority: string) {
-  const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}/priority`, {
+  const res = await apiFetch(`${API_URL}/api/staff/tickets/${ticketId}/priority`, {
     credentials: "include",
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -373,24 +397,24 @@ export async function updateTicketPriority(ticketId: number, itPriority: string)
   return res.json();
 }
 
-export async function updateTicketStatus(ticketId: number, status: string, rejectionReason?: string) {
-  const res = await fetch(`${API_URL}/api/staff/tickets/${ticketId}/status`, {
+export async function updateTicketStatus(ticketId: number, status: string, rejectionReason?: string, expectedUpdatedAt?: string) {
+  const res = await apiFetch(`${API_URL}/api/staff/tickets/${ticketId}/status`, {
     credentials: "include",
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status, rejectionReason })
+    body: JSON.stringify({ status, rejectionReason, expectedUpdatedAt })
   });
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => null);
-    throw new Error(errorData?.error?.message || "Failed to update status");
+    // ApiError is an Error, so existing callers reading err.message keep working; code/status drive the workflow messages.
+    throw await toApiError(res, "Failed to update status");
   }
 
   return res.json();
 }
 
 export async function getPublicComments(ticketId: number) {
-  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, { credentials: "include" });
+  const res = await apiFetch(`${API_URL}/api/tickets/${ticketId}/comments`, { credentials: "include" });
   if (!res.ok) {
     const errorData = await res.json().catch(() => null);
     throw new Error(errorData?.error?.message || "Failed to load comments");
@@ -398,10 +422,10 @@ export async function getPublicComments(ticketId: number) {
   return res.json();
 }
 
-export async function addPublicComment(ticketId: number, content: string) {
-  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
+export async function addPublicComment(ticketId: number, content: string, idempotencyKey?: string) {
+  const res = await apiFetch(`${API_URL}/api/tickets/${ticketId}/comments`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...idempotencyHeaders(idempotencyKey) },
     credentials: "include",
     body: JSON.stringify({ content })
   });
@@ -412,10 +436,10 @@ export async function addPublicComment(ticketId: number, content: string) {
   return res.json();
 }
 
-export async function addInternalNote(ticketId: number, content: string) {
-  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/internal-notes`, {
+export async function addInternalNote(ticketId: number, content: string, idempotencyKey?: string) {
+  const res = await apiFetch(`${API_URL}/api/tickets/${ticketId}/internal-notes`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...idempotencyHeaders(idempotencyKey) },
     credentials: "include",
     body: JSON.stringify({ content })
   });
@@ -427,7 +451,7 @@ export async function addInternalNote(ticketId: number, content: string) {
 }
 
 export async function indicateProblemResolved(ticketId: number) {
-  const res = await fetch(`${API_URL}/api/tickets/${ticketId}/indicate-resolved`, {
+  const res = await apiFetch(`${API_URL}/api/tickets/${ticketId}/indicate-resolved`, {
     method: "POST",
     credentials: "include",
   });
@@ -443,7 +467,7 @@ export async function getUsers(search?: string, role?: string) {
   if (search) params.append("search", search);
   if (role) params.append("role", role);
   const qs = params.toString();
-  const res = await fetch(`${API_URL}/api/admin/users${qs ? `?${qs}` : ""}`, { credentials: "include" });
+  const res = await apiFetch(`${API_URL}/api/admin/users${qs ? `?${qs}` : ""}`, { credentials: "include" });
   if (!res.ok) {
     const errorData = await res.json().catch(() => null);
     throw new Error(errorData?.error?.message || "Failed to load users");
@@ -452,7 +476,7 @@ export async function getUsers(search?: string, role?: string) {
 }
 
 export async function createUser(data: any) {
-  const res = await fetch(`${API_URL}/api/admin/users`, {
+  const res = await apiFetch(`${API_URL}/api/admin/users`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -466,7 +490,7 @@ export async function createUser(data: any) {
 }
 
 export async function updateUser(id: string, data: any) {
-  const res = await fetch(`${API_URL}/api/admin/users/${id}`, {
+  const res = await apiFetch(`${API_URL}/api/admin/users/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -480,7 +504,7 @@ export async function updateUser(id: string, data: any) {
 }
 
 export async function resetUserPassword(id: string, newPassword: string) {
-  const res = await fetch(`${API_URL}/api/admin/users/${id}/reset-password`, {
+  const res = await apiFetch(`${API_URL}/api/admin/users/${id}/reset-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
@@ -490,5 +514,175 @@ export async function resetUserPassword(id: string, newPassword: string) {
     const errorData = await res.json().catch(() => null);
     throw new Error(errorData?.error?.message || "Failed to reset password");
   }
+  return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Lab 4: Actions Taken client APIs (specification.md BR-04/BR-05, api-spec.md §2)
+// ---------------------------------------------------------------------------
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+export interface ActionTakenUser {
+  id: string;
+  fullName: string;
+  role: string;
+}
+
+export interface ActionTakenRevision {
+  id: number;
+  revisionNumber: number;
+  editedAt: string;
+  editor?: ActionTakenUser;
+  originalData?: Record<string, unknown>;
+  updatedData?: Record<string, unknown>;
+}
+
+export interface ActionTaken {
+  id: number;
+  ticketId: number;
+  performedBy: ActionTakenUser;
+  assignedToId?: string | null;
+  assignedTo?: ActionTakenUser | null;
+  actionDateTime: string;
+  description: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  // Only returned to IT Staff / Admin.
+  revisions?: ActionTakenRevision[];
+}
+
+export interface CreateActionTakenInput {
+  description: string;
+  result: string;
+  followUpRequired: boolean;
+  followUpNote?: string;
+  attachmentNotes?: string;
+  actionDateTime?: string;
+  assignedToId?: string;
+}
+
+export interface UpdateActionTakenInput {
+  expectedUpdatedAt: string;
+  description?: string;
+  result?: string;
+  followUpRequired?: boolean;
+  followUpNote?: string | null;
+  attachmentNotes?: string | null;
+  actionDateTime?: string;
+  assignedToId?: string | null;
+}
+
+async function toApiError(res: Response, fallback: string): Promise<ApiError> {
+  const errorData = await res.json().catch(() => null);
+  return new ApiError(errorData?.error?.message || fallback, res.status, errorData?.error?.code);
+}
+
+export async function getActionsTaken(ticketId: number): Promise<{ data: ActionTaken[] }> {
+  const res = await apiFetch(`${API_URL}/api/tickets/${ticketId}/actions-taken`, {
+    credentials: "include",
+    method: "GET",
+    headers: { "Content-Type": "application/json" }
+  });
+  if (!res.ok) throw await toApiError(res, "Failed to fetch actions taken");
+  return res.json();
+}
+
+export async function createActionTaken(
+  ticketId: number,
+  data: CreateActionTakenInput,
+  idempotencyKey?: string
+): Promise<{ message: string; data: ActionTaken }> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+  const res = await apiFetch(`${API_URL}/api/tickets/${ticketId}/actions-taken`, {
+    credentials: "include",
+    method: "POST",
+    headers,
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) throw await toApiError(res, "Failed to record action taken");
+  return res.json();
+}
+
+export async function updateActionTaken(
+  actionId: number,
+  data: UpdateActionTakenInput
+): Promise<{ message: string; data: ActionTaken }> {
+  const res = await apiFetch(`${API_URL}/api/actions-taken/${actionId}`, {
+    credentials: "include",
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) throw await toApiError(res, "Failed to update action taken");
+  return res.json();
+}
+
+// Lab 4: Dashboards (FR-13, FR-14)
+export interface RequesterDashboardData {
+  totalTickets: number;
+  activeTickets: number;
+  waitingForRequesterTickets: number;
+  resolvedOrClosedTickets: number;
+  recentTickets: Array<{
+    id: number;
+    ticketNumber: string;
+    title: string;
+    currentStatus: string;
+    itPriority: string;
+    updatedAt: string;
+  }>;
+}
+
+export interface StaffDashboardData {
+  unassignedTickets: number;
+  myActiveTickets: number;
+  ticketsRequiringFollowUp: number;
+  criticalOrHighPriorityTickets: number;
+  statusBreakdown: Record<string, number>;
+  recentTickets: Array<{
+    id: number;
+    ticketNumber: string;
+    title: string;
+    currentStatus: string;
+    itPriority: string;
+    ownerId: string | null;
+    updatedAt: string;
+  }>;
+  currentUserActions: Array<{
+    id: number;
+    ticketId: number;
+    ticketNumber: string;
+    description: string;
+    result: string;
+    actionDateTime: string;
+    followUpRequired: boolean;
+  }>;
+}
+
+export async function getRequesterDashboard(): Promise<{ data: RequesterDashboardData }> {
+  const res = await apiFetch(`${API_URL}/api/dashboard/requester`, { credentials: "include" });
+  if (!res.ok) throw await toApiError(res, "Failed to load requester dashboard");
+  return res.json();
+}
+
+export async function getStaffDashboard(): Promise<{ data: StaffDashboardData }> {
+  const res = await apiFetch(`${API_URL}/api/dashboard/staff`, { credentials: "include" });
+  if (!res.ok) throw await toApiError(res, "Failed to load staff dashboard");
   return res.json();
 }

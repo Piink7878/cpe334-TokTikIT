@@ -23,6 +23,7 @@ describe("IT Staff Ticket Detail API (Lab 3)", () => {
       const tickets = await prisma.ticket.findMany({ where: { OR: [{ requesterId: { in: userIds } }, { ownerId: { in: userIds } }] } });
       const ticketIds = tickets.map(t => t.id);
       
+      await prisma.actionTaken.deleteMany({ where: { ticketId: { in: ticketIds } } });
       await prisma.internalNote.deleteMany({ where: { ticketId: { in: ticketIds } } });
       await prisma.publicComment.deleteMany({ where: { ticketId: { in: ticketIds } } });
       await prisma.attachment.deleteMany({ where: { ticketId: { in: ticketIds } } });
@@ -60,6 +61,7 @@ describe("IT Staff Ticket Detail API (Lab 3)", () => {
 
   beforeEach(async () => {
     if (testTicketId) {
+      await prisma.actionTaken.deleteMany({ where: { ticketId: testTicketId } });
       await prisma.internalNote.deleteMany({ where: { ticketId: testTicketId } });
       await prisma.publicComment.deleteMany({ where: { ticketId: testTicketId } });
       await prisma.attachment.deleteMany({ where: { ticketId: testTicketId } });
@@ -95,6 +97,7 @@ describe("IT Staff Ticket Detail API (Lab 3)", () => {
       const tickets = await prisma.ticket.findMany({ where: { OR: [{ requesterId: { in: userIds } }, { ownerId: { in: userIds } }] } });
       const ticketIds = tickets.map(t => t.id);
       
+      await prisma.actionTaken.deleteMany({ where: { ticketId: { in: ticketIds } } });
       await prisma.internalNote.deleteMany({ where: { ticketId: { in: ticketIds } } });
       await prisma.publicComment.deleteMany({ where: { ticketId: { in: ticketIds } } });
       await prisma.attachment.deleteMany({ where: { ticketId: { in: ticketIds } } });
@@ -249,6 +252,10 @@ describe("IT Staff Ticket Detail API (Lab 3)", () => {
 
     it("should allow valid transition OPEN -> RESOLVED and log it with actor ID and timestamp", async () => {
       await prisma.ticket.update({ where: { id: testTicketId }, data: { currentStatus: "OPEN" } });
+      // Resolution Gate (Lab 4 BR-10): RESOLVED needs at least one Action Taken.
+      await prisma.actionTaken.create({
+        data: { ticketId: testTicketId, performedById: itStaffId, description: "Resolution Action", result: "Issue resolved" }
+      });
       
       const res = await request(app).patch(`/api/staff/tickets/${testTicketId}/status`)
         .set("Cookie", itStaffSessionCookie)

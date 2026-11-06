@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import express, { Request, Response } from "express";
 import { Prisma } from "@prisma/client";
 import cors from "cors";
@@ -16,8 +17,48 @@ void getPrisma;
 // Supertest can import `app` without opening a port. Do not merge these files.
 export const app = express();
 
-app.use(cors({ origin: true, credentials: true }));
+app.disable("x-powered-by");
+
+// The browser app is served from the Vite dev server (proxying /api); only configured origins may make credentialed
+// cross-origin requests. Requests without an Origin header (same-origin, curl, tests) are unaffected.
+const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET must be set when NODE_ENV=production");
+}
+
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "same-origin");
+  next();
+});
+app.use(cors({ origin: (origin, callback) => callback(null, !origin || allowedOrigins.includes(origin)), credentials: true }));
 app.use(express.json());
+
+// PostgreSQL text columns cannot hold NUL characters; reject them up front instead of failing inside a query.
+const containsNullByte = (value: unknown): boolean => {
+  if (typeof value === "string") return value.includes("\u0000");
+  if (Array.isArray(value)) return value.some(containsNullByte);
+  if (value && typeof value === "object") return Object.entries(value).some(([k, v]) => containsNullByte(k) || containsNullByte(v));
+  return false;
+};
+app.use((req, res, next) => {
+  // An undecodable URL is left to Express (it answers path-parameter decoding failures with a 400 handled below).
+  let url = req.originalUrl;
+  try {
+    url = decodeURIComponent(url);
+  } catch {
+    /* keep the raw URL */
+  }
+  if (containsNullByte(url) || /%00/i.test(req.originalUrl) || containsNullByte(req.body) || containsNullByte(req.query)) {
+    return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Request contains an invalid character" } });
+  }
+  next();
+});
 
 app.use(session({
   secret: process.env.SESSION_SECRET || "default_secret_for_local_dev",
@@ -38,7 +79,7 @@ app.use(session({
 app.post("/api/auth/login", async (req: Request, res: Response): Promise<any> => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
+    if (!email || !password || typeof email !== "string" || typeof password !== "string") {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Email and password are required" } });
     }
 
@@ -54,6 +95,8 @@ app.post("/api/auth/login", async (req: Request, res: Response): Promise<any> =>
       return res.status(401).json({ error: { code: "UNAUTHORIZED", message: "Invalid email or password" } });
     }
 
+    // A new session id at login prevents session fixation (a pre-login id never becomes an authenticated one).
+    await new Promise<void>((resolve, reject) => req.session.regenerate((err) => (err ? reject(err) : resolve())));
     req.session.userId = user.id;
     req.session.establishedAt = Date.now();
     
@@ -221,8 +264,8 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
   try {
     const requesterId = req.user!.id;
 
-    const categoryId = parseInt(req.body.categoryId, 10);
-    const relatedSystemId = parseInt(req.body.relatedSystemId, 10);
+    const categoryId = parseId(req.body.categoryId);
+    const relatedSystemId = parseId(req.body.relatedSystemId);
     const summary = req.body.summary?.trim();
     const description = req.body.description?.trim();
     const requestedPriority = req.body.requestedPriority;
@@ -245,11 +288,7 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
     }
 
     if (details.length > 0) {
-      if (req.files) {
-        for (const file of req.files as Express.Multer.File[]) {
-          fs.unlink(file.path, () => {});
-        }
-      }
+      discardUploadedFiles(req);
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Validation failed", details } });
     }
 
@@ -265,7 +304,7 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
     }
 
     const currentYear = new Date().getFullYear();
-    const attachmentsData = [];
+    const attachmentsData: { originalName: string; storedName: string; mimeType: string; sizeBytes: number }[] = [];
     if (req.files) {
       for (const file of req.files as Express.Multer.File[]) {
         attachmentsData.push({
@@ -277,24 +316,41 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
       }
     }
 
+    // Optional replay protection: the payload includes the uploaded files' content so a retry must match exactly.
+    let idem: IdempotencyStart = { kind: "none" };
+    if (req.headers["idempotency-key"] !== undefined) {
+      const uploaded = (req.files as Express.Multer.File[] | undefined) ?? [];
+      const files = await Promise.all(
+        uploaded.map(async (f) => ({
+          name: f.originalname,
+          type: f.mimetype,
+          size: f.size,
+          sha256: crypto.createHash("sha256").update(await fs.promises.readFile(f.path)).digest("hex")
+        }))
+      );
+      idem = await beginIdempotent(req, res, "POST /api/tickets", { categoryId, relatedSystemId, requestedPriority, summary, description, files }, () => discardUploadedFiles(req));
+      if (idem.kind === "handled") return;
+    }
+
     let maxRetries = 5;
     let ticket: any = null;
+    let storedBody: unknown = null;
 
     while (maxRetries > 0) {
-      const lastTicket = await prisma.ticket.findFirst({
-        where: { ticketNumber: { startsWith: `TKT-${currentYear}-` } },
-        orderBy: { ticketNumber: "desc" }
-      });
+      const create = async (db: Prisma.TransactionClient) => {
+        const lastTicket = await db.ticket.findFirst({
+          where: { ticketNumber: { startsWith: `TKT-${currentYear}-` } },
+          orderBy: { ticketNumber: "desc" }
+        });
 
-      let sequence = 1;
-      if (lastTicket) {
-        const parts = lastTicket.ticketNumber.split('-');
-        sequence = parseInt(parts[2], 10) + 1;
-      }
-      const ticketNumber = `TKT-${currentYear}-${String(sequence).padStart(6, '0')}`;
+        let sequence = 1;
+        if (lastTicket) {
+          const parts = lastTicket.ticketNumber.split('-');
+          sequence = parseInt(parts[2], 10) + 1;
+        }
+        const ticketNumber = `TKT-${currentYear}-${String(sequence).padStart(6, '0')}`;
 
-      try {
-        ticket = await prisma.ticket.create({
+        return db.ticket.create({
           data: {
             ticketNumber,
             requesterId,
@@ -311,8 +367,27 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
           },
           include: { attachments: true }
         });
+      };
+
+      try {
+        if (idem.kind === "new") {
+          // The ticket and its stored response commit together (see createWithIdempotency).
+          ticket = await prisma.$transaction(async (tx) => {
+            const created = await create(tx);
+            storedBody = { data: formatTicket(created) };
+            await recordIdempotent(tx, req, idem.ctx, 201, storedBody);
+            return created;
+          });
+        } else {
+          ticket = await create(prisma as unknown as Prisma.TransactionClient);
+        }
         break; // Successfully created
       } catch (err: any) {
+        if (isIdempotencyConflict(err) && idem.kind === "new") {
+          // An identical request committed first: answer with its stored response and keep no files of ours.
+          if (await replayIfRecorded(req, res, idem.ctx, () => discardUploadedFiles(req))) return;
+          throw err;
+        }
         if (err.code === "P2002") {
           maxRetries--;
           if (maxRetries === 0) {
@@ -325,48 +400,12 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
       }
     }
 
-    const formattedTicket = {
-        id: ticket.id,
-        ticketNumber: ticket.ticketNumber,
-        requesterId: ticket.requesterId,
-        categoryId: ticket.categoryId,
-        relatedSystemId: ticket.relatedSystemId,
-        summary: ticket.summary,
-        description: ticket.description,
-        requestedPriority: ticket.requestedPriority,
-        itPriority: ticket.itPriority,
-        status: ticket.currentStatus,
-        createdAt: ticket.createdAt,
-        updatedAt: ticket.updatedAt,
-        attachments: ticket.attachments ? ticket.attachments.map((att: {
-            id: number;
-            originalName: string;
-            sizeBytes: number;
-            mimeType: string;
-            isRemoved: boolean;
-            removedAt: Date | null;
-            removalReason: string | null;
-            createdAt: Date;
-        }) => ({
-            id: att.id,
-            originalFilename: att.originalName,
-            fileSize: att.sizeBytes,
-            contentType: att.mimeType,
-            isRemoved: att.isRemoved,
-            removedAt: att.removedAt,
-            removedReason: att.removalReason,
-            createdAt: att.createdAt
-        })) : []
-    };
+    const formattedTicket = formatTicket(ticket);
 
     return res.status(201).json({ data: formattedTicket });
 
   } catch (error: any) {
-    if (req.files) {
-      for (const file of req.files as Express.Multer.File[]) {
-        fs.unlink(file.path, () => {});
-      }
-    }
+    discardUploadedFiles(req);
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });
   }
@@ -375,6 +414,166 @@ app.post("/api/tickets", requireAuth, requirePasswordChangeEnforcement, (req, re
 // ---------------------------------------------------------------------------
 // GET /api/tickets - List Requester Tickets (My Tickets)
 // ---------------------------------------------------------------------------
+// Integer ids must fit the database's 32-bit integer column; anything larger is treated like a non-numeric id.
+function parseId(raw: unknown): number {
+  const n = parseInt(String(raw), 10);
+  return Number.isInteger(n) && Math.abs(n) <= 2147483647 ? n : NaN;
+}
+
+// ---------------------------------------------------------------------------
+// Replay protection for creating tickets, public comments and internal notes (safe network retries).
+// A request that carries an Idempotency-Key is recorded together with its response; a retry with the same key and
+// payload (for example after the response was lost to a timeout) gets that stored response and creates nothing.
+// Without the header every endpoint behaves exactly as before.
+// ---------------------------------------------------------------------------
+const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
+
+type IdempotencyContext = { key: string; endpoint: string; requestHash: string };
+type IdempotencyStart = { kind: "none" } | { kind: "handled" } | { kind: "new"; ctx: IdempotencyContext };
+
+const hashPayload = (payload: unknown) => crypto.createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+
+// Answers the request itself (kind "handled") for an invalid key, a replay, or a key reused with a different payload.
+// `cleanup` runs before any such answer is sent (e.g. to delete files the request uploaded).
+async function beginIdempotent(req: Request, res: Response, endpoint: string, payload: unknown, cleanup?: () => void): Promise<IdempotencyStart> {
+  const raw = req.headers["idempotency-key"];
+  const key = (Array.isArray(raw) ? raw[0] : raw)?.trim();
+  if (key === undefined) return { kind: "none" };
+  if (!IDEMPOTENCY_KEY_PATTERN.test(key)) {
+    cleanup?.();
+    res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Idempotency-Key must be 8-128 characters: letters, digits, '.', '_', ':' or '-'" } });
+    return { kind: "handled" };
+  }
+  const ctx = { key, endpoint, requestHash: hashPayload(payload) };
+  return (await replayIfRecorded(req, res, ctx, cleanup)) ? { kind: "handled" } : { kind: "new", ctx };
+}
+
+async function replayIfRecorded(req: Request, res: Response, ctx: IdempotencyContext, cleanup?: () => void): Promise<boolean> {
+  const record = await getPrisma().requestIdempotency.findUnique({
+    where: { userId_endpoint_key: { userId: req.user!.id, endpoint: ctx.endpoint, key: ctx.key } }
+  });
+  if (!record || record.expiresAt <= new Date()) return false;
+  cleanup?.();
+  if (record.requestHash !== ctx.requestHash) {
+    res.status(409).json({ error: { code: "IDEMPOTENCY_KEY_CONFLICT", message: "The Idempotency-Key has already been used with a different request payload." } });
+    return true;
+  }
+  res.setHeader("Idempotent-Replay", "true");
+  res.status(record.responseStatus).json(record.responseBody);
+  return true;
+}
+
+// Called inside the same transaction that creates the record, so either both exist or neither does.
+async function recordIdempotent(tx: Prisma.TransactionClient, req: Request, ctx: IdempotencyContext, status: number, body: unknown) {
+  await tx.requestIdempotency.deleteMany({ where: { expiresAt: { lte: new Date() } } });
+  await tx.requestIdempotency.create({
+    data: {
+      userId: req.user!.id,
+      endpoint: ctx.endpoint,
+      key: ctx.key,
+      requestHash: ctx.requestHash,
+      responseStatus: status,
+      responseBody: body as Prisma.InputJsonValue,
+      expiresAt: new Date(Date.now() + IDEMPOTENCY_TTL_MS)
+    }
+  });
+}
+
+// A concurrent request with the same key committed first: its unique record makes this transaction fail.
+function isIdempotencyConflict(err: any): boolean {
+  if (err?.code !== "P2002") return false;
+  const target = err.meta?.target;
+  return Array.isArray(target) ? target.includes("endpoint") : String(target ?? "").includes("RequestIdempotency");
+}
+
+// Creates a record through `create` and answers 201. With an idempotency context the record and its stored response
+// are committed together, and a lost race against an identical request replays the winner's response.
+async function createWithIdempotency(
+  req: Request,
+  res: Response,
+  idem: IdempotencyStart,
+  create: (db: Prisma.TransactionClient) => Promise<unknown>
+): Promise<any> {
+  const prisma = getPrisma();
+  if (idem.kind !== "new") {
+    return res.status(201).json(await create(prisma as unknown as Prisma.TransactionClient));
+  }
+  try {
+    const body = await prisma.$transaction(async (tx) => {
+      const created = await create(tx);
+      await recordIdempotent(tx, req, idem.ctx, 201, created);
+      return created;
+    });
+    return res.status(201).json(body);
+  } catch (err) {
+    if (isIdempotencyConflict(err) && (await replayIfRecorded(req, res, idem.ctx))) return;
+    throw err;
+  }
+}
+
+// Removes files multer already wrote to disk for a request that will not create an attachment record.
+// Synchronous, so the files are gone before the response that rejects the request is sent.
+function discardUploadedFiles(req: Request) {
+  if (!req.files) return;
+  for (const file of req.files as Express.Multer.File[]) {
+    try {
+      fs.unlinkSync(file.path);
+    } catch {
+      /* already removed */
+    }
+  }
+}
+
+// Response shape of POST /api/tickets (also what the idempotency record stores for replays).
+function formatTicket(ticket: any) {
+  return {
+      id: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      requesterId: ticket.requesterId,
+      categoryId: ticket.categoryId,
+      relatedSystemId: ticket.relatedSystemId,
+      summary: ticket.summary,
+      description: ticket.description,
+      requestedPriority: ticket.requestedPriority,
+      itPriority: ticket.itPriority,
+      status: ticket.currentStatus,
+      createdAt: ticket.createdAt,
+      updatedAt: ticket.updatedAt,
+      attachments: ticket.attachments ? ticket.attachments.map((att: {
+          id: number;
+          originalName: string;
+          sizeBytes: number;
+          mimeType: string;
+          isRemoved: boolean;
+          removedAt: Date | null;
+          removalReason: string | null;
+          createdAt: Date;
+      }) => ({
+          id: att.id,
+          originalFilename: att.originalName,
+          fileSize: att.sizeBytes,
+          contentType: att.mimeType,
+          isRemoved: att.isRemoved,
+          removedAt: att.removedAt,
+          removedReason: att.removalReason,
+          createdAt: att.createdAt
+      })) : []
+  };
+}
+
+const ALL_TICKET_STATUSES = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "RESOLVED", "CLOSED", "REOPENED", "CANCELLED", "REJECTED"];
+const ALL_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const UNRESOLVED_TICKET_STATUSES = ["NEW", "OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "REOPENED"];
+
+// Parses a single value or a comma-separated list (dashboard drill-downs) into a Prisma filter.
+// Returns null when any value is not part of the allowed set.
+function parseEnumFilter(raw: string, allowed: string[]): string | { in: string[] } | null {
+  const values = raw.split(",").map((v) => v.trim());
+  if (values.some((v) => !allowed.includes(v))) return null;
+  return values.length === 1 ? values[0] : { in: values };
+}
+
 app.get("/api/tickets", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
   try {
     const requesterId = req.user!.id;
@@ -407,19 +606,31 @@ app.get("/api/tickets", requireAuth, requirePasswordChangeEnforcement, async (re
       ];
     }
     if (categoryId) {
-      const parsedCategoryId = parseInt(categoryId as string, 10);
+      const parsedCategoryId = parseId(categoryId);
       if (!isNaN(parsedCategoryId)) {
         where.categoryId = parsedCategoryId;
       }
     }
     if (requestedPriority && typeof requestedPriority === "string") {
-      where.requestedPriority = requestedPriority;
+      const requestedFilter = parseEnumFilter(requestedPriority, ALL_PRIORITIES);
+      if (!requestedFilter) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid requestedPriority filter" } });
+      }
+      where.requestedPriority = requestedFilter;
     }
     if (itPriority && typeof itPriority === "string") {
-      where.itPriority = itPriority;
+      const priorityFilter = parseEnumFilter(itPriority, ALL_PRIORITIES);
+      if (!priorityFilter) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid itPriority filter" } });
+      }
+      where.itPriority = priorityFilter;
     }
     if (status && typeof status === "string") {
-      where.currentStatus = status;
+      const statusFilter = parseEnumFilter(status, ALL_TICKET_STATUSES);
+      if (!statusFilter) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid status filter" } });
+      }
+      where.currentStatus = statusFilter;
     }
 
     const validSortFields = ["ticketNumber", "createdAt", "updatedAt", "summary"];
@@ -483,7 +694,7 @@ app.get("/api/tickets/:id", requireAuth, requirePasswordChangeEnforcement, async
   try {
     const requesterId = req.user!.id;
 
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -562,7 +773,7 @@ app.post("/api/tickets/:id/attachments", requireAuth, requirePasswordChangeEnfor
   try {
     const requesterId = req.user!.id;
 
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       if (req.file) fs.unlink(req.file.path, () => {});
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
@@ -635,7 +846,7 @@ app.get("/api/attachments/:id/download", requireAuth, requirePasswordChangeEnfor
   try {
     const requesterId = req.user!.id;
 
-    const attachmentId = parseInt(req.params.id, 10);
+    const attachmentId = parseId(req.params.id);
     if (isNaN(attachmentId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid attachment ID" } });
     }
@@ -685,7 +896,7 @@ app.delete("/api/attachments/:id", requireAuth, requirePasswordChangeEnforcement
   try {
     const requesterId = req.user!.id;
 
-    const attachmentId = parseInt(req.params.id, 10);
+    const attachmentId = parseId(req.params.id);
     if (isNaN(attachmentId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid attachment ID" } });
     }
@@ -756,6 +967,7 @@ app.get("/api/staff/tickets", requireAuth, requirePasswordChangeEnforcement, req
       itPriority,
       status,
       ownerId,
+      followUpRequired,
       sortBy = "createdAt",
       sortOrder = "desc",
       page = "1",
@@ -781,24 +993,41 @@ app.get("/api/staff/tickets", requireAuth, requirePasswordChangeEnforcement, req
       ];
     }
     if (categoryId) {
-      const parsedCategoryId = parseInt(categoryId as string, 10);
+      const parsedCategoryId = parseId(categoryId);
       if (!isNaN(parsedCategoryId)) {
         where.categoryId = parsedCategoryId;
       }
     }
     if (requestedPriority && typeof requestedPriority === "string") {
-      where.requestedPriority = requestedPriority;
+      const requestedFilter = parseEnumFilter(requestedPriority, ALL_PRIORITIES);
+      if (!requestedFilter) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid requestedPriority filter" } });
+      }
+      where.requestedPriority = requestedFilter;
     }
     if (itPriority && typeof itPriority === "string") {
-      where.itPriority = itPriority;
+      const priorityFilter = parseEnumFilter(itPriority, ALL_PRIORITIES);
+      if (!priorityFilter) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid itPriority filter" } });
+      }
+      where.itPriority = priorityFilter;
     }
     if (status && typeof status === "string") {
-      where.currentStatus = status;
+      const statusFilter = parseEnumFilter(status, ALL_TICKET_STATUSES);
+      if (!statusFilter) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid status filter" } });
+      }
+      where.currentStatus = statusFilter;
     }
     if (ownerId === "unassigned") {
       where.ownerId = null;
+    } else if (ownerId === "me") {
+      where.ownerId = req.user!.id;
     } else if (ownerId && typeof ownerId === "string") {
       where.ownerId = ownerId;
+    }
+    if (followUpRequired === "true") {
+      where.actionsTaken = { some: { followUpRequired: true } };
     }
 
     const validSortFields = ["ticketNumber", "createdAt", "updatedAt", "summary", "itPriority", "status"];
@@ -902,7 +1131,7 @@ app.get("/api/staff/assignees", requireAuth, requirePasswordChangeEnforcement, r
 // ---------------------------------------------------------------------------
 app.get("/api/staff/tickets/:id", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -958,12 +1187,52 @@ app.get("/api/staff/tickets/:id", requireAuth, requirePasswordChangeEnforcement,
   }
 });
 
+// BR-08: CLOSED, CANCELLED and REJECTED tickets accept no further status, owner or priority changes.
+const TERMINAL_TICKET_STATUSES = ["CLOSED", "CANCELLED", "REJECTED"];
+
+function sendTerminalTicketError(res: Response): Response {
+  return res.status(400).json({
+    error: { code: "TICKET_TERMINAL", message: "Ticket is in a terminal status and can no longer be modified." }
+  });
+}
+
+function sendConcurrencyConflict(res: Response): Response {
+  return res.status(409).json({
+    error: {
+      code: "CONCURRENCY_CONFLICT",
+      message: "Ticket was modified by another concurrent update. Please reload and retry."
+    }
+  });
+}
+
+// BR-08 / BR-14: the earlier read only decides the response; the write itself must still be conditional, otherwise a
+// concurrent request can move the ticket to a terminal status between the check and the update.
+async function updateTicketIfUnchanged(
+  ticketId: number,
+  guard: Prisma.TicketWhereInput,
+  data: Prisma.TicketUncheckedUpdateManyInput,
+  auditNote?: { content: string; authorId: string }
+): Promise<{ ticket: any } | { failure: "TERMINAL" | "CONFLICT" }> {
+  return getPrisma().$transaction(async (tx) => {
+    const updated = await tx.ticket.updateMany({ where: { id: ticketId, ...guard }, data });
+    if (updated.count === 0) {
+      const current = await tx.ticket.findUnique({ where: { id: ticketId }, select: { currentStatus: true } });
+      const terminal = !!current && TERMINAL_TICKET_STATUSES.includes(current.currentStatus);
+      return { failure: terminal ? ("TERMINAL" as const) : ("CONFLICT" as const) };
+    }
+    if (auditNote) {
+      await tx.internalNote.create({ data: { ticketId, ...auditNote } });
+    }
+    return { ticket: await tx.ticket.findUnique({ where: { id: ticketId } }) };
+  });
+}
+
 // ---------------------------------------------------------------------------
 // PATCH /api/staff/tickets/:id/claim - Claim a ticket
 // ---------------------------------------------------------------------------
 app.patch("/api/staff/tickets/:id/claim", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -974,30 +1243,25 @@ app.patch("/api/staff/tickets/:id/claim", requireAuth, requirePasswordChangeEnfo
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
     }
 
-    const newStatus = ticket.currentStatus === "NEW" ? "OPEN" : ticket.currentStatus;
-
-    const updateData: any = {
-      ownerId: req.user!.id,
-      currentStatus: newStatus
-    };
-
-    if (ticket.currentStatus === "NEW") {
-      updateData.internalNotes = {
-        create: {
-          content: "Status changed from NEW to OPEN",
-          authorId: req.user!.id
-        }
-      };
+    if (TERMINAL_TICKET_STATUSES.includes(ticket.currentStatus)) {
+      return sendTerminalTicketError(res);
     }
 
-    const updatedTicket = await prisma.ticket.update({
-      where: { id: ticketId },
-      data: updateData
-    });
+    const newStatus = ticket.currentStatus === "NEW" ? "OPEN" : ticket.currentStatus;
+
+    const result = await updateTicketIfUnchanged(
+      ticketId,
+      { currentStatus: ticket.currentStatus },
+      { ownerId: req.user!.id, currentStatus: newStatus },
+      ticket.currentStatus === "NEW" ? { content: "Status changed from NEW to OPEN", authorId: req.user!.id } : undefined
+    );
+    if ("failure" in result) {
+      return result.failure === "TERMINAL" ? sendTerminalTicketError(res) : sendConcurrencyConflict(res);
+    }
 
     return res.status(200).json({
       message: "Ticket claimed successfully",
-      ticket: updatedTicket
+      ticket: result.ticket
     });
   } catch (error) {
     console.error(error);
@@ -1010,13 +1274,13 @@ app.patch("/api/staff/tickets/:id/claim", requireAuth, requirePasswordChangeEnfo
 // ---------------------------------------------------------------------------
 app.patch("/api/staff/tickets/:id/assign", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
 
     const { assigneeId } = req.body;
-    if (!assigneeId) {
+    if (!assigneeId || typeof assigneeId !== "string") {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "assigneeId is required" } });
     }
 
@@ -1033,30 +1297,25 @@ app.patch("/api/staff/tickets/:id/assign", requireAuth, requirePasswordChangeEnf
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
     }
 
-    const newStatus = ticket.currentStatus === "NEW" ? "OPEN" : ticket.currentStatus;
-
-    const updateData: any = {
-      ownerId: assigneeId,
-      currentStatus: newStatus
-    };
-
-    if (ticket.currentStatus === "NEW") {
-      updateData.internalNotes = {
-        create: {
-          content: "Status changed from NEW to OPEN",
-          authorId: req.user!.id
-        }
-      };
+    if (TERMINAL_TICKET_STATUSES.includes(ticket.currentStatus)) {
+      return sendTerminalTicketError(res);
     }
 
-    const updatedTicket = await prisma.ticket.update({
-      where: { id: ticketId },
-      data: updateData
-    });
+    const newStatus = ticket.currentStatus === "NEW" ? "OPEN" : ticket.currentStatus;
+
+    const result = await updateTicketIfUnchanged(
+      ticketId,
+      { currentStatus: ticket.currentStatus },
+      { ownerId: assigneeId, currentStatus: newStatus },
+      ticket.currentStatus === "NEW" ? { content: "Status changed from NEW to OPEN", authorId: req.user!.id } : undefined
+    );
+    if ("failure" in result) {
+      return result.failure === "TERMINAL" ? sendTerminalTicketError(res) : sendConcurrencyConflict(res);
+    }
 
     return res.status(200).json({
       message: "Ticket assigned successfully",
-      ticket: updatedTicket
+      ticket: result.ticket
     });
   } catch (error) {
     console.error(error);
@@ -1069,7 +1328,7 @@ app.patch("/api/staff/tickets/:id/assign", requireAuth, requirePasswordChangeEnf
 // ---------------------------------------------------------------------------
 app.patch("/api/staff/tickets/:id/priority", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1086,14 +1345,22 @@ app.patch("/api/staff/tickets/:id/priority", requireAuth, requirePasswordChangeE
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
     }
 
-    const updatedTicket = await prisma.ticket.update({
-      where: { id: ticketId },
-      data: { itPriority }
-    });
+    if (TERMINAL_TICKET_STATUSES.includes(ticket.currentStatus)) {
+      return sendTerminalTicketError(res);
+    }
+
+    const result = await updateTicketIfUnchanged(
+      ticketId,
+      { currentStatus: { notIn: TERMINAL_TICKET_STATUSES as any } },
+      { itPriority }
+    );
+    if ("failure" in result) {
+      return result.failure === "TERMINAL" ? sendTerminalTicketError(res) : sendConcurrencyConflict(res);
+    }
 
     return res.status(200).json({
       message: "Priority updated successfully",
-      ticket: updatedTicket
+      ticket: result.ticket
     });
   } catch (error) {
     console.error(error);
@@ -1106,14 +1373,23 @@ app.patch("/api/staff/tickets/:id/priority", requireAuth, requirePasswordChangeE
 // ---------------------------------------------------------------------------
 app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
 
-    const { status, rejectionReason } = req.body;
+    const { status, rejectionReason, expectedUpdatedAt } = req.body;
     if (!status) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "status is required" } });
+    }
+
+    // Optional stale-update guard (requirements §6.1): the caller's last-seen ticket.updatedAt.
+    let expectedDate: Date | undefined;
+    if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null) {
+      expectedDate = typeof expectedUpdatedAt === "string" ? new Date(expectedUpdatedAt) : new Date(NaN);
+      if (isNaN(expectedDate.getTime())) {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "expectedUpdatedAt must be a valid date" } });
+      }
     }
 
     const prisma = getPrisma();
@@ -1124,13 +1400,12 @@ app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnf
 
     const currentStatus = ticket.currentStatus;
 
-    // BR-04: Validate allowed state machine transitions
-    // NEW -> OPEN, REJECTED, CANCELLED
-    // OPEN -> RESOLVED, CANCELLED
-    // RESOLVED -> CLOSED, REOPENED
-    // REOPENED -> RESOLVED, CANCELLED
-    // Terminal states: CLOSED, REJECTED, CANCELLED
+    // A caller working from an outdated view is told so (409) before its transition is judged against newer state.
+    if (expectedDate && expectedDate.getTime() !== ticket.updatedAt.getTime()) {
+      return sendConcurrencyConflict(res);
+    }
 
+    // Approved status transition matrix (specification.md §6.1). Terminal states have no exits (BR-08).
     const allowedTransitions: Record<string, string[]> = {
       NEW: ["OPEN", "REJECTED", "CANCELLED"],
       OPEN: ["RESOLVED", "CANCELLED", "IN_PROGRESS", "WAITING_FOR_REQUESTER"],
@@ -1154,30 +1429,51 @@ app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnf
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "rejectionReason is required when rejecting a ticket" } });
     }
 
-    const updateData: any = {
-      currentStatus: status
-    };
-
-    const noteBody = status === "REJECTED" 
+    const noteBody = status === "REJECTED"
       ? `Status changed from ${currentStatus} to ${status}. Reason: ${rejectionReason.trim()}`
       : `Status changed from ${currentStatus} to ${status}`;
 
-    updateData.internalNotes = {
-      create: {
-        content: noteBody,
-        authorId: req.user!.id
+    try {
+      const updatedTicket = await prisma.$transaction(async (tx) => {
+        // BR-10 Resolution Gate: RESOLVED needs at least one persisted Action Taken (follow-ups do not block).
+        if (status === "RESOLVED") {
+          const actionsCount = await tx.actionTaken.count({ where: { ticketId } });
+          if (actionsCount === 0) {
+            throw new Error("ACTION_TAKEN_REQUIRED");
+          }
+        }
+
+        // BR-14: compare-and-set on the state we validated against, so a competing or stale update loses with 409.
+        const updated = await tx.ticket.updateMany({
+          where: { id: ticketId, currentStatus, ...(expectedDate ? { updatedAt: expectedDate } : {}) },
+          data: { currentStatus: status }
+        });
+        if (updated.count === 0) {
+          throw new Error("CONCURRENCY_CONFLICT");
+        }
+
+        await tx.internalNote.create({
+          data: { ticketId, authorId: req.user!.id, content: noteBody }
+        });
+
+        return tx.ticket.findUnique({ where: { id: ticketId } });
+      });
+
+      return res.status(200).json({
+        message: "Status updated successfully",
+        ticket: updatedTicket
+      });
+    } catch (err: any) {
+      if (err.message === "ACTION_TAKEN_REQUIRED") {
+        return res.status(400).json({
+          error: { code: "ACTION_TAKEN_REQUIRED", message: "At least one Action Taken is required." }
+        });
       }
-    };
-
-    const updatedTicket = await prisma.ticket.update({
-      where: { id: ticketId },
-      data: updateData
-    });
-
-    return res.status(200).json({
-      message: "Status updated successfully",
-      ticket: updatedTicket
-    });
+      if (err.message === "CONCURRENCY_CONFLICT") {
+        return sendConcurrencyConflict(res);
+      }
+      throw err;
+    }
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });
@@ -1189,7 +1485,7 @@ app.patch("/api/staff/tickets/:id/status", requireAuth, requirePasswordChangeEnf
 // ---------------------------------------------------------------------------
 app.get("/api/tickets/:id/comments", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1223,7 +1519,7 @@ app.get("/api/tickets/:id/comments", requireAuth, requirePasswordChangeEnforceme
 // ---------------------------------------------------------------------------
 app.post("/api/tickets/:id/comments", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1244,16 +1540,20 @@ app.post("/api/tickets/:id/comments", requireAuth, requirePasswordChangeEnforcem
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
     }
 
-    const comment = await prisma.publicComment.create({
-      data: {
-        ticketId,
-        authorId: req.user!.id,
-        content: content.trim()
-      },
-      include: { author: { select: { id: true, fullName: true, role: true } } }
-    });
+    const idem = await beginIdempotent(req, res, "POST /api/tickets/:id/comments", { ticketId, content: content.trim() });
+    if (idem.kind === "handled") return;
 
-    return res.status(201).json({ data: comment });
+    return createWithIdempotency(req, res, idem, async (db) => {
+      const comment = await db.publicComment.create({
+        data: {
+          ticketId,
+          authorId: req.user!.id,
+          content: content.trim()
+        },
+        include: { author: { select: { id: true, fullName: true, role: true } } }
+      });
+      return { data: comment };
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });
@@ -1265,7 +1565,7 @@ app.post("/api/tickets/:id/comments", requireAuth, requirePasswordChangeEnforcem
 // ---------------------------------------------------------------------------
 app.get("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1295,7 +1595,7 @@ app.get("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEnf
 // ---------------------------------------------------------------------------
 app.post("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1312,16 +1612,677 @@ app.post("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEn
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
     }
 
-    const note = await prisma.internalNote.create({
+    const idem = await beginIdempotent(req, res, "POST /api/tickets/:id/internal-notes", { ticketId, content: content.trim() });
+    if (idem.kind === "handled") return;
+
+    return createWithIdempotency(req, res, idem, async (db) => {
+      const note = await db.internalNote.create({
+        data: {
+          ticketId,
+          authorId: req.user!.id,
+          content: content.trim()
+        },
+        include: { author: { select: { id: true, fullName: true, role: true } } }
+      });
+      return { data: note };
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Actions Taken Endpoints (Lab 4 Part 6)
+// ---------------------------------------------------------------------------
+
+// Shared input validation for Action Taken create/update (specification.md BR-04 field limits).
+// Returns a human-readable message for the first invalid field, or null when valid.
+const ACTION_DATE_FUTURE_TOLERANCE_MS = 5 * 60 * 1000;
+
+function isJsonObject(body: unknown): boolean {
+  return body !== null && typeof body === "object" && !Array.isArray(body);
+}
+
+function validateActionTakenInput(body: any, mode: "create" | "update"): string | null {
+  const { description, result, followUpRequired, followUpNote, attachmentNotes, actionDateTime, assignedToId } = body;
+  const create = mode === "create";
+
+  if (create || description !== undefined) {
+    if (typeof description !== "string" || description.trim() === "") {
+      return create ? "description is required" : "description cannot be empty";
+    }
+    if (description.trim().length < 5 || description.trim().length > 3000) {
+      return "description must be between 5 and 3000 characters";
+    }
+  }
+
+  if (create || result !== undefined) {
+    if (typeof result !== "string" || result.trim() === "") {
+      return create ? "result is required" : "result cannot be empty";
+    }
+    if (result.trim().length < 2 || result.trim().length > 1000) {
+      return "result must be between 2 and 1000 characters";
+    }
+  }
+
+  // Optional on create (defaults to false per BR-04); when supplied it must be a boolean.
+  if (followUpRequired !== undefined && typeof followUpRequired !== "boolean") {
+    return "followUpRequired must be a boolean";
+  }
+
+  if (followUpNote !== undefined && followUpNote !== null) {
+    if (typeof followUpNote !== "string") return "followUpNote must be a string";
+    if (followUpNote.trim().length > 1000) return "followUpNote must be at most 1000 characters";
+  }
+
+  if (attachmentNotes !== undefined && attachmentNotes !== null) {
+    if (typeof attachmentNotes !== "string") return "attachmentNotes must be a string";
+    if (attachmentNotes.trim().length > 1000) return "attachmentNotes must be at most 1000 characters";
+  }
+
+  if (assignedToId !== undefined && assignedToId !== null && typeof assignedToId !== "string") {
+    return "assignedToId must be a string";
+  }
+
+  // On create an omitted/empty actionDateTime defaults to now(); on update it cannot be cleared.
+  if (actionDateTime !== undefined && (!create || (actionDateTime !== null && actionDateTime !== ""))) {
+    if (typeof actionDateTime !== "string" || isNaN(new Date(actionDateTime).getTime())) {
+      return "Invalid actionDateTime";
+    }
+    if (new Date(actionDateTime).getTime() > Date.now() + ACTION_DATE_FUTURE_TOLERANCE_MS) {
+      return "actionDateTime cannot be more than 5 minutes in the future";
+    }
+  }
+
+  return null;
+}
+
+// POST /api/tickets/:id/actions-taken - Record Action Taken
+app.post("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const ticketId = parseId(req.params.id);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
+    }
+
+    if (!isJsonObject(req.body)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Request body must be a JSON object" } });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    const {
+      description,
+      result,
+      followUpRequired = false,
+      followUpNote,
+      attachmentNotes,
+      actionDateTime,
+      assignedToId
+    } = req.body;
+
+    const validationMessage = validateActionTakenInput(req.body, "create");
+    if (validationMessage) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: validationMessage } });
+    }
+
+    if (followUpRequired && (!followUpNote || followUpNote.trim() === "")) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "followUpNote is required when followUpRequired is true" } });
+    }
+
+    const parsedActionDate = actionDateTime ? new Date(actionDateTime) : new Date();
+
+    if (assignedToId) {
+      const assignee = await prisma.user.findUnique({ where: { id: assignedToId } });
+      if (!assignee || !assignee.isActive) {
+        return res.status(400).json({ error: { code: "INACTIVE_ASSIGNEE", message: "Assigned user is inactive." } });
+      }
+      if (assignee.role !== "IT_STAFF" && assignee.role !== "ADMIN") {
+        return res.status(400).json({ error: { code: "INVALID_ASSIGNEE_ROLE", message: "Assignee must have role IT_STAFF or ADMIN." } });
+      }
+    }
+
+    const rawIdempotencyHeader = req.headers["idempotency-key"];
+    const idempotencyKey = (Array.isArray(rawIdempotencyHeader) ? rawIdempotencyHeader[0] : rawIdempotencyHeader)?.trim();
+
+    if (idempotencyKey) {
+      const canonicalPayload = JSON.stringify({
+        description: description.trim(),
+        result: result.trim(),
+        followUpRequired,
+        followUpNote: followUpRequired ? followUpNote.trim() : null,
+        attachmentNotes: attachmentNotes ? attachmentNotes.trim() : null,
+        assignedToId: assignedToId || null,
+        actionDateTime: actionDateTime ? parsedActionDate.toISOString() : null,
+      });
+      const requestHash = crypto.createHash("sha256").update(canonicalPayload).digest("hex");
+
+      const existingRecord = await prisma.idempotencyRecord.findUnique({
+        where: {
+          userId_endpoint_ticketId_key: {
+            userId: req.user!.id,
+            endpoint: "POST /api/tickets/:id/actions-taken",
+            ticketId,
+            key: idempotencyKey,
+          },
+        },
+      });
+
+      if (existingRecord) {
+        if (existingRecord.expiresAt > new Date()) {
+          if (existingRecord.requestHash === requestHash) {
+            return res.status(existingRecord.responseStatus).json(existingRecord.responseBody);
+          } else {
+            return res.status(409).json({
+              error: {
+                code: "IDEMPOTENCY_KEY_CONFLICT",
+                message: "The Idempotency-Key has already been used with a different request payload.",
+              },
+            });
+          }
+        }
+      }
+
+      try {
+        const resultPayload = await prisma.$transaction(async (tx) => {
+          await tx.idempotencyRecord.deleteMany({
+            where: {
+              userId: req.user!.id,
+              endpoint: "POST /api/tickets/:id/actions-taken",
+              ticketId,
+              key: idempotencyKey,
+              expiresAt: { lte: new Date() },
+            },
+          });
+
+          const newAction = await tx.actionTaken.create({
+            data: {
+              ticketId,
+              performedById: req.user!.id,
+              assignedToId: assignedToId || null,
+              actionDateTime: parsedActionDate,
+              description: description.trim(),
+              result: result.trim(),
+              followUpRequired,
+              followUpNote: followUpRequired ? followUpNote.trim() : null,
+              attachmentNotes: attachmentNotes ? attachmentNotes.trim() : null,
+            },
+            include: {
+              performedBy: { select: { id: true, fullName: true, role: true } },
+              assignedTo: { select: { id: true, fullName: true, role: true } },
+            },
+          });
+
+          const responsePayload = {
+            message: "Action taken recorded successfully",
+            data: newAction,
+          };
+
+          await tx.idempotencyRecord.create({
+            data: {
+              userId: req.user!.id,
+              endpoint: "POST /api/tickets/:id/actions-taken",
+              ticketId,
+              key: idempotencyKey,
+              requestHash,
+              actionTakenId: newAction.id,
+              responseStatus: 201,
+              responseBody: responsePayload,
+              expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            },
+          });
+
+          return responsePayload;
+        });
+
+        return res.status(201).json(resultPayload);
+      } catch (err: any) {
+        if (err.code === "P2002") {
+          const committedRecord = await prisma.idempotencyRecord.findUnique({
+            where: {
+              userId_endpoint_ticketId_key: {
+                userId: req.user!.id,
+                endpoint: "POST /api/tickets/:id/actions-taken",
+                ticketId,
+                key: idempotencyKey,
+              },
+            },
+          });
+          if (committedRecord && committedRecord.requestHash === requestHash) {
+            return res.status(committedRecord.responseStatus).json(committedRecord.responseBody);
+          } else {
+            return res.status(409).json({
+              error: {
+                code: "IDEMPOTENCY_KEY_CONFLICT",
+                message: "The Idempotency-Key has already been used with a different request payload.",
+              },
+            });
+          }
+        }
+        throw err;
+      }
+    }
+
+    // No idempotency key provided
+    const newAction = await prisma.actionTaken.create({
       data: {
         ticketId,
-        authorId: req.user!.id,
-        content: content.trim()
+        performedById: req.user!.id,
+        assignedToId: assignedToId || null,
+        actionDateTime: parsedActionDate,
+        description: description.trim(),
+        result: result.trim(),
+        followUpRequired,
+        followUpNote: followUpRequired ? followUpNote.trim() : null,
+        attachmentNotes: attachmentNotes ? attachmentNotes.trim() : null,
       },
-      include: { author: { select: { id: true, fullName: true, role: true } } }
+      include: {
+        performedBy: { select: { id: true, fullName: true, role: true } },
+        assignedTo: { select: { id: true, fullName: true, role: true } },
+      },
     });
 
-    return res.status(201).json({ data: note });
+    return res.status(201).json({
+      message: "Action taken recorded successfully",
+      data: newAction,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// PATCH /api/actions-taken/:actionId - Update Action Taken with Optimistic Concurrency and Revision Audit
+app.patch("/api/actions-taken/:actionId", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const actionId = parseId(req.params.actionId);
+    if (isNaN(actionId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid action ID" } });
+    }
+
+    if (!isJsonObject(req.body)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Request body must be a JSON object" } });
+    }
+
+    const {
+      expectedUpdatedAt,
+      description,
+      result,
+      followUpRequired,
+      followUpNote,
+      attachmentNotes,
+      actionDateTime,
+      assignedToId
+    } = req.body;
+
+    if (!expectedUpdatedAt) {
+      return res.status(400).json({ error: { code: "MISSING_EXPECTED_UPDATED_AT", message: "expectedUpdatedAt is required" } });
+    }
+
+    const expectedDate = new Date(expectedUpdatedAt);
+    if (isNaN(expectedDate.getTime())) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "expectedUpdatedAt must be a valid date" } });
+    }
+
+    const prisma = getPrisma();
+    const existing = await prisma.actionTaken.findUnique({
+      where: { id: actionId },
+      include: {
+        revisions: { orderBy: { revisionNumber: "desc" }, take: 1 },
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Action Taken record not found" } });
+    }
+
+    const validationMessage = validateActionTakenInput(req.body, "update");
+    if (validationMessage) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: validationMessage } });
+    }
+
+    const effectiveFollowUpRequired = followUpRequired !== undefined ? followUpRequired : existing.followUpRequired;
+    let effectiveFollowUpNote = existing.followUpNote;
+
+    if (effectiveFollowUpRequired) {
+      if (followUpNote !== undefined) {
+        if (!followUpNote || typeof followUpNote !== "string" || followUpNote.trim() === "") {
+          return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "followUpNote is required when followUpRequired is true" } });
+        }
+        effectiveFollowUpNote = followUpNote.trim();
+      } else if (!existing.followUpNote || existing.followUpNote.trim() === "") {
+        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "followUpNote is required when followUpRequired is true" } });
+      }
+    } else {
+      effectiveFollowUpNote = null;
+    }
+
+    if (assignedToId) {
+      const assignee = await prisma.user.findUnique({ where: { id: assignedToId } });
+      if (!assignee || !assignee.isActive) {
+        return res.status(400).json({ error: { code: "INACTIVE_ASSIGNEE", message: "Assigned user is inactive." } });
+      }
+      if (assignee.role !== "IT_STAFF" && assignee.role !== "ADMIN") {
+        return res.status(400).json({ error: { code: "INVALID_ASSIGNEE_ROLE", message: "Assignee must have role IT_STAFF or ADMIN." } });
+      }
+    }
+
+    try {
+      const txResult = await prisma.$transaction(async (tx) => {
+        const updateResult = await tx.actionTaken.updateMany({
+          where: {
+            id: actionId,
+            updatedAt: expectedDate,
+          },
+          data: {
+            ...(description !== undefined && { description: description.trim() }),
+            ...(result !== undefined && { result: result.trim() }),
+            ...(followUpRequired !== undefined && { followUpRequired }),
+            followUpNote: effectiveFollowUpNote,
+            ...(attachmentNotes !== undefined && { attachmentNotes: attachmentNotes ? attachmentNotes.trim() : null }),
+            ...(actionDateTime !== undefined && { actionDateTime: new Date(actionDateTime) }),
+            ...(assignedToId !== undefined && { assignedToId: assignedToId || null }),
+          },
+        });
+
+        if (updateResult.count === 0) {
+          throw new Error("STALE_UPDATE");
+        }
+
+        const nextRevisionNumber = (existing.revisions[0]?.revisionNumber || 0) + 1;
+        const originalSnapshot = {
+          description: existing.description,
+          result: existing.result,
+          followUpRequired: existing.followUpRequired,
+          followUpNote: existing.followUpNote,
+          attachmentNotes: existing.attachmentNotes,
+          assignedToId: existing.assignedToId,
+          actionDateTime: existing.actionDateTime,
+        };
+
+        const updatedRecord = await tx.actionTaken.findUnique({
+          where: { id: actionId },
+          include: {
+            performedBy: { select: { id: true, fullName: true, role: true } },
+            assignedTo: { select: { id: true, fullName: true, role: true } },
+          },
+        });
+
+        const updatedSnapshot = {
+          description: updatedRecord!.description,
+          result: updatedRecord!.result,
+          followUpRequired: updatedRecord!.followUpRequired,
+          followUpNote: updatedRecord!.followUpNote,
+          attachmentNotes: updatedRecord!.attachmentNotes,
+          assignedToId: updatedRecord!.assignedToId,
+          actionDateTime: updatedRecord!.actionDateTime,
+        };
+
+        const newRevision = await tx.actionTakenRevision.create({
+          data: {
+            actionTakenId: actionId,
+            revisionNumber: nextRevisionNumber,
+            editedById: req.user!.id,
+            originalData: originalSnapshot,
+            updatedData: updatedSnapshot,
+          },
+        });
+
+        return {
+          updatedRecord,
+          newRevision,
+        };
+      });
+
+      return res.status(200).json({
+        message: "Action taken updated successfully",
+        data: {
+          ...txResult.updatedRecord,
+          latestRevision: {
+            revisionNumber: txResult.newRevision.revisionNumber,
+            editedById: txResult.newRevision.editedById,
+            editedAt: txResult.newRevision.editedAt,
+          },
+        },
+      });
+    } catch (err: any) {
+      if (err.message === "STALE_UPDATE") {
+        const currentRecord = await prisma.actionTaken.findUnique({
+          where: { id: actionId },
+          include: {
+            performedBy: { select: { id: true, fullName: true, role: true } },
+            assignedTo: { select: { id: true, fullName: true, role: true } },
+          },
+        });
+        return res.status(409).json({
+          error: {
+            code: "STALE_UPDATE",
+            message: "The record was modified by another user. Please reload and retry.",
+          },
+          current: currentRecord,
+        });
+      }
+      throw err;
+    }
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// GET /api/tickets/:id/actions-taken - List Actions Taken
+app.get("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnforcement, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const ticketId = parseId(req.params.id);
+    if (isNaN(ticketId)) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
+    }
+
+    const prisma = getPrisma();
+    const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    // Requester authorization & non-enumeration protection
+    if (req.user!.role === "REQUESTER" && ticket.requesterId !== req.user!.id) {
+      return res.status(404).json({ error: { code: "NOT_FOUND", message: "Ticket not found" } });
+    }
+
+    const sortBy = req.query.sortBy === "createdAt" ? "createdAt" : "actionDateTime";
+    const sortOrder = req.query.sortOrder === "desc" ? "desc" : "asc";
+
+    if (req.user!.role === "REQUESTER") {
+      // Requesters receive actions without internal revision history snapshots
+      const actions = await prisma.actionTaken.findMany({
+        where: { ticketId },
+        orderBy: { [sortBy]: sortOrder },
+        include: {
+          performedBy: { select: { id: true, fullName: true, role: true } },
+          assignedTo: { select: { id: true, fullName: true, role: true } },
+        },
+      });
+
+      return res.status(200).json({ data: actions });
+    }
+
+    // IT Staff and Admin receive full actions with nested revisions
+    const actions = await prisma.actionTaken.findMany({
+      where: { ticketId },
+      orderBy: { [sortBy]: sortOrder },
+      include: {
+        performedBy: { select: { id: true, fullName: true, role: true } },
+        assignedTo: { select: { id: true, fullName: true, role: true } },
+        revisions: {
+          orderBy: { revisionNumber: "asc" },
+          include: {
+            editor: { select: { id: true, fullName: true, role: true } },
+          },
+        },
+      },
+    });
+
+    return res.status(200).json({ data: actions });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// Explicit DELETE prohibition for Actions Taken (BR-05 / HTTP 405)
+app.delete(["/api/actions-taken/:actionId", "/api/tickets/:id/actions-taken/:actionId"], requireAuth, (_req: Request, res: Response) => {
+  return res.status(405).json({
+    error: {
+      code: "METHOD_NOT_ALLOWED",
+      message: "Action Taken records represent legal compliance audit history and cannot be deleted.",
+    },
+  });
+});
+
+// Revision mutation/deletion prohibition (HTTP 405)
+app.all(["/api/action-taken-revisions*", "/api/tickets/:id/actions-taken/:actionId/revisions*"], requireAuth, (req: Request, res: Response) => {
+  if (req.method === "GET") {
+    return res.status(404).json({ error: { code: "NOT_FOUND", message: "Not found" } });
+  }
+  return res.status(405).json({
+    error: {
+      code: "METHOD_NOT_ALLOWED",
+      message: "Action Taken revisions are immutable and cannot be modified or deleted.",
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Dashboards (FR-13..FR-17, BR-12, BR-13, BR-16)
+// All metrics are database aggregates; recent lists are capped at 5.
+// ---------------------------------------------------------------------------
+const DASHBOARD_RECENT_LIMIT = 5;
+
+// Every status is present in the breakdown, with 0 for statuses that currently have no tickets.
+export function buildStatusBreakdown(rows: { currentStatus: string; _count: { _all: number } }[]): Record<string, number> {
+  const breakdown: Record<string, number> = {};
+  for (const status of ALL_TICKET_STATUSES) breakdown[status] = 0;
+  for (const row of rows) breakdown[row.currentStatus] = row._count._all;
+  return breakdown;
+}
+
+// GET /api/dashboard/requester - metrics for the authenticated Requester's own tickets
+app.get("/api/dashboard/requester", requireAuth, requirePasswordChangeEnforcement, requireRole(["REQUESTER"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const prisma = getPrisma();
+    const requesterId = req.user!.id;
+
+    const [totalTickets, activeTickets, waitingForRequesterTickets, resolvedOrClosedTickets, recent] = await Promise.all([
+      prisma.ticket.count({ where: { requesterId } }),
+      prisma.ticket.count({ where: { requesterId, currentStatus: { in: ["NEW", "OPEN", "IN_PROGRESS"] } } }),
+      prisma.ticket.count({ where: { requesterId, currentStatus: "WAITING_FOR_REQUESTER" } }),
+      prisma.ticket.count({ where: { requesterId, currentStatus: { in: ["RESOLVED", "CLOSED"] } } }),
+      prisma.ticket.findMany({
+        where: { requesterId },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        take: DASHBOARD_RECENT_LIMIT,
+        select: { id: true, ticketNumber: true, summary: true, currentStatus: true, itPriority: true, updatedAt: true }
+      })
+    ]);
+
+    return res.status(200).json({
+      data: {
+        totalTickets,
+        activeTickets,
+        waitingForRequesterTickets,
+        resolvedOrClosedTickets,
+        recentTickets: recent.map((t) => ({
+          id: t.id,
+          ticketNumber: t.ticketNumber,
+          title: t.summary,
+          currentStatus: t.currentStatus,
+          itPriority: t.itPriority,
+          updatedAt: t.updatedAt
+        }))
+      }
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: { message: "Internal server error" } });
+  }
+});
+
+// GET /api/dashboard/staff - global queue metrics for IT Staff and Administrators
+app.get("/api/dashboard/staff", requireAuth, requirePasswordChangeEnforcement, requireRole(["IT_STAFF", "ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const prisma = getPrisma();
+    const userId = req.user!.id;
+    const unresolved = { in: UNRESOLVED_TICKET_STATUSES as any };
+
+    const [
+      unassignedTickets,
+      myActiveTickets,
+      ticketsRequiringFollowUp,
+      criticalOrHighPriorityTickets,
+      statusCounts,
+      recent,
+      actions
+    ] = await Promise.all([
+      prisma.ticket.count({ where: { ownerId: null, currentStatus: { in: ["NEW", "OPEN"] } } }),
+      prisma.ticket.count({ where: { ownerId: userId, currentStatus: { in: ["OPEN", "IN_PROGRESS", "WAITING_FOR_REQUESTER", "REOPENED"] } } }),
+      // Counts tickets, not actions: several follow-up actions on one ticket still count once (AC-13).
+      prisma.ticket.count({ where: { currentStatus: unresolved, actionsTaken: { some: { followUpRequired: true } } } }),
+      prisma.ticket.count({ where: { currentStatus: unresolved, itPriority: { in: ["CRITICAL", "HIGH"] } } }),
+      prisma.ticket.groupBy({ by: ["currentStatus"], _count: { _all: true } }),
+      prisma.ticket.findMany({
+        where: { currentStatus: unresolved },
+        orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+        take: DASHBOARD_RECENT_LIMIT,
+        select: { id: true, ticketNumber: true, summary: true, currentStatus: true, itPriority: true, ownerId: true, updatedAt: true }
+      }),
+      prisma.actionTaken.findMany({
+        where: { OR: [{ performedById: userId }, { assignedToId: userId }] },
+        orderBy: [{ actionDateTime: "desc" }, { id: "desc" }],
+        take: DASHBOARD_RECENT_LIMIT,
+        select: {
+          id: true,
+          ticketId: true,
+          description: true,
+          result: true,
+          actionDateTime: true,
+          followUpRequired: true,
+          ticket: { select: { ticketNumber: true } }
+        }
+      })
+    ]);
+
+    return res.status(200).json({
+      data: {
+        unassignedTickets,
+        myActiveTickets,
+        ticketsRequiringFollowUp,
+        criticalOrHighPriorityTickets,
+        statusBreakdown: buildStatusBreakdown(statusCounts),
+        recentTickets: recent.map((t) => ({
+          id: t.id,
+          ticketNumber: t.ticketNumber,
+          title: t.summary,
+          currentStatus: t.currentStatus,
+          itPriority: t.itPriority,
+          ownerId: t.ownerId,
+          updatedAt: t.updatedAt
+        })),
+        currentUserActions: actions.map((a) => ({
+          id: a.id,
+          ticketId: a.ticketId,
+          ticketNumber: a.ticket.ticketNumber,
+          description: a.description,
+          result: a.result,
+          actionDateTime: a.actionDateTime,
+          followUpRequired: a.followUpRequired
+        }))
+      }
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });
@@ -1333,7 +2294,7 @@ app.post("/api/tickets/:id/internal-notes", requireAuth, requirePasswordChangeEn
 // ---------------------------------------------------------------------------
 app.post("/api/tickets/:id/indicate-resolved", requireAuth, requirePasswordChangeEnforcement, requireRole(["REQUESTER"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const ticketId = parseInt(req.params.id, 10);
+    const ticketId = parseId(req.params.id);
     if (isNaN(ticketId)) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid ticket ID" } });
     }
@@ -1409,7 +2370,7 @@ app.get("/api/admin/users", requireAuth, requirePasswordChangeEnforcement, requi
 app.post("/api/admin/users", requireAuth, requirePasswordChangeEnforcement, requireRole(["ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
     const { name, email, role, password } = req.body;
-    if (!name || !email || !role || !password) {
+    if (!name || !email || !role || !password || [name, email, role, password].some((v) => typeof v !== "string")) {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Name, email, role, and password are required" } });
     }
     const validRoles = ["REQUESTER", "IT_STAFF", "ADMIN"];
@@ -1459,6 +2420,12 @@ const updateUserHandler = async (req: Request, res: Response): Promise<any> => {
        return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "User ID required" }});
     }
     const { name, email, role, isActive } = req.body;
+    if (
+      [name, email, role].some((v) => v !== undefined && v !== null && typeof v !== "string") ||
+      (isActive !== undefined && typeof isActive !== "boolean")
+    ) {
+      return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid field type" } });
+    }
     if (role) {
       const validRoles = ["REQUESTER", "IT_STAFF", "ADMIN"];
       if (!validRoles.includes(role)) {
@@ -1580,7 +2547,7 @@ app.post("/api/admin/users/:id/reset-password", requireAuth, requirePasswordChan
   try {
     const userId = req.params.id;
     const { newPassword } = req.body;
-    if (!newPassword) {
+    if (!newPassword || typeof newPassword !== "string") {
       return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "newPassword is required" } });
     }
 
@@ -1604,6 +2571,28 @@ app.post("/api/admin/users/:id/reset-password", requireAuth, requirePasswordChan
     console.error(error);
     return res.status(500).json({ error: { message: "Internal server error" } });
   }
+});
+
+// Unknown API paths and body-parser failures answer in JSON like every other API error (no HTML, no stack trace).
+app.use("/api", (_req: Request, res: Response) => {
+  res.status(404).json({ error: { code: "NOT_FOUND", message: "Resource not found" } });
+});
+
+app.use((err: any, _req: Request, res: Response, next: express.NextFunction) => {
+  if (res.headersSent) return next(err);
+  if (err?.type === "entity.parse.failed") {
+    return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Malformed JSON request body" } });
+  }
+  if (err?.type === "entity.too.large") {
+    return res.status(413).json({ error: { code: "PAYLOAD_TOO_LARGE", message: "Request body is too large" } });
+  }
+  // Client errors raised by Express itself (e.g. an undecodable path parameter, an unsupported charset).
+  const status = Number(err?.status ?? err?.statusCode);
+  if (status >= 400 && status < 500) {
+    return res.status(status).json({ error: { code: "VALIDATION_ERROR", message: "The request could not be processed" } });
+  }
+  console.error(err);
+  return res.status(500).json({ error: { message: "Internal server error" } });
 });
 
 export default app;

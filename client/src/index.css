@@ -155,3 +155,170 @@ body {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* Actions Taken (Lab 4, ui-spec.md §5.3 / §7.3) */
+.action-taken-card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  border-left: 4px solid var(--color-secondary);
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.action-taken-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.action-taken-card__performer {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.action-pill {
+  display: inline-block;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.action-pill--ok {
+  background-color: var(--color-pale-green);
+  color: var(--color-primary);
+}
+
+.action-pill--warn {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+/* Minimum 44x44 touch targets for Actions Taken controls */
+.action-btn {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.action-modal .btn-close {
+  width: 44px;
+  height: 44px;
+  background-size: 14px;
+}
+
+.action-modal .form-check-input {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Dashboard KPI cards (Lab 4, ui-spec §2.1.4) */
+.kpi-card {
+  display: block;
+  background-color: var(--color-pale-green);
+  border: 1px solid #BCE3CE;
+  border-radius: 12px;
+  transition: box-shadow 0.2s ease-in-out, border-color 0.2s ease-in-out;
+}
+a.kpi-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 107, 60, 0.12);
+  border-color: var(--color-primary);
+}
+a.kpi-card:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.kpi-card .kpi-value {
+  font-size: 48px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-primary);
+}
+.kpi-skeleton {
+  min-height: 150px;
+}
+
+/* Navigation touch targets (ui-spec 5.4: at least 44px) */
+.navbar .nav-link,
+.navbar .navbar-toggler,
+.navbar .btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+.navbar .navbar-toggler {
+  min-width: 44px;
+  justify-content: center;
+}
+@media (min-width: 992px) {
+  .navbar .navbar-toggler {
+    display: none;
+  }
+}
+
+/* Zen Green accessible variants of the Bootstrap outline buttons (contrast >= 4.5:1) */
+.btn-outline-success {
+  --bs-btn-color: var(--color-primary);
+  --bs-btn-border-color: var(--color-primary);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--color-primary);
+  --bs-btn-hover-border-color: var(--color-primary);
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: var(--color-primary-hover);
+  --bs-btn-active-border-color: var(--color-primary-hover);
+}
+.btn-outline-secondary {
+  --bs-btn-color: #495057;
+  --bs-btn-border-color: #6c757d;
+}
+.text-success {
+  color: var(--color-primary) !important;
+}
+
+/* Links and outline buttons follow Zen Green (Bootstrap's default blue fails contrast on tinted backgrounds) */
+:root {
+  --bs-link-color-rgb: 0, 107, 60;
+  --bs-link-hover-color-rgb: 0, 84, 47;
+}
+.btn-outline-primary {
+  --bs-btn-color: var(--color-primary);
+  --bs-btn-border-color: var(--color-primary);
+  --bs-btn-hover-color: #fff;
+  --bs-btn-hover-bg: var(--color-primary);
+  --bs-btn-hover-border-color: var(--color-primary);
+  --bs-btn-active-color: #fff;
+  --bs-btn-active-bg: var(--color-primary-hover);
+  --bs-btn-active-border-color: var(--color-primary-hover);
+}
+
+/* Touch targets on tablet and mobile (ui-spec 5.4: at least 44px) */
+@media (max-width: 991.98px) {
+  .btn-close,
+  .modal-header .btn-close {
+    box-sizing: content-box;
+    width: 16px;
+    height: 16px;
+    padding: 14px;
+  }
+  .btn,
+  .page-link,
+  .nav-tabs .nav-link {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Red outline buttons: Bootstrap's #dc3545 is below 4.5:1 on light grey panels */
+.btn-outline-danger {
+  --bs-btn-color: #B02A37;
+  --bs-btn-border-color: #B02A37;
+  --bs-btn-hover-bg: #B02A37;
+  --bs-btn-hover-border-color: #B02A37;
+  --bs-btn-active-bg: #8E1F2B;
+  --bs-btn-active-border-color: #8E1F2B;
+}

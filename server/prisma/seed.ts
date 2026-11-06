@@ -42,17 +42,19 @@ async function main() {
     const passwordHash = await bcrypt.hash('Password123!', 10);
 
     const usersToSeed = [
-      // Requesters (4 Active, 1 Inactive)
+      // Requesters (4 Active, 1 Inactive, 1 zero-metric dashboard account)
       { email: 'req1@toktikit.local', fullName: 'Requester One', role: Role.REQUESTER, isActive: true, mustChangePassword: true },
       { email: 'req2@toktikit.local', fullName: 'Requester Two', role: Role.REQUESTER, isActive: true, mustChangePassword: false },
       { email: 'req3@toktikit.local', fullName: 'Requester Three', role: Role.REQUESTER, isActive: true, mustChangePassword: false },
       { email: 'req4@toktikit.local', fullName: 'Requester Four', role: Role.REQUESTER, isActive: true, mustChangePassword: true },
+      { email: 'req_empty@toktikit.local', fullName: 'Requester Empty', role: Role.REQUESTER, isActive: true, mustChangePassword: false },
       { email: 'req5_inactive@toktikit.local', fullName: 'Requester Inactive', role: Role.REQUESTER, isActive: false, mustChangePassword: false },
 
-      // IT Staff (3 Active, 1 Inactive)
+      // IT Staff (3 Active, 1 Inactive, 1 zero-metric dashboard account)
       { email: 'staff1@toktikit.local', fullName: 'IT Staff One', role: Role.IT_STAFF, isActive: true, mustChangePassword: true },
       { email: 'staff2@toktikit.local', fullName: 'IT Staff Two', role: Role.IT_STAFF, isActive: true, mustChangePassword: false },
       { email: 'staff3@toktikit.local', fullName: 'IT Staff Three', role: Role.IT_STAFF, isActive: true, mustChangePassword: false },
+      { email: 'tech_empty@toktikit.local', fullName: 'Staff Empty', role: Role.IT_STAFF, isActive: true, mustChangePassword: false },
       { email: 'staff4_inactive@toktikit.local', fullName: 'IT Staff Inactive', role: Role.IT_STAFF, isActive: false, mustChangePassword: false },
 
       // Administrator (1 Active)
@@ -201,6 +203,102 @@ async function main() {
           },
         });
         console.log('Inserted Comments for TKT-1003');
+      }
+    }
+
+    // 6. Seed Actions Taken (Lab 4)
+    // TKT-1001: 2 Actions (1 with follow-up required, 1 revision)
+    // TKT-1004: 1 Action (Resolved ticket satisfies Resolution Gate)
+    // TKT-1002: 0 Actions (New unassigned ticket)
+    if (tkt1) {
+      // Each record is checked on its own so an interrupted run is completed by the next one.
+      let action1 = await prisma.actionTaken.findFirst({
+        where: { ticketId: tkt1.id, description: 'Investigated server error 500 in auth log.' },
+      });
+      if (!action1) {
+        action1 = await prisma.actionTaken.create({
+          data: {
+            ticketId: tkt1.id,
+            performedById: staff1.id,
+            assignedToId: staff2.id,
+            actionDateTime: new Date(),
+            description: 'Investigated server error 500 in auth log.',
+            result: 'Identified bottleneck in connection pooling. Increased max connections.',
+            followUpRequired: true,
+            followUpNote: 'Monitor database connection pool during peak hours.',
+            attachmentNotes: 'Refer to server metric dashboard snapshot.',
+          },
+        });
+        console.log('Inserted Action Taken #1 for TKT-1001');
+      }
+
+      // Seed 1 revision on action1
+      const revisionCount = await prisma.actionTakenRevision.count({ where: { actionTakenId: action1.id } });
+      if (revisionCount === 0) {
+        await prisma.actionTakenRevision.create({
+          data: {
+            actionTakenId: action1.id,
+            revisionNumber: 1,
+            editedById: staff1.id,
+            editedAt: new Date(),
+            originalData: {
+              description: 'Investigated server error 500.',
+              result: 'Identified bottleneck.',
+              followUpRequired: false,
+              followUpNote: null,
+              assignedToId: null,
+            },
+            updatedData: {
+              description: 'Investigated server error 500 in auth log.',
+              result: 'Identified bottleneck in connection pooling. Increased max connections.',
+              followUpRequired: true,
+              followUpNote: 'Monitor database connection pool during peak hours.',
+              assignedToId: staff2.id,
+            },
+          },
+        });
+        console.log('Inserted Revision for TKT-1001 Action Taken #1');
+      }
+
+      const action2 = await prisma.actionTaken.findFirst({
+        where: { ticketId: tkt1.id, description: 'Verified database configuration parameters.' },
+      });
+      if (!action2) {
+        await prisma.actionTaken.create({
+          data: {
+            ticketId: tkt1.id,
+            performedById: staff2.id,
+            assignedToId: null,
+            actionDateTime: new Date(),
+            description: 'Verified database configuration parameters.',
+            result: 'Confirmed connection pool limits updated in production cluster.',
+            followUpRequired: false,
+            followUpNote: null,
+            attachmentNotes: null,
+          },
+        });
+        console.log('Inserted Action Taken #2 for TKT-1001');
+      }
+    }
+
+    const tkt4 = await prisma.ticket.findUnique({ where: { ticketNumber: 'TKT-1004' } });
+    if (tkt4) {
+      const actionCount = await prisma.actionTaken.count({ where: { ticketId: tkt4.id } });
+      if (actionCount === 0) {
+        await prisma.actionTaken.create({
+          data: {
+            ticketId: tkt4.id,
+            performedById: staff1.id,
+            assignedToId: null,
+            actionDateTime: new Date(),
+            description: 'Replaced failed router power adapter in Lab 3.',
+            result: 'Router powered back on and link lights normal.',
+            followUpRequired: false,
+            followUpNote: null,
+            attachmentNotes: null,
+          },
+        });
+        console.log('Inserted Action Taken for TKT-1004');
       }
     }
 
