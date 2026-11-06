@@ -376,7 +376,7 @@ export default function StaffTicketQueue() {
 
       {!loading && totalPages > 1 && (
         <nav aria-label="Ticket queue pagination" className="mt-4">
-          <ul className="pagination justify-content-center">
+          <ul className="pagination justify-content-center flex-wrap">
             <li className={`page-item ${page === 1 ? 'disabled' : ''}`}>
               <button className="page-link" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
                 Previous
