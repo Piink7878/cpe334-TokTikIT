@@ -115,12 +115,13 @@ This document details the REST API specification for Sprint 4 (Lab 4). It define
   ```
 * **Status Codes:**
   * `201 Created`: Action Taken created successfully.
-  * `400 Bad Request`: Validation failure (missing required fields, missing `followUpNote` when `followUpRequired = true`, `INACTIVE_ASSIGNEE`, or `INVALID_ASSIGNEE_ROLE`).
+  * `400 Bad Request`: Validation failure (missing required fields, missing `followUpNote` when `followUpRequired = true`, `INACTIVE_ASSIGNEE`, `INVALID_ASSIGNEE_ROLE`, or `TICKET_TERMINAL`).
+    * `TICKET_TERMINAL`: the Ticket is `CLOSED`, `CANCELLED` or `REJECTED` (`BR-08`, `AC-21`). Nothing is written, no idempotency record is stored, and the check is repeated under a row lock inside the create transaction so a concurrent close cannot be overtaken. A retry with an `Idempotency-Key` whose request already succeeded before the Ticket ended still returns the stored `201`.
   * `401 Unauthorized`: Unauthenticated request.
   * `403 Forbidden`: Authenticated user is a `REQUESTER`.
   * `404 Not Found`: Ticket not found.
   * `409 Conflict`: Same `Idempotency-Key` reused with a different payload (`IDEMPOTENCY_KEY_CONFLICT`).
-* **Traceability:** `FR-01`, `FR-02`, `FR-03`, `FR-21`, `FR-25`, `BR-01`, `BR-02`, `BR-04`, `BR-14`, `AC-01`, `AC-02`, `AC-03`, `AC-06`, `AC-17`, `AC-19`.
+* **Traceability:** `FR-01`, `FR-02`, `FR-03`, `FR-21`, `FR-25`, `BR-01`, `BR-02`, `BR-04`, `BR-08`, `BR-14`, `AC-01`, `AC-02`, `AC-03`, `AC-06`, `AC-17`, `AC-19`, `AC-21`.
 
 ---
 
@@ -206,12 +207,13 @@ This document details the REST API specification for Sprint 4 (Lab 4). It define
   ```
 * **Status Codes:**
   * `200 OK`: Action Taken updated and revision appended successfully.
-  * `400 Bad Request`: Validation failure (missing `followUpNote` when `followUpRequired = true`, `INACTIVE_ASSIGNEE`, `INVALID_ASSIGNEE_ROLE`, or `MISSING_EXPECTED_UPDATED_AT`).
+  * `400 Bad Request`: Validation failure (missing `followUpNote` when `followUpRequired = true`, `INACTIVE_ASSIGNEE`, `INVALID_ASSIGNEE_ROLE`, `MISSING_EXPECTED_UPDATED_AT`, or `TICKET_TERMINAL`).
+    * `TICKET_TERMINAL`: the parent Ticket is `CLOSED`, `CANCELLED` or `REJECTED` (`BR-08`, `AC-21`); the record and its revision history are left unchanged. The check runs before validation and again under a row lock inside the update transaction.
   * `401 Unauthorized`: Unauthenticated request.
   * `403 Forbidden`: Authenticated user is a `REQUESTER`.
   * `404 Not Found`: Action Taken record not found.
   * `409 Conflict`: Stale update detected (`STALE_UPDATE`).
-* **Traceability:** `FR-04`, `FR-21`, `FR-25`, `BR-01`, `BR-04`, `BR-05`, `BR-14`, `AC-04`, `AC-17`, `AC-19`.
+* **Traceability:** `FR-04`, `FR-21`, `FR-25`, `BR-01`, `BR-04`, `BR-05`, `BR-08`, `BR-14`, `AC-04`, `AC-17`, `AC-19`, `AC-21`.
 
 ---
 
@@ -480,7 +482,7 @@ Every transition listed above is enabled. Any transition not listed is rejected 
   * **Authoritative Enforcement Point:** The backend is the authoritative enforcement point. Frontend validation is supplementary only.
 * **Audit Log Generation:** Every successful status transition automatically creates a new `InternalNote` record (`ticketId`, `authorId: req.user.id`, `content: "Status changed from <OLD_STATUS> to <NEW_STATUS>"`). For rejection, the reason is appended to the note.
 * **Concurrency Protection:** The update executes within a transaction verifying current ticket state. Competing simultaneous status updates, and updates whose `expectedUpdatedAt` is outdated, receive `409 Conflict` with `code: "CONCURRENCY_CONFLICT"`.
-* **Terminal Tickets:** Besides status changes (`VALIDATION_ERROR`), `PATCH /api/staff/tickets/:id/claim`, `/assign` and `/priority` on a `CLOSED`, `CANCELLED` or `REJECTED` Ticket return `400 Bad Request` with `code: "TICKET_TERMINAL"` (`BR-08`, `AC-09`). These three writes are conditional: if the Ticket becomes terminal between validation and write the same `TICKET_TERMINAL` response is returned, and if its status changed to another non-terminal status in the meantime (`claim`/`assign`) the response is `409 Conflict` with `code: "CONCURRENCY_CONFLICT"`, so a terminal Ticket can never be modified or re-opened by a racing request.
+* **Terminal Tickets:** Besides status changes (`VALIDATION_ERROR`), creating or editing an Action Taken (`POST /api/tickets/:id/actions-taken`, `PATCH /api/actions-taken/:actionId`, section 2) and `PATCH /api/staff/tickets/:id/claim`, `/assign` and `/priority` on a `CLOSED`, `CANCELLED` or `REJECTED` Ticket return `400 Bad Request` with `code: "TICKET_TERMINAL"` (`BR-08`, `AC-09`). These three writes are conditional: if the Ticket becomes terminal between validation and write the same `TICKET_TERMINAL` response is returned, and if its status changed to another non-terminal status in the meantime (`claim`/`assign`) the response is `409 Conflict` with `code: "CONCURRENCY_CONFLICT"`, so a terminal Ticket can never be modified or re-opened by a racing request.
 * **Response Payload (200 OK):**
   ```json
   {

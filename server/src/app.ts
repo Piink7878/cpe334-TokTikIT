@@ -1187,8 +1187,19 @@ app.get("/api/staff/tickets/:id", requireAuth, requirePasswordChangeEnforcement,
   }
 });
 
-// BR-08: CLOSED, CANCELLED and REJECTED tickets accept no further status, owner or priority changes.
+// BR-08: CLOSED, CANCELLED and REJECTED tickets accept no further status, owner, priority or Action Taken changes.
 const TERMINAL_TICKET_STATUSES = ["CLOSED", "CANCELLED", "REJECTED"];
+
+class TerminalTicketError extends Error {}
+
+// Locks the Ticket row for the rest of the transaction and reports whether it may still receive or change
+// Action Taken records (BR-08). The row lock makes a concurrent close wait for the write, or be seen by it.
+async function lockOpenTicketForAction(tx: Prisma.TransactionClient, ticketId: number): Promise<boolean> {
+  const rows = await tx.$queryRaw<{ currentStatus: string }[]>(
+    Prisma.sql`SELECT "currentStatus"::text AS "currentStatus" FROM "Ticket" WHERE "id" = ${ticketId} FOR UPDATE`
+  );
+  return rows.length > 0 && !TERMINAL_TICKET_STATUSES.includes(rows[0].currentStatus);
+}
 
 function sendTerminalTicketError(res: Response): Response {
   return res.status(400).json({
@@ -1790,6 +1801,10 @@ app.post("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnf
 
       try {
         const resultPayload = await prisma.$transaction(async (tx) => {
+          if (!(await lockOpenTicketForAction(tx, ticketId))) {
+            throw new TerminalTicketError();
+          }
+
           await tx.idempotencyRecord.deleteMany({
             where: {
               userId: req.user!.id,
@@ -1842,6 +1857,9 @@ app.post("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnf
 
         return res.status(201).json(resultPayload);
       } catch (err: any) {
+        if (err instanceof TerminalTicketError) {
+          return sendTerminalTicketError(res);
+        }
         if (err.code === "P2002") {
           const committedRecord = await prisma.idempotencyRecord.findUnique({
             where: {
@@ -1869,23 +1887,36 @@ app.post("/api/tickets/:id/actions-taken", requireAuth, requirePasswordChangeEnf
     }
 
     // No idempotency key provided
-    const newAction = await prisma.actionTaken.create({
-      data: {
-        ticketId,
-        performedById: req.user!.id,
-        assignedToId: assignedToId || null,
-        actionDateTime: parsedActionDate,
-        description: description.trim(),
-        result: result.trim(),
-        followUpRequired,
-        followUpNote: followUpRequired ? followUpNote.trim() : null,
-        attachmentNotes: attachmentNotes ? attachmentNotes.trim() : null,
-      },
-      include: {
-        performedBy: { select: { id: true, fullName: true, role: true } },
-        assignedTo: { select: { id: true, fullName: true, role: true } },
-      },
-    });
+    let newAction;
+    try {
+      newAction = await prisma.$transaction(async (tx) => {
+        if (!(await lockOpenTicketForAction(tx, ticketId))) {
+          throw new TerminalTicketError();
+        }
+        return tx.actionTaken.create({
+          data: {
+            ticketId,
+            performedById: req.user!.id,
+            assignedToId: assignedToId || null,
+            actionDateTime: parsedActionDate,
+            description: description.trim(),
+            result: result.trim(),
+            followUpRequired,
+            followUpNote: followUpRequired ? followUpNote.trim() : null,
+            attachmentNotes: attachmentNotes ? attachmentNotes.trim() : null,
+          },
+          include: {
+            performedBy: { select: { id: true, fullName: true, role: true } },
+            assignedTo: { select: { id: true, fullName: true, role: true } },
+          },
+        });
+      });
+    } catch (err) {
+      if (err instanceof TerminalTicketError) {
+        return sendTerminalTicketError(res);
+      }
+      throw err;
+    }
 
     return res.status(201).json({
       message: "Action taken recorded successfully",
@@ -1934,11 +1965,17 @@ app.patch("/api/actions-taken/:actionId", requireAuth, requirePasswordChangeEnfo
       where: { id: actionId },
       include: {
         revisions: { orderBy: { revisionNumber: "desc" }, take: 1 },
+        ticket: { select: { currentStatus: true } },
       },
     });
 
     if (!existing) {
       return res.status(404).json({ error: { code: "NOT_FOUND", message: "Action Taken record not found" } });
+    }
+
+    // BR-08: an Action Taken of a CLOSED, CANCELLED or REJECTED Ticket can no longer be edited.
+    if (TERMINAL_TICKET_STATUSES.includes(existing.ticket.currentStatus)) {
+      return sendTerminalTicketError(res);
     }
 
     const validationMessage = validateActionTakenInput(req.body, "update");
@@ -1974,6 +2011,10 @@ app.patch("/api/actions-taken/:actionId", requireAuth, requirePasswordChangeEnfo
 
     try {
       const txResult = await prisma.$transaction(async (tx) => {
+        if (!(await lockOpenTicketForAction(tx, existing.ticketId))) {
+          throw new TerminalTicketError();
+        }
+
         const updateResult = await tx.actionTaken.updateMany({
           where: {
             id: actionId,
@@ -2051,6 +2092,9 @@ app.patch("/api/actions-taken/:actionId", requireAuth, requirePasswordChangeEnfo
         },
       });
     } catch (err: any) {
+      if (err instanceof TerminalTicketError) {
+        return sendTerminalTicketError(res);
+      }
       if (err.message === "STALE_UPDATE") {
         const currentRecord = await prisma.actionTaken.findUnique({
           where: { id: actionId },

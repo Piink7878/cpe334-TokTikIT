@@ -476,6 +476,44 @@
   * **Test Level:** API / Integration / Concurrency
   * **Priority:** High
 
+  #### TC-ACT-22: Create Action Taken on a Terminal Ticket Is Refused
+  * **Related Requirements:** FR-01, BR-08, AC-21, api-spec §2.1
+  * **Related API/UI:** `POST /api/tickets/:id/actions-taken`
+  * **Test Objective:** Verify that the backend, not only the UI, refuses to create an Action Taken on a `CLOSED`, `CANCELLED` or `REJECTED` ticket.
+  * **Preconditions / Test Data:** One ticket per terminal status, each with one Action recorded while it was open; sessions for IT Staff and Administrator.
+  * **Steps:**
+    1. Issue `POST /api/tickets/:id/actions-taken` with a valid payload as IT Staff on each terminal ticket.
+    2. Repeat as Administrator and with an `Idempotency-Key` header.
+    3. Count `ActionTaken` and `IdempotencyRecord` rows of the ticket.
+  * **Expected Result:** HTTP `400 Bad Request` with `code: "TICKET_TERMINAL"` each time; the ticket still has exactly its original Action and no idempotency record is stored. The same request on a non-terminal ticket (for example `REOPENED`) still returns `201`.
+  * **Test Level:** API / Integration / Authorization
+  * **Priority:** High
+
+  #### TC-ACT-23: Edit Action Taken on a Terminal Ticket Is Refused
+  * **Related Requirements:** FR-04, BR-05, BR-08, AC-21, api-spec §2.2
+  * **Related API/UI:** `PATCH /api/actions-taken/:actionId`
+  * **Test Objective:** Verify that an Action Taken of a terminal ticket cannot be edited and that no revision is appended.
+  * **Preconditions / Test Data:** Actions of `CLOSED`, `CANCELLED` and `REJECTED` tickets with a valid `expectedUpdatedAt`.
+  * **Steps:**
+    1. Issue `PATCH /api/actions-taken/:actionId` with `{ "result": "...", "expectedUpdatedAt": "<current>" }` as IT Staff.
+    2. Query the record and its `ActionTakenRevision` rows.
+    3. Issue `GET /api/tickets/:id/actions-taken` as IT Staff and as the owning Requester.
+  * **Expected Result:** HTTP `400` with `code: "TICKET_TERMINAL"`; the record is unchanged and has no new revision; both reads still return `200` with the Action.
+  * **Test Level:** API / Integration
+  * **Priority:** High
+
+  #### TC-ACT-24: Retry After the Ticket Ended Replays the Stored Response
+  * **Related Requirements:** FR-25, BR-08, BR-14, AC-19, AC-21
+  * **Related API/UI:** `POST /api/tickets/:id/actions-taken` with `Idempotency-Key`
+  * **Test Objective:** Verify that a network retry of a create request that succeeded while the ticket was open is not turned into an error because the ticket has meanwhile been closed, while a genuinely new request is refused.
+  * **Preconditions / Test Data:** An open ticket; an Action created with key `K`; the ticket then set to `CLOSED`.
+  * **Steps:**
+    1. Re-send the identical request with key `K`.
+    2. Send a new request with a different key.
+  * **Expected Result:** Step 1 returns `201` with the original Action (same `id`, no new row). Step 2 returns `400` `TICKET_TERMINAL`.
+  * **Test Level:** API / Integration / Concurrency
+  * **Priority:** Medium
+
   ---
 
   ### 3.2 Role-Based Access Control (RBAC) & Authorization
