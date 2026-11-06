@@ -68,9 +68,9 @@ export default function StaffTicketDetail() {
     try {
       await addPublicComment(ticket.id, publicCommentText, commentKeys.keyFor(`${ticket.id}|${publicCommentText.trim()}`));
       commentKeys.reset();
-      setSuccessMsg("Public comment added successfully");
       setPublicCommentText("");
       await fetchTicketAndAssignees(true); // in place, so a draft in the other form is not lost
+      setSuccessMsg("Public comment added successfully");
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to add public comment");
     } finally {
@@ -85,9 +85,9 @@ export default function StaffTicketDetail() {
     try {
       await addInternalNote(ticket.id, internalNoteText, noteKeys.keyFor(`${ticket.id}|${internalNoteText.trim()}`));
       noteKeys.reset();
-      setSuccessMsg("Internal note added successfully");
       setInternalNoteText("");
       await fetchTicketAndAssignees(true); // in place, so a draft in the other form is not lost
+      setSuccessMsg("Internal note added successfully");
     } catch (err: any) {
       setErrorMsg(err.message || "Failed to add internal note");
     } finally {
@@ -97,6 +97,8 @@ export default function StaffTicketDetail() {
 
   // silent = refresh in place after a change, without replacing the page (and its Actions Taken section) by a spinner.
   // Only the latest request may write state: a slower, older response must not reset what the user has since selected.
+  // Every write below shows its success banner only after this refresh, so the banner means "the screen has settled"
+  // (a refresh that finished later would reset the status selector or the form the user had already started using).
   const fetchSeqRef = useRef(0);
   const fetchTicketAndAssignees = async (silent = false) => {
     const seq = ++fetchSeqRef.current;
@@ -148,8 +150,8 @@ export default function StaffTicketDetail() {
         setErrorMsg("");
         setSuccessMsg("");
         await claimTicket(ticket.id);
-        setSuccessMsg("Ticket claimed successfully");
         await fetchTicketAndAssignees(true);
+        setSuccessMsg("Ticket claimed successfully");
       } catch (err: any) {
         setErrorMsg(err.message || "Failed to claim ticket");
       }
@@ -162,8 +164,8 @@ export default function StaffTicketDetail() {
         setErrorMsg("");
         setSuccessMsg("");
         await assignTicket(ticket.id, assigneeId);
-        setSuccessMsg("Ticket assigned successfully");
         await fetchTicketAndAssignees(true);
+        setSuccessMsg("Ticket assigned successfully");
       } catch (err: any) {
         setErrorMsg(err.message || "Failed to assign ticket");
       }
@@ -176,8 +178,8 @@ export default function StaffTicketDetail() {
         setErrorMsg("");
         setSuccessMsg("");
         await updateTicketPriority(ticket.id, itPriority);
-        setSuccessMsg("Priority updated successfully");
         await fetchTicketAndAssignees(true);
+        setSuccessMsg("Priority updated successfully");
       } catch (err: any) {
         setErrorMsg(err.message || "Failed to update priority");
       }
