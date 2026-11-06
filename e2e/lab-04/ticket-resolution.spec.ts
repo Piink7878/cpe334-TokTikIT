@@ -72,6 +72,12 @@ test.describe('Ticket workflow and Resolution Gate (Lab 4)', () => {
     await expect(page.locator('#priority-select')).toBeDisabled();
     await expect(page.getByRole('button', { name: '+ Add Action Taken' })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Edit Action Taken #1' })).toBeDisabled();
+
+    // The backend refuses as well: hiding the buttons is not authorization (BR-08, AC-21)
+    const ticketId = page.url().match(/\/staff\/tickets\/(\d+)/)![1];
+    const refused = await page.request.post(`/api/tickets/${ticketId}/actions-taken`, { data: { description: 'Added after the ticket was closed', result: 'Must be refused', followUpRequired: false } });
+    expect(refused.status()).toBe(400);
+    expect((await refused.json()).error.code).toBe('TICKET_TERMINAL');
   });
 
   test('a resolved ticket can be reopened and worked again', async ({ page }) => {

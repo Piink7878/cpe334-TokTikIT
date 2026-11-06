@@ -762,6 +762,107 @@ describe("Actions Taken API Tests (Lab 4 Part 6)", () => {
     });
   });
 
+  describe("Terminal tickets accept no Action Taken create or edit (BR-08, AC-21, TC-ACT-22..24)", () => {
+    const created: number[] = [];
+
+    async function ticketWithAction(status: string) {
+      const category = await prisma.category.findFirst();
+      const system = await prisma.relatedSystem.findFirst();
+      const t = await prisma.ticket.create({
+        data: {
+          ticketNumber: `TKT-TRM-${status}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+          summary: `Terminal rule ${status}`,
+          description: "BR-08 test ticket",
+          categoryId: category!.id,
+          relatedSystemId: system!.id,
+          requesterId: requesterUser1.id,
+          ownerId: staffUser1.id,
+          currentStatus: "IN_PROGRESS",
+        },
+      });
+      created.push(t.id);
+      const action = await prisma.actionTaken.create({
+        data: { ticketId: t.id, performedById: staffUser1.id, actionDateTime: new Date(), description: "Seeded action before the ticket ends", result: "Seeded result", followUpRequired: false },
+      });
+      if (status !== "IN_PROGRESS") {
+        await prisma.ticket.update({ where: { id: t.id }, data: { currentStatus: status as any } });
+      }
+      return { ticket: t, action };
+    }
+
+    afterAll(async () => {
+      if (created.length) {
+        await prisma.idempotencyRecord.deleteMany({ where: { ticketId: { in: created } } });
+        await prisma.actionTakenRevision.deleteMany({ where: { actionTaken: { ticketId: { in: created } } } });
+        await prisma.actionTaken.deleteMany({ where: { ticketId: { in: created } } });
+        await prisma.internalNote.deleteMany({ where: { ticketId: { in: created } } });
+        await prisma.ticket.deleteMany({ where: { id: { in: created } } });
+      }
+    });
+
+    const body = { description: "Trying to add work after the ticket ended", result: "Should be refused", followUpRequired: false };
+
+    it.each(["CLOSED", "CANCELLED", "REJECTED"])("refuses to create an Action Taken on a %s ticket and writes nothing", async (status) => {
+      const { ticket } = await ticketWithAction(status);
+      const res = await request(app).post(`/api/tickets/${ticket.id}/actions-taken`).set("Cookie", staffCookie1).send(body);
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("TICKET_TERMINAL");
+      expect(await prisma.actionTaken.count({ where: { ticketId: ticket.id } })).toBe(1);
+    });
+
+    it("also refuses an Administrator and a request that carries an Idempotency-Key, and stores no replay record", async () => {
+      const { ticket } = await ticketWithAction("CLOSED");
+      const asAdmin = await request(app).post(`/api/tickets/${ticket.id}/actions-taken`).set("Cookie", adminCookie).send(body);
+      expect(asAdmin.status).toBe(400);
+      expect(asAdmin.body.error.code).toBe("TICKET_TERMINAL");
+      const withKey = await request(app).post(`/api/tickets/${ticket.id}/actions-taken`).set("Cookie", staffCookie1).set("Idempotency-Key", `terminal-${Date.now()}`).send(body);
+      expect(withKey.status).toBe(400);
+      expect(withKey.body.error.code).toBe("TICKET_TERMINAL");
+      expect(await prisma.idempotencyRecord.count({ where: { ticketId: ticket.id } })).toBe(0);
+      expect(await prisma.actionTaken.count({ where: { ticketId: ticket.id } })).toBe(1);
+    });
+
+    it.each(["CLOSED", "CANCELLED", "REJECTED"])("refuses to edit an Action Taken of a %s ticket and appends no revision", async (status) => {
+      const { action } = await ticketWithAction(status);
+      const res = await request(app).patch(`/api/actions-taken/${action.id}`).set("Cookie", staffCookie1).send({ result: "Edited after the end", expectedUpdatedAt: action.updatedAt.toISOString() });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe("TICKET_TERMINAL");
+      expect(await prisma.actionTakenRevision.count({ where: { actionTakenId: action.id } })).toBe(0);
+      expect((await prisma.actionTaken.findUnique({ where: { id: action.id } }))!.result).toBe("Seeded result");
+    });
+
+    it("still lets staff and the owning Requester read the Actions of a terminal ticket", async () => {
+      const { ticket } = await ticketWithAction("CLOSED");
+      const staff = await request(app).get(`/api/tickets/${ticket.id}/actions-taken`).set("Cookie", staffCookie1);
+      expect(staff.status).toBe(200);
+      expect(staff.body.data).toHaveLength(1);
+      const owner = await request(app).get(`/api/tickets/${ticket.id}/actions-taken`).set("Cookie", requesterCookie1);
+      expect(owner.status).toBe(200);
+      expect(owner.body.data).toHaveLength(1);
+    });
+
+    it("replays the stored 201 for a retry of an Action created before the ticket was closed", async () => {
+      const { ticket } = await ticketWithAction("IN_PROGRESS");
+      const key = `replay-${Date.now()}`;
+      const first = await request(app).post(`/api/tickets/${ticket.id}/actions-taken`).set("Cookie", staffCookie1).set("Idempotency-Key", key).send(body);
+      expect(first.status).toBe(201);
+      await prisma.ticket.update({ where: { id: ticket.id }, data: { currentStatus: "CLOSED" } });
+      const retry = await request(app).post(`/api/tickets/${ticket.id}/actions-taken`).set("Cookie", staffCookie1).set("Idempotency-Key", key).send(body);
+      expect(retry.status).toBe(201);
+      expect(retry.body.data.id).toBe(first.body.data.id);
+      expect(await prisma.actionTaken.count({ where: { ticketId: ticket.id } })).toBe(2);
+      const fresh = await request(app).post(`/api/tickets/${ticket.id}/actions-taken`).set("Cookie", staffCookie1).set("Idempotency-Key", `new-${Date.now()}`).send(body);
+      expect(fresh.status).toBe(400);
+      expect(fresh.body.error.code).toBe("TICKET_TERMINAL");
+    });
+
+    it("keeps working for tickets that are not terminal (REOPENED)", async () => {
+      const { ticket } = await ticketWithAction("REOPENED");
+      const res = await request(app).post(`/api/tickets/${ticket.id}/actions-taken`).set("Cookie", staffCookie1).send(body);
+      expect(res.status).toBe(201);
+    });
+  });
+
   describe("DELETE Prohibition (HTTP 405 Method Not Allowed)", () => {
     it("should return HTTP 405 when attempting to delete an ActionTaken", async () => {
       const action = await prisma.actionTaken.findFirst({ where: { ticketId: testTicket.id } });

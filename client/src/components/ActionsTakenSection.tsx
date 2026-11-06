@@ -46,6 +46,7 @@ const NETWORK_MESSAGE_CREATE = "Failed to record action due to network error. Fo
 const NETWORK_MESSAGE_EDIT = "Failed to update action due to network error. Form data has been preserved. Please retry.";
 const ASSIGNEE_MESSAGE = "Selected assignee is inactive or unauthorized. Please select an active IT Staff member.";
 const STALE_MESSAGE = "This action was updated by another user. Please reload the page to see the latest version before editing.";
+const TERMINAL_MESSAGE = "This Ticket has ended (Closed, Cancelled or Rejected), so Actions Taken can no longer be added or edited. Reload the page to see its current status.";
 
 const FIELD_LABELS: Record<string, string> = {
   description: "Description",
@@ -305,6 +306,7 @@ function ActionFormModal({ mode, action, performer, assignees, onClose, onSubmit
       if (err instanceof ApiError) {
         if (err.code === "INACTIVE_ASSIGNEE" || err.code === "INVALID_ASSIGNEE_ROLE") setFormError(ASSIGNEE_MESSAGE);
         else if (err.code === "STALE_UPDATE") setFormError(STALE_MESSAGE);
+        else if (err.code === "TICKET_TERMINAL") setFormError(TERMINAL_MESSAGE);
         else if (err.status === 400) setFormError(err.message);
         else if (err.status === 403) setFormError("You do not have permission to perform this action.");
         else if (err.status === 404) setFormError("This record could not be found. Please reload the page.");

@@ -563,6 +563,19 @@ describe("ActionsTakenSection — IT Staff / Admin view (ui-spec §3.2)", () => 
       expect(screen.getByLabelText(/^Result/)).toHaveValue("My unsaved edit");
     });
 
+    it("explains that the Ticket has ended on 400 TICKET_TERMINAL and keeps the draft (BR-08)", async () => {
+      (api.updateActionTaken as any).mockRejectedValue(new api.ApiError("Ticket is in a terminal status and can no longer be modified.", 400, "TICKET_TERMINAL"));
+      renderStaff();
+      await openEditModal();
+
+      setField(/^Result/, "My unsaved edit");
+      fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+
+      expect(await screen.findByText(/This Ticket has ended \(Closed, Cancelled or Rejected\)/)).toBeInTheDocument();
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByLabelText(/^Result/)).toHaveValue("My unsaved edit");
+    });
+
     it("keeps the draft and shows the network message on a 500", async () => {
       (api.updateActionTaken as any).mockRejectedValue(new api.ApiError("Internal server error", 500));
       renderStaff();
