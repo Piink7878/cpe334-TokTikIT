@@ -273,16 +273,16 @@ All transitions listed above are enabled. No transition is conditional on future
 
 #### Calculation Rules (Scope: `ticket.requesterId === req.user.id`):
 1. **`totalTickets`:**
-   $$\text{COUNT}(*) \quad \text{where } \text{requesterId} = \text{user.id}$$
+   `COUNT(*) where requesterId = user.id`
    *Includes all tickets created by the user across all statuses (active and terminal).*
 2. **`activeTickets`:**
-   $$\text{COUNT}(*) \quad \text{where } \text{requesterId} = \text{user.id} \text{ AND } \text{currentStatus} \in (\text{'NEW'}, \text{'OPEN'}, \text{'IN\_PROGRESS'})$$
+   `COUNT(*) where requesterId = user.id AND currentStatus IN ('NEW', 'OPEN', 'IN_PROGRESS')`
    *Includes unresolved tickets currently undergoing triage or work.*
 3. **`waitingForRequesterTickets`:**
-   $$\text{COUNT}(*) \quad \text{where } \text{requesterId} = \text{user.id} \text{ AND } \text{currentStatus} = \text{'WAITING\_FOR\_REQUESTER'}$$
+   `COUNT(*) where requesterId = user.id AND currentStatus = 'WAITING_FOR_REQUESTER'`
    *Includes tickets requiring user input or verification.*
 4. **`resolvedOrClosedTickets`:**
-   $$\text{COUNT}(*) \quad \text{where } \text{requesterId} = \text{user.id} \text{ AND } \text{currentStatus} \in (\text{'RESOLVED'}, \text{'CLOSED'})$$
+   `COUNT(*) where requesterId = user.id AND currentStatus IN ('RESOLVED', 'CLOSED')`
    *Includes successfully resolved and formally closed tickets (`CANCELLED` and `REJECTED` are excluded).*
 5. **`recentTickets` (Recent & Attention-Required Ticket Information):**
    * List of up to 5 tickets owned by the requester, ordered by `updatedAt DESC`. *[Proposed Technical Constraint — Limit 5]*.
@@ -303,19 +303,19 @@ All transitions listed above are enabled. No transition is conditional on future
 
 #### Calculation Rules (Scope: Global Queue):
 1. **`unassignedTickets`:**
-   $$\text{COUNT}(*) \quad \text{where } \text{ownerId IS NULL} \text{ AND } \text{currentStatus} \in (\text{'NEW'}, \text{'OPEN'})$$
+   `COUNT(*) where ownerId IS NULL AND currentStatus IN ('NEW', 'OPEN')`
    *Unassigned tickets requiring initial owner pickup or assignment.*
 2. **`myActiveTickets`:**
-   $$\text{COUNT}(*) \quad \text{where } \text{ownerId} = \text{user.id} \text{ AND } \text{currentStatus} \in (\text{'OPEN'}, \text{'IN\_PROGRESS'}, \text{'WAITING\_FOR\_REQUESTER'}, \text{'REOPENED'})$$
+   `COUNT(*) where ownerId = user.id AND currentStatus IN ('OPEN', 'IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'REOPENED')`
    *Active tickets owned by the authenticated technician. Excludes `RESOLVED`, `CLOSED`, `CANCELLED`, and `REJECTED`.*
 3. **`ticketsRequiringFollowUp`:**
-   $$\text{COUNT}(\text{DISTINCT } t.\text{id}) \quad \text{from Ticket } t \text{ JOIN ActionTaken } a \text{ ON } t.\text{id} = a.\text{ticketId}$$
-   $$\text{where } a.\text{followUpRequired} = \text{true} \text{ AND } t.\text{currentStatus} \in (\text{'NEW'}, \text{'OPEN'}, \text{'IN\_PROGRESS'}, \text{'WAITING\_FOR\_REQUESTER'}, \text{'REOPENED'})$$
+   `COUNT(DISTINCT t.id) from Ticket t JOIN ActionTaken a ON t.id = a.ticketId`
+   `where a.followUpRequired = true AND t.currentStatus IN ('NEW', 'OPEN', 'IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'REOPENED')`
    *(Strictly: `currentStatus NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED', 'REJECTED')`).*
    **Distinct Tickets Clarification:** Counts **distinct tickets**. If a single ticket contains multiple ActionTaken records marked `followUpRequired = true`, it is counted exactly **once** in this metric.
 4. **`criticalOrHighPriorityTickets`:**
-   $$\text{COUNT}(*) \quad \text{where } \text{itPriority} \in (\text{'CRITICAL'}, \text{'HIGH'})$$
-   $$\text{AND } \text{currentStatus} \in (\text{'NEW'}, \text{'OPEN'}, \text{'IN\_PROGRESS'}, \text{'WAITING\_FOR\_REQUESTER'}, \text{'REOPENED'})$$
+   `COUNT(*) where itPriority IN ('CRITICAL', 'HIGH')`
+   `AND currentStatus IN ('NEW', 'OPEN', 'IN_PROGRESS', 'WAITING_FOR_REQUESTER', 'REOPENED')`
    *(Strictly: `currentStatus NOT IN ('RESOLVED', 'CLOSED', 'CANCELLED', 'REJECTED')`).*
 5. **`statusBreakdown`:**
    An object mapping each status name to its count across all tickets in the system. Includes all eight standard statuses plus `REJECTED` (for Lab 3 backward compatibility).
